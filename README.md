@@ -1,0 +1,97 @@
+# ALOLA Real Estate CRM & ERP
+
+Implementation control centre for the ALOLA Real Estate CRM & ERP — a secure, Arabic-first modular
+monolith connecting marketing, leads, inventory, sales, collections, accounting, procurement,
+construction, HR, handover, and after-sales in one auditable platform.
+
+**Current state: Phase 1. Discovery approved 2026-09-19; build half (application scaffolding) authorized.**
+See [docs/MEMORY.md](docs/MEMORY.md) for verified status.
+
+## Documentation map
+
+### Start here
+
+| Document | Purpose |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | Mandatory instructions. Read first, every session. |
+| [docs/MEMORY.md](docs/MEMORY.md) | Live project state, blockers, and the exact next action. |
+| [docs/MASTER-MAPPING.md](docs/MASTER-MAPPING.md) | Product scope, architecture, modules, phases, acceptance gates. |
+| [docs/PHASE-PROMPTS.md](docs/PHASE-PROMPTS.md) | Execution prompt for each of the nine phases. |
+
+These four, together with the approved ADRs in [docs/decisions/](docs/decisions/), are the **implementation
+sources of truth**. Later written stakeholder decisions supersede conflicting statements in the Arabic PDF.
+
+### Requirements and terminology
+
+| Document | Purpose |
+|---|---|
+| [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Stable requirement IDs and their status. Phase 1 enumerated in full. |
+| [docs/glossary.md](docs/glossary.md) | Approved Arabic/English terminology across 12 domains. |
+
+### Decisions
+
+| Document | Purpose |
+|---|---|
+| [docs/decisions/](docs/decisions/) | 18 Architecture Decision Records — *why* the implementation is shaped as it is. |
+| [docs/decisions/open-decisions.md](docs/decisions/open-decisions.md) | Stakeholder decisions, each assigned to the phase it blocks. **17 open, none blocking Phase 1 scaffolding.** |
+
+### Architecture
+
+| Document | Purpose |
+|---|---|
+| [docs/architecture/overview.md](docs/architecture/overview.md) | System context, process topology, module boundaries, request lifecycle. |
+| [docs/architecture/security-model.md](docs/architecture/security-model.md) | Identity, authorization layers, field security, audit. |
+| [docs/architecture/data-model-conventions.md](docs/architecture/data-model-conventions.md) | Identifiers, money, time, concurrency, transactions, idempotency. |
+| [docs/architecture/localization-and-theming.md](docs/architecture/localization-and-theming.md) | i18n, direction, typography, design tokens. |
+| [docs/architecture/integrations.md](docs/architecture/integrations.md) | Adapter contract, webhooks, job reliability. |
+| [docs/architecture/environments.md](docs/architecture/environments.md) | Configuration contract and local development options. |
+
+### Phases and discovery
+
+| Document | Purpose |
+|---|---|
+| [docs/phases/README.md](docs/phases/README.md) | Phase index, dependencies, client-stage crosswalk. |
+| [docs/phases/phase-gates.md](docs/phases/phase-gates.md) | The checklist every phase must pass. |
+| [docs/phases/phase-1-discovery-checklist.md](docs/phases/phase-1-discovery-checklist.md) | Phase 1 discovery deliverables and outstanding inputs. |
+| [docs/discovery/arabic-scope-review.md](docs/discovery/arabic-scope-review.md) | Arabic business scope reviewed against the Master Mapping. |
+
+### Supplementary
+
+`نطاق_أعمال_نظام_شركة_العلا_للتطوير_العقاري.pdf` — the Arabic client-facing business scope document. It is
+a **supplementary client-facing business document**, not a technical source of truth. It is kept in the working
+tree but is not committed to the repository. See
+[ADR-0013](docs/decisions/adr-0013-arabic-scope-document-status.md).
+
+## Non-negotiable constraints
+
+These are settled. Each has an ADR; none is a preference.
+
+- **Arabic is the default language.** Arabic and English ship together in the same change; a missing key
+  in either locale fails CI. Arabic RTL and English LTR from the first component.
+- **Light Mode only.** No Dark Mode, System Mode, theme switcher, or per-user theme preference.
+- **Semantic design tokens only.** Components never hard-code a colour value.
+- **Authorization on the server and inside the query.** Never only in the UI. Fetch-then-filter is prohibited.
+- **Decimal-safe money.** Never binary floating point for financial calculations.
+- **UTC storage**, organization timezone for display.
+- **No hard deletion** of financial, contractual, inventory-history, audit, check, or note records.
+- **Official provider APIs only**, behind versioned adapters. Webhooks verify signatures; retryable jobs
+  are idempotent.
+- **Never commit or log** secrets, tokens, credentials, production personal data, card data, or document
+  contents.
+
+## Working in this repository
+
+1. Read [CLAUDE.md](CLAUDE.md) and [docs/MEMORY.md](docs/MEMORY.md) completely before planning anything.
+2. Read the relevant Master Mapping sections and the current phase prompt.
+3. Inspect the actual repository — code, tests, configuration, Git status — before trusting any document.
+   **When documentation conflicts with verified code, the code wins and the document is corrected.**
+4. Work one bounded requirement group at a time, referencing requirement IDs.
+5. Do not begin the next phase until the current gate is verified and explicitly approved.
+6. Update [docs/MEMORY.md](docs/MEMORY.md) and [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) after every
+   completed feature, fix, migration, or material decision.
+
+## Repository status
+
+- Local Git repository on branch `main`. **No remote configured. Nothing has been pushed or deployed.**
+- `.gitignore` in place and verified with `git check-ignore`.
+- See [docs/MEMORY.md](docs/MEMORY.md) for what is installed, configured, and verified.
