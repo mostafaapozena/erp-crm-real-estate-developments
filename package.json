@@ -1,0 +1,46 @@
+{
+  "name": "alola-erp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ALOLA Real Estate CRM & ERP — TypeScript modular monolith",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @alola/api",
+    "dev:worker": "npm run dev -w @alola/worker",
+    "dev:web": "npm run dev -w @alola/web",
+    "lint": "node scripts/bin.mjs eslint . --max-warnings=0",
+    "format": "node scripts/bin.mjs prettier --write .",
+    "format:check": "node scripts/bin.mjs prettier --check .",
+    "typecheck": "node scripts/bin.mjs tsc --noEmit -p tsconfig.json && npm run typecheck --workspaces --if-present",
+    "test": "npm run test:unit",
+    "test:unit": "node scripts/bin.mjs vitest run",
+    "test:integration": "node scripts/bin.mjs vitest run --config vitest.integration.config.ts",
+    "test:e2e": "npm run test:e2e -w @alola/web",
+    "check:i18n": "node scripts/bin.mjs tsx scripts/check-i18n.ts",
+    "check:secrets": "node scripts/scan-secrets.mjs",
+    "check:deps": "npm audit --audit-level=high",
+    "build": "npm run build --workspaces --if-present",
+    "verify": "npm run lint && npm run format:check && npm run typecheck && npm run check:i18n && npm run check:secrets && npm run test:unit && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.2",
+    "esbuild": "0.28.2",
+    "eslint": "10.11.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.12.0",
+    "jsdom": "29.1.1",
+    "prettier": "3.9.8",
+    "tsx": "4.23.13",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0",
+    "vitest": "5.0.1"
+  }
+}

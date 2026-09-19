@@ -20,6 +20,7 @@ This directory describes **how** ALOLA ERP is built. It is deliberately narrow i
 | [localization-and-theming.md](localization-and-theming.md) | i18n mechanics, direction handling, typography, the design token contract |
 | [integrations.md](integrations.md) | Adapter contract, webhook handling, job reliability, provider registry |
 | [environments.md](environments.md) | Configuration contract, local development options, fail-safe startup |
+| [dependencies.md](dependencies.md) | Pinned dependency versions, why each was chosen, and what was deliberately left out |
 
 ## Rule for these documents
 

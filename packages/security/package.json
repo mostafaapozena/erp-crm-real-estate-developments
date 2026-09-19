@@ -1,0 +1,16 @@
+{
+  "name": "@alola/security",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Logging redaction, encryption and private-file abstractions, upload validation",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "node ../../scripts/bin.mjs tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "pino": "10.3.1"
+  }
+}

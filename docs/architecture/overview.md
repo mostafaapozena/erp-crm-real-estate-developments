@@ -70,7 +70,9 @@ docs/
   architecture/  decisions/  phases/  discovery/
 ```
 
-Nothing under `apps/` or `packages/` exists yet. Scaffolding awaits approval.
+The Phase 1 scaffolding of all nine workspaces exists as of 2026-09-19; see `../MEMORY.md` for verified
+status. `packages/security/` currently holds logging redaction, encryption, private-file, and upload
+foundations; authorization primitives and scoped repositories arrive with `SEC-023`–`SEC-032`.
 
 ## 4. Module boundaries
 

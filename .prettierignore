@@ -1,0 +1,11 @@
+# Hand-formatted documentation: Prettier would reflow its tables and prose.
+*.md
+docs/
+
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+package-lock.json
+*.pdf

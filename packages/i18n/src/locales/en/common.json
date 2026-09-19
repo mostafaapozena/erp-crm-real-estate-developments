@@ -1,0 +1,41 @@
+{
+  "app": {
+    "title": "ALOLA ERP"
+  },
+  "shell": {
+    "logoPlaceholder": "Temporary logo — development only",
+    "logoPlaceholderHint": "Will be replaced by the approved logo when available",
+    "switchLanguage": "العربية",
+    "openNavigation": "Open navigation",
+    "closeNavigation": "Close navigation",
+    "navigation": "Main navigation",
+    "skipToContent": "Skip to content"
+  },
+  "nav": {
+    "foundation": "Platform foundation"
+  },
+  "foundation": {
+    "title": "Platform foundation",
+    "description": "Phase 1: shared foundations for language, direction, Light Mode, and interface states.",
+    "statesHeading": "Interface states",
+    "bidiHeading": "Direction isolation for mixed fields",
+    "phoneLabel": "Phone number",
+    "emailLabel": "Email",
+    "actionLabel": "Primary action",
+    "itemsCount_one": "{{count}} item",
+    "itemsCount_other": "{{count}} items"
+  },
+  "states": {
+    "loadingTitle": "Loading",
+    "loadingDescription": "Please wait a moment.",
+    "emptyTitle": "No data",
+    "emptyDescription": "There are no records to show yet.",
+    "errorTitle": "Something went wrong",
+    "errorDescription": "The request could not be completed. Try again.",
+    "forbiddenTitle": "Not authorized",
+    "forbiddenDescription": "You do not have permission to access this content.",
+    "successTitle": "Completed successfully",
+    "successDescription": "Your changes were saved.",
+    "retry": "Try again"
+  }
+}

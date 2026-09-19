@@ -1,0 +1,14 @@
+{
+  "VALIDATION_FAILED": "Some of the entered data is not valid.",
+  "MALFORMED_REQUEST": "The request could not be read.",
+  "PAYLOAD_TOO_LARGE": "The submitted data is larger than allowed.",
+  "UNAUTHENTICATED": "You need to sign in.",
+  "FORBIDDEN": "You do not have permission to perform this action.",
+  "CSRF_REJECTED": "The request was rejected for security reasons. Reload the page and try again.",
+  "NOT_FOUND": "The requested item was not found.",
+  "CONFLICT": "The data changed since it was loaded. Reload and try again.",
+  "RATE_LIMITED": "Too many requests in a short time. Wait a moment and try again.",
+  "SERVICE_NOT_CONFIGURED": "This service is not configured in the current environment.",
+  "SERVICE_UNAVAILABLE": "The service is temporarily unavailable.",
+  "INTERNAL_ERROR": "An unexpected error occurred."
+}

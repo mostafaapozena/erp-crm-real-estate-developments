@@ -1,0 +1,42 @@
+import { z } from 'zod';
+
+/**
+ * Stable machine error codes (PLAT-008, I18N-008).
+ *
+ * The API never returns user-facing prose. It returns one of these codes and the client renders the
+ * localized message from the `errors` translation namespace. Adding a code means adding its Arabic and
+ * English message in the same change — the i18n key check enforces it.
+ */
+export const ERROR_CODES = [
+  'VALIDATION_FAILED',
+  'MALFORMED_REQUEST',
+  'PAYLOAD_TOO_LARGE',
+  'UNAUTHENTICATED',
+  'FORBIDDEN',
+  'CSRF_REJECTED',
+  'NOT_FOUND',
+  'CONFLICT',
+  'RATE_LIMITED',
+  'SERVICE_NOT_CONFIGURED',
+  'SERVICE_UNAVAILABLE',
+  'INTERNAL_ERROR',
+] as const;
+
+export const ErrorCodeSchema = z.enum(ERROR_CODES);
+export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
+
+/** One field-level validation problem. `code` is a machine code; `path` locates the field. */
+export const FieldIssueSchema = z.strictObject({
+  path: z.array(z.union([z.string(), z.number()])),
+  code: z.string(),
+});
+export type FieldIssue = z.infer<typeof FieldIssueSchema>;
+
+export const ErrorResponseSchema = z.strictObject({
+  error: z.strictObject({
+    code: ErrorCodeSchema,
+    correlationId: z.string(),
+    issues: z.array(FieldIssueSchema).optional(),
+  }),
+});
+export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;

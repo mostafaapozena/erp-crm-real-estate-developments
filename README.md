@@ -4,7 +4,7 @@ Implementation control centre for the ALOLA Real Estate CRM & ERP — a secure, 
 monolith connecting marketing, leads, inventory, sales, collections, accounting, procurement,
 construction, HR, handover, and after-sales in one auditable platform.
 
-**Current state: Phase 1. Discovery approved 2026-09-19; build half (application scaffolding) authorized.**
+**Current state: Phase 1. Discovery approved; application scaffolding complete and awaiting Phase 1 review.**
 See [docs/MEMORY.md](docs/MEMORY.md) for verified status.
 
 ## Documentation map
@@ -33,7 +33,7 @@ sources of truth**. Later written stakeholder decisions supersede conflicting st
 | Document | Purpose |
 |---|---|
 | [docs/decisions/](docs/decisions/) | 18 Architecture Decision Records — *why* the implementation is shaped as it is. |
-| [docs/decisions/open-decisions.md](docs/decisions/open-decisions.md) | Stakeholder decisions, each assigned to the phase it blocks. **17 open, none blocking Phase 1 scaffolding.** |
+| [docs/decisions/open-decisions.md](docs/decisions/open-decisions.md) | Stakeholder decisions, each assigned to the phase it blocks. **18 open, none blocking Phase 1 scaffolding.** |
 
 ### Architecture
 
@@ -89,6 +89,21 @@ These are settled. Each has an ADR; none is a preference.
 5. Do not begin the next phase until the current gate is verified and explicitly approved.
 6. Update [docs/MEMORY.md](docs/MEMORY.md) and [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) after every
    completed feature, fix, migration, or material decision.
+
+## Getting started
+
+Requires Node.js 24 (see `.nvmrc`). No database, Redis, or Docker is needed to build and test.
+
+```sh
+npm install
+npm run verify      # lint, format, typecheck, i18n keys, secret scan, unit tests, production build
+npm run dev:web     # http://localhost:5173 — Arabic RTL by default
+npm run dev:api     # http://localhost:4000 — copy .env.example to .env first
+```
+
+The full command list, test tiers, and service setup are in
+[docs/architecture/environments.md](docs/architecture/environments.md). Pinned dependency versions and
+the reasons for them are in [docs/architecture/dependencies.md](docs/architecture/dependencies.md).
 
 ## Repository status
 

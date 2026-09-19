@@ -42,6 +42,7 @@ two. `SD-13` onward are additions arising from the discovery review and the tech
 | `SD-19` | Meta Business ownership and assets | Phase 3 | No |
 | `SD-20` | Provider selection | Phase 3 | No |
 | `SD-21` | Timezone, fiscal calendar, working week | Phase 2 | No — configurable, placeholder `UTC` in development |
+| `SD-23` | Digit shape for Arabic numbers | Phase 2 | No — one formatter setting, CLDR default meanwhile |
 
 **No open item blocks Phase 1 scaffolding.** Each one does block its named phase, and must be answered
 before that phase starts.
@@ -201,6 +202,18 @@ zone). Development uses the placeholder `UTC`, which is explicitly **not** a bus
 calendar. See [adr-0008-utc-storage-and-display-timezone.md](adr-0008-utc-storage-and-display-timezone.md).
 **Status:** Open
 
+### SD-23 — Digit shape for Arabic numbers
+**Question:** In the Arabic interface, should numbers, amounts, and dates use Western digits (`1,234.5`)
+or Arabic-Indic digits (`١٬٢٣٤٫٥`)? Should exports and PDFs follow the same choice?
+**Owner:** ALOLA business owner / design authority · **First blocks:** Phase 2 (first screens showing
+prices and areas)
+**Phase 1 impact:** None. Found during scaffolding: the `ar` locale formats with **Western** digits by
+default, `ar-EG` with Arabic-Indic. All formatters use one setting from one place
+(`packages/i18n/src/format.ts`), so digits never mix within a screen; the chosen shape is a one-line
+change there.
+**Risk if assumed:** Mixed digit shapes across screens, exports, and PDFs read as a defect, and changing
+them after documents are issued creates inconsistent records. **Status:** Open
+
 ## Closed items
 
 | ID | Decision | Resolution | Date |
@@ -222,7 +235,8 @@ calendar. See [adr-0008-utc-storage-and-display-timezone.md](adr-0008-utc-storag
 |---|---|
 | Open, adopted from the client's own checklist (`SD-01`–`SD-12`) | 12 |
 | Open, raised by discovery or the technical baseline (`SD-17`–`SD-21`) | 5 |
-| **Total open** | **17** |
+| Open, raised during Phase 1 scaffolding (`SD-23`) | 1 |
+| **Total open** | **18** |
 | Open items blocking Phase 1 scaffolding | **0** |
 | Blocking an entire phase | `SD-08` blocks Phase 6 |
 | Closed stakeholder items (`SD-13`, `SD-14`, `SD-15`, `SD-16`, `SD-22`) | 5 |

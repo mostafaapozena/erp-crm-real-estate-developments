@@ -1,0 +1,13 @@
+{
+  "name": "@alola/testing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Test harness helpers: service availability and explicit skips (TEST-001)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "node ../../scripts/bin.mjs tsc --noEmit -p tsconfig.json"
+  }
+}

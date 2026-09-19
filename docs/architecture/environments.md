@@ -45,19 +45,23 @@ at first use, hours later, inside an unrelated stack trace.
 real value. A new required variable is added to `.env.example` in the same change that introduces it, and CI
 checks `.env.example` against the configuration schema for completeness.
 
-Expected variable groups (final list fixed during scaffolding):
+Implemented variables (Phase 1 scaffolding, `packages/config/src/env.ts`):
 
-| Group | Variables |
-|---|---|
-| Runtime | `NODE_ENV`, `PORT`, `TZ=UTC`, `LOG_LEVEL` |
-| Application | `APP_BASE_URL`, `API_BASE_URL`, `DEFAULT_LOCALE=ar`, `ORG_TIMEZONE` |
-| Database | `MONGODB_URI` |
-| Redis | `REDIS_URL` |
-| Sessions | `SESSION_SECRET`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL` |
-| Storage | `S3_BUCKET`, `S3_REGION`, `AWS_*` credentials or role |
-| Encryption | `KMS_KEY_ID` |
-| Providers | Meta, WhatsApp, email, SMS, gateway — added per phase, never before needed |
-| Observability | `SENTRY_DSN` |
+| Group | Variables | Required |
+|---|---|---|
+| Runtime | `NODE_ENV`, `APP_ENV`, `LOG_LEVEL`, `TZ` (must be `UTC`) | `TZ` always |
+| Organization | `ORG_TIMEZONE` (IANA; placeholder `UTC` pending `SD-21`), `DEFAULT_LOCALE` (`ar`) | `ORG_TIMEZONE` always |
+| API | `PORT`, `CORS_ALLOWED_ORIGINS` (bare origins, no wildcard), `TRUST_PROXY_HOPS`, `RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_MAX_REQUESTS` | `CORS_ALLOWED_ORIGINS` for the API |
+| Database | `MONGODB_URI`, `MONGODB_DB_NAME` | staging and production; name containing `prod` refused elsewhere |
+| Redis | `REDIS_URL` | staging and production; always for the worker |
+| Worker | `WORKER_CONCURRENCY` | — |
+| Files and encryption | `S3_BUCKET`, `S3_REGION`, `KMS_KEY_ID` | staging and production |
+
+Added in the phase that needs them, never before: session secrets and token lifetimes (`SEC-014`),
+provider credentials (Phase 3+), `SENTRY_DSN` (monitoring).
+
+A configuration error lists every offending variable with the problem — **never its value** — and the
+process exits with status 1. It does not crash-loop or print a stack trace.
 
 `TZ=UTC` is required on every server process
 ([ADR-0008](../decisions/adr-0008-utc-storage-and-display-timezone.md)); CI asserts it.
@@ -151,21 +155,33 @@ an audit trail.
 
 ## 7. Verification commands
 
-To be available once scaffolding exists. All four must pass with **no services running**:
+All of these pass with **no services running**:
 
 ```sh
-npm run lint          # ESLint: boundaries, hex literals, physical CSS, money arithmetic
-npm run typecheck     # tsc --noEmit, strict
+npm run verify        # everything below except audit and E2E, in order
+npm run lint          # ESLint: type-aware rules, module boundaries, color literals, physical CSS,
+                      # Light-Mode-only, hard-coded text
+npm run format:check  # Prettier
+npm run typecheck     # tsc --noEmit, strict, every workspace
+npm run check:i18n    # Arabic/English key parity, empty values, plural forms
+npm run check:secrets # credential patterns in tracked and untracked files
 npm run test:unit     # Vitest — no service dependency
-npm run build         # Production build of all applications
+npm run build         # production build of web, api, worker
+npm run check:deps    # npm audit, high and critical
+npm run test:e2e      # Playwright against the production build, Arabic RTL and English LTR
 ```
 
-Requiring infrastructure:
+E2E needs a one-time browser download: `node scripts/bin.mjs playwright install chromium` (run in
+`apps/web`).
+
+Requiring infrastructure — **skipped, and reported as skipped, until it is provisioned**:
 
 ```sh
-npm run test:integration   # MongoDB replica set + Redis
-npm run test:e2e           # Playwright, both locales and directions
+npm run test:integration   # Atlas development cluster + Redis (ADR-0018)
 ```
+
+Development servers: `npm run dev:api`, `npm run dev:worker`, `npm run dev:web`. The API and worker read
+the untracked repository-root `.env` (copy `.env.example`).
 
 ## 8. Open dependencies
 

@@ -1,0 +1,45 @@
+{
+  "app": {
+    "title": "نظام العلا"
+  },
+  "shell": {
+    "logoPlaceholder": "شعار مؤقت — للتطوير فقط",
+    "logoPlaceholderHint": "سيُستبدل بالشعار المعتمد عند توفره",
+    "switchLanguage": "English",
+    "openNavigation": "فتح قائمة التنقل",
+    "closeNavigation": "إغلاق قائمة التنقل",
+    "navigation": "التنقل الرئيسي",
+    "skipToContent": "الانتقال إلى المحتوى"
+  },
+  "nav": {
+    "foundation": "أساس المنصة"
+  },
+  "foundation": {
+    "title": "أساس المنصة",
+    "description": "المرحلة الأولى: البنية المشتركة للغة والاتجاه والوضع الفاتح وحالات الواجهة.",
+    "statesHeading": "حالات الواجهة",
+    "bidiHeading": "عزل الاتجاه للحقول المختلطة",
+    "phoneLabel": "رقم الهاتف",
+    "emailLabel": "البريد الإلكتروني",
+    "actionLabel": "إجراء أساسي",
+    "itemsCount_zero": "لا توجد عناصر",
+    "itemsCount_one": "عنصر واحد",
+    "itemsCount_two": "عنصران",
+    "itemsCount_few": "{{count}} عناصر",
+    "itemsCount_many": "{{count}} عنصرًا",
+    "itemsCount_other": "{{count}} عنصر"
+  },
+  "states": {
+    "loadingTitle": "جارٍ التحميل",
+    "loadingDescription": "يُرجى الانتظار قليلًا.",
+    "emptyTitle": "لا توجد بيانات",
+    "emptyDescription": "لا توجد سجلات لعرضها حتى الآن.",
+    "errorTitle": "حدث خطأ",
+    "errorDescription": "تعذّر إكمال الطلب. حاول مرة أخرى.",
+    "forbiddenTitle": "غير مصرّح",
+    "forbiddenDescription": "ليست لديك صلاحية الوصول إلى هذا المحتوى.",
+    "successTitle": "تمت العملية بنجاح",
+    "successDescription": "حُفظت التغييرات.",
+    "retry": "إعادة المحاولة"
+  }
+}

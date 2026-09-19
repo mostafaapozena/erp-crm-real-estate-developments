@@ -1,0 +1,17 @@
+{
+  "name": "@alola/config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Environment configuration validated at startup (OPS-001, OPS-002)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "node ../../scripts/bin.mjs tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@alola/contracts": "0.1.0",
+    "zod": "4.6.5"
+  }
+}

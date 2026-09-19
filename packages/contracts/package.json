@@ -1,0 +1,17 @@
+{
+  "name": "@alola/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Single definition of every request, response, and domain primitive (PLAT-011)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "node ../../scripts/bin.mjs tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "decimal.js": "10.6.0",
+    "zod": "4.6.5"
+  }
+}
