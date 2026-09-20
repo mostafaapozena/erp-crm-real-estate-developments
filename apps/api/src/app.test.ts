@@ -1,5 +1,5 @@
 import { Writable } from 'node:stream';
-import { createLogger } from '@alola/security';
+import { PrivilegeEscalationError, createLogger } from '@alola/security';
 import { Router } from 'express';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import request from 'supertest';
@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { createApp, type AppDependencies } from './app';
 import { AppError } from './errors';
 import { currentCorrelationId } from './http/correlation';
+import { markAuditExempt } from './http/audit-context';
 import { validate, validated } from './http/validate';
 
 const ALLOWED = 'http://localhost:5173';
@@ -32,6 +33,9 @@ const testModule = () => {
     '/echo',
     validate({ body: z.strictObject({ name: z.string().min(1), amount: z.string() }) }),
     (_req, res) => {
+      // This fixture echoes input and changes no state, so it is exempt from the
+      // "every mutation is audited" assertion (AUDIT-003). Domain mutations are never exempt.
+      markAuditExempt(res);
       res.json({ received: validated(res, 'body'), correlationId: currentCorrelationId() });
     },
   );
@@ -40,6 +44,15 @@ const testModule = () => {
   });
   router.get('/conflict', () => {
     throw new AppError('CONFLICT', 409);
+  });
+  router.get('/escalation', () => {
+    // A module error that carries a published code, thrown by code that cannot import the HTTP layer.
+    throw new PrivilegeEscalationError('self-grant');
+  });
+  router.get('/oserror', () => {
+    const error = new Error('open failed') as Error & { code: string };
+    error.code = 'ENOENT';
+    throw error;
   });
   return { basePath: '/test' as const, router };
 };
@@ -203,6 +216,20 @@ describe('centralized errors (PLAT-008)', () => {
     const res = await request(buildApp().app).get('/api/v1/test/conflict');
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('CONFLICT');
+  });
+
+  it('answers a domain error with the code it declares, without its detail', async () => {
+    const res = await request(buildApp().app).get('/api/v1/test/escalation');
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN');
+    // The reason for the refusal is policy information and stays on the server (SEC-030).
+    expect(JSON.stringify(res.body)).not.toContain('self-grant');
+  });
+
+  it('does not let an unrelated error code choose its own status', async () => {
+    const res = await request(buildApp().app).get('/api/v1/test/oserror');
+    expect(res.status).toBe(500);
+    expect(res.body.error.code).toBe('INTERNAL_ERROR');
   });
 
   it('hides unexpected error messages from the client but logs them with the correlation ID', async () => {

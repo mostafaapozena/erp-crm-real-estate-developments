@@ -43,6 +43,8 @@ silently violate a constraint whose reason was never written down.
 | [ADR-0018](adr-0018-development-infrastructure-selection.md) | Development infrastructure: MongoDB Atlas and a Redis adapter | Accepted (staging/production only since ADR-0020) | Environment |
 | [ADR-0019](adr-0019-security-account-organization-employee-boundary.md) | Security account, organization, and employee are separate aggregates | Accepted | Architecture |
 | [ADR-0020](adr-0020-local-docker-development-services.md) | Local Docker services for development; managed services for staging and production | Accepted | Environment |
+| [ADR-0021](adr-0021-audit-trail-integrity.md) | Audit trail integrity: what the application guarantees, and what it cannot | Accepted | Security |
+| [ADR-0022](adr-0022-authorization-resolved-per-request.md) | Authorization state is resolved per request, with no permission cache | Accepted | Security |
 
 ## Open items
 

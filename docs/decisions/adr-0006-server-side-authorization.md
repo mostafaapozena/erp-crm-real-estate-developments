@@ -1,6 +1,6 @@
 # ADR-0006 — Authorization enforced on the server and in query scope
 
-- Status: Accepted
+- Status: Accepted · amended by a status update 2026-09-21
 - Date: 2026-09-19
 - Deciders: Implementation team, ratified by ALOLA blueprint revision 2.0
 - Scope: Security
@@ -89,6 +89,21 @@ Per endpoint, tests must prove:
 6. Privilege escalation attempts — editing one's own roles, scopes, or another actor's assignment — fail.
 
 A phase gate does not pass without these tests.
+
+## Status update — 2026-09-21
+
+The first implementation of this ADR landed with `AUDIT-001`–`AUDIT-006` and `SEC-023`–`SEC-032`. Two
+mechanisms chosen while implementing it are recorded separately because a later session must not reverse
+them silently:
+
+- [ADR-0021](adr-0021-audit-trail-integrity.md) — how append-only is enforced, what the guarantee does
+  **not** cover (a privileged database administrator; no cryptographic tamper-proofing), and the runtime
+  assertion that makes "every mutation is audited" more than a convention.
+- [ADR-0022](adr-0022-authorization-resolved-per-request.md) — the actor is rebuilt from stored grants on
+  every request, so there is no permission cache to invalidate and `SEC-032` holds by construction.
+
+Nothing in the Decision above changed. Separation of duties (Layer 4 concerns) and the session rules
+remain unimplemented: they belong to `APPROVAL-001`–`007` and `SEC-010`–`022`.
 
 ## References
 

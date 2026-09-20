@@ -7,6 +7,8 @@ import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import type { RateLimiterAbstract } from 'rate-limiter-flexible';
 import { readiness, type HealthProbe } from './health';
+import { attachActor, unauthenticatedResolver, type ActorResolver } from './http/actor';
+import { assertMutationAudited, auditRequestContext } from './http/audit-context';
 import { CORRELATION_HEADER, correlation, correlationIdOf } from './http/correlation';
 import { csrfOriginGuard } from './http/csrf';
 import { errorHandler, notFound } from './http/errors';
@@ -29,14 +31,21 @@ export interface AppDependencies {
   redis: HealthProbe<DependencyHealth>;
   rateLimiter: RateLimiterAbstract;
   modules?: readonly ApiModule[];
+  /**
+   * Builds the actor from stored grants (SEC-025). Defaults to "no actor", so protected endpoints answer
+   * 401 until session authentication lands (SEC-013/SEC-014). Nothing about identity is ever taken from
+   * the request itself.
+   */
+  actorResolver?: ActorResolver;
 }
 
 export const JSON_BODY_LIMIT = '100kb';
 
 /**
  * Request pipeline, in order (docs/architecture/overview.md §5):
- * correlation ID → structured request log → security headers → CORS → health → rate limit →
- * body parsing → CSRF origin guard → versioned routes → not found → centralized errors.
+ * correlation ID → audit request context → structured request log → security headers → CORS → health →
+ * rate limit → body parsing → CSRF origin guard → actor resolution → mutation-audit assertion →
+ * versioned routes → not found → centralized errors.
  */
 export function createApp(deps: AppDependencies): Express {
   const app = express();
@@ -44,6 +53,8 @@ export function createApp(deps: AppDependencies): Express {
   app.set('trust proxy', deps.config.TRUST_PROXY_HOPS);
 
   app.use(correlation());
+  // AUDIT-003: count audit writes per request so an unaudited mutation cannot return success.
+  app.use(auditRequestContext());
   app.use(
     pinoHttp({
       logger: deps.logger,
@@ -92,6 +103,10 @@ export function createApp(deps: AppDependencies): Express {
   app.use(rateLimit(deps.rateLimiter, (req) => `ip:${req.ip ?? 'unknown'}`));
   app.use(express.json({ limit: JSON_BODY_LIMIT, strict: true }));
   app.use(csrfOriginGuard(deps.config.CORS_ALLOWED_ORIGINS));
+
+  // SEC-025: the actor is resolved server-side, then every protected route checks permissions.
+  app.use(attachActor(deps.actorResolver ?? unauthenticatedResolver));
+  app.use(assertMutationAudited(deps.logger));
 
   const v1 = Router();
   const openApiDocument = buildOpenApiDocument();

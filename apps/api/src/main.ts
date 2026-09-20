@@ -2,7 +2,13 @@ import { ConfigError, assertUtcRuntime, loadApiConfig, loadDotEnvIfPresent } fro
 import { createLogger } from '@alola/security';
 import { fileURLToPath } from 'node:url';
 import { RateLimiterMemory, RateLimiterRedis } from 'rate-limiter-flexible';
-import { createApp } from './app';
+import { createApp, type ApiModule } from './app';
+import { AUDIT_ACTIONS } from '@alola/contracts';
+import { noteAuditWrite } from './http/audit-context';
+import { AuditService, auditRouter } from './modules/audit';
+import { SecurityService, securityRouter } from './modules/security';
+import { ensureIndexes } from './platform/indexes';
+import { AppError } from './errors';
 import { MongoConnector, configureMongoose } from './platform/mongo';
 import { RedisConnector } from './platform/redis';
 
@@ -34,7 +40,18 @@ const mongo = new MongoConnector(
   logger,
 );
 const redis = new RedisConnector(config.REDIS_URL, logger);
-void mongo.connect();
+void mongo.connect().then(async () => {
+  if (!mongo.db) return;
+  try {
+    // ADR-0002: indexes are declared with their collections and created explicitly (autoIndex is off).
+    await ensureIndexes(mongo.db, logger);
+  } catch (error) {
+    logger.error(
+      { err: error, code: 'INDEX_CREATION_FAILED' },
+      'MongoDB indexes could not be created',
+    );
+  }
+});
 redis.connect();
 
 const limits = {
@@ -51,7 +68,76 @@ const rateLimiter = redis.client
     })
   : memoryLimiter;
 
-const app = createApp({ config, logger, mongo, redis, rateLimiter });
+/**
+ * Domain services need a live database. Until MongoDB is configured, their routes answer
+ * SERVICE_NOT_CONFIGURED rather than crashing the process (ADR-0012).
+ */
+function requireConnection() {
+  const connection = mongo.db;
+  if (!connection) throw new AppError('SERVICE_NOT_CONFIGURED', 503);
+  return connection;
+}
+
+let auditService: AuditService | undefined;
+let securityService: SecurityService | undefined;
+
+function getAuditService(): AuditService {
+  const connection = requireConnection();
+  auditService ??= new AuditService({ connection, logger, onRecorded: noteAuditWrite });
+  return auditService;
+}
+
+function getSecurityService(): SecurityService {
+  const connection = requireConnection();
+  securityService ??= new SecurityService({ connection, audit: getAuditService() });
+  return securityService;
+}
+
+/** Authorization denials are security events (AUDIT-005). A failure to record must not hide the denial. */
+const guard = {
+  onDenied: async (denial: {
+    requiredPermission: string;
+    actor?: { kind: 'account' | 'system'; accountId: string; roleKeys: string[] } | undefined;
+    correlationId: string;
+    method: string;
+    route: string;
+    ip?: string;
+  }) => {
+    try {
+      await getAuditService().record({
+        action: AUDIT_ACTIONS.authorizationDenied,
+        outcome: 'denied',
+        actor: denial.actor
+          ? {
+              kind: denial.actor.kind,
+              accountId: denial.actor.accountId,
+              roleKeys: denial.actor.roleKeys,
+            }
+          : { kind: 'anonymous' },
+        target: { type: 'endpoint', id: `${denial.method} ${denial.route}` },
+        reason: `missing permission: ${denial.requiredPermission}`,
+        context: {
+          correlationId: denial.correlationId,
+          method: denial.method,
+          route: denial.route,
+          ...(denial.ip ? { ip: denial.ip } : {}),
+        },
+      });
+    } catch (error) {
+      logger.error(
+        { err: error, code: 'AUDIT_DENIAL_NOT_RECORDED' },
+        'Authorization denial could not be audited',
+      );
+    }
+  },
+};
+
+const modules: ApiModule[] = [
+  { basePath: '/audit', router: auditRouter({ getService: getAuditService, guard }) },
+  { basePath: '/security', router: securityRouter({ getService: getSecurityService, guard }) },
+];
+
+const app = createApp({ config, logger, mongo, redis, rateLimiter, modules });
 
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.APP_ENV }, 'API listening');

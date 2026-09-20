@@ -1,6 +1,6 @@
 # Requirement Registry
 
-Version: 1.2 · Last updated: 2026-09-19 · Scheme: [ADR-0014](decisions/adr-0014-requirement-id-scheme.md),
+Version: 1.3 · Last updated: 2026-09-21 · Scheme: [ADR-0014](decisions/adr-0014-requirement-id-scheme.md),
 namespaces [ADR-0016](decisions/adr-0016-phase-1-requirement-namespaces.md)
 
 ## How to use this registry
@@ -25,6 +25,7 @@ enumerated during that phase's discovery.
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
+| Status `implemented` (code and passing tests) | **59** — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
@@ -185,6 +186,36 @@ discovery enumerates them.
 | AUDIT-004 | Audit of every export and of sensitive-data reads | MM §11 | Was `CORE-AUDIT-004` |
 | AUDIT-005 | Audit of authentication events and permission/role/scope changes | MM §6 | Was `CORE-AUDIT-005` |
 | AUDIT-006 | Summaries, not verbatim protected values | ADR-0006 | Was `CORE-AUDIT-006` |
+
+## Implementation evidence — audit and authorization core (2026-09-21)
+
+Status `implemented`: code exists and its tests pass. **None of these is `verified`**; `verified` requires
+the Phase 1 exit-gate review, which has not happened. Evidence is the test that would fail if the
+behaviour regressed, not the file that contains the feature.
+
+| ID | Status | Evidence |
+|---|---|---|
+| AUDIT-001 | implemented | `apps/api/src/modules/audit/audit.int-test.ts` — every mutating query operation, `bulkWrite`, and a document re-save are refused against real MongoDB; `authorization.int-test.ts` — no HTTP route updates or deletes an event. Limits stated in [ADR-0021](decisions/adr-0021-audit-trail-integrity.md) §2 |
+| AUDIT-002 | implemented | `audit.int-test.ts` — actor, action, outcome, target, correlation ID, request context, provider reference, and a UTC `occurredAt` are stored and returned |
+| AUDIT-003 | implemented | `apps/api/src/http/guards.test.ts` — a successful mutation recording no audit event returns `500` and logs `AUDIT_MISSING_FOR_MUTATION`; `authorization.int-test.ts` — real mutating routes pass the assertion |
+| AUDIT-004 | implemented | `authorization.int-test.ts` — a list read and an export each record their own event before the response is sent; export requires a separate permission |
+| AUDIT-005 | implemented | `authorization.int-test.ts` — role creation, grant change (with before/after summary), authorization denials, anonymous denials, and refused escalation attempts are all recorded. Authentication events: `recordAuthenticationEvent` exists and is tested, but no authentication flow calls it yet (`SEC-013`) |
+| AUDIT-006 | implemented | `packages/security/src/audit/summary.test.ts` — 19 sensitive key names redacted, nested values covered, length and path count bounded, no whole request body stored |
+| SEC-023 | implemented | `packages/contracts/src/authorization.ts` — granular verb catalog with administrative permissions listed explicitly; `authorization.test.ts` — an administrative permission is never implied by another |
+| SEC-024 | implemented | `authorization.int-test.ts` — roles created and listed over HTTP, duplicate key rejected with `CONFLICT`, administrative roles flagged. Business role content still blocked on `SD-02`; nothing seeded |
+| SEC-025 | implemented | `authorization.int-test.ts` — 401 without an actor, 403 without the permission, deny wins over a granting role, headers/cookies/bodies claiming roles are ignored |
+| SEC-026 | implemented | `packages/contracts` scope model `self`…`all`; `authorization.test.ts` covers every level. Hierarchy **values** remain blocked on `SD-01` |
+| SEC-027 | implemented | `authorization.test.ts` — an unsatisfiable scope becomes a filter matching nothing, never an open one; `audit.int-test.ts` — operator objects in a filter are rejected. No repository method accepts a filter without a scope |
+| SEC-028 | implemented | `authorization.int-test.ts` — items, the total, and the export are all scoped; totals stay consistent across keyset pages |
+| SEC-029 | implemented | `authorization.int-test.ts` — restricted fields absent from list, single read, and NDJSON export, and a grant's denial list absent for a view-only actor; `authorization.test.ts` — writes to unseen fields refused |
+| SEC-030 | implemented | `authorization.int-test.ts` — an out-of-scope event and an absent event return identical `404` bodies; denials never name the permission or scope |
+| SEC-031 | implemented | `authorization.int-test.ts` — self-grant refused, granting unheld permissions refused, widening scope refused, role minting with unheld permissions refused, `security.grant.assignAny` allows it, and every refusal is audited |
+| SEC-032 | implemented | `authorization.int-test.ts` — a grant written over HTTP changes the next request's outcome in both directions, with no cache to invalidate ([ADR-0022](decisions/adr-0022-authorization-resolved-per-request.md)) |
+
+**Not covered by this group:** `SEC-010`–`SEC-022` (accounts, passwords, sessions, devices, MFA,
+activation, offboarding) and `SEC-033` (KMS adapter). The production actor resolver returns no actor, so
+protected endpoints answer `401` until `SEC-013` lands. The integration suites inject a test resolver;
+it is a fixture for exercising authorization and is **not** an authentication implementation.
 
 ## APPROVAL — Approval infrastructure (Master Mapping module `CORE-APPROVAL`)
 

@@ -25,6 +25,25 @@ export const ERROR_CODES = [
 export const ErrorCodeSchema = z.enum(ERROR_CODES);
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 
+/**
+ * The HTTP status each code is answered with. Declared once, so a code cannot mean 403 on one route and
+ * 404 on another — which for authorization codes would itself leak policy (SEC-030).
+ */
+export const ERROR_STATUS: Readonly<Record<ErrorCode, number>> = {
+  VALIDATION_FAILED: 400,
+  MALFORMED_REQUEST: 400,
+  PAYLOAD_TOO_LARGE: 413,
+  UNAUTHENTICATED: 401,
+  FORBIDDEN: 403,
+  CSRF_REJECTED: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  RATE_LIMITED: 429,
+  SERVICE_NOT_CONFIGURED: 503,
+  SERVICE_UNAVAILABLE: 503,
+  INTERNAL_ERROR: 500,
+};
+
 /** One field-level validation problem. `code` is a machine code; `path` locates the field. */
 export const FieldIssueSchema = z.strictObject({
   path: z.array(z.union([z.string(), z.number()])),

@@ -154,3 +154,47 @@ Record in `docs/MEMORY.md`:
 - the exact next action
 
 A gate with any unchecked item in sections 2–9 has **not** passed. Say so plainly rather than hedging.
+
+---
+
+## Phase 1 — gate status as of 2026-09-21
+
+**Phase 1 has NOT passed its gate.** Recorded here because the checklist above is a template; only proven
+facts appear below.
+
+Proven for the scope implemented so far (commands run locally, results as observed):
+
+| Section | Item | Result |
+|---|---|---|
+| 2 | `npm run lint` | ✅ 0 errors, 0 warnings |
+| 2 | `npm run format:check` | ✅ |
+| 2 | `npm run typecheck` | ✅ strict, root + 9 workspaces, no new suppressions |
+| 2 | `npm run test:unit` | ✅ 284 passed, 17 files |
+| 2 | `npm run test:integration:gate` | ✅ 59 passed, 0 failed, **0 skipped**, 4 files |
+| 2 | `npm run check:bundle` | ✅ within budget |
+| 2 | `npm run test:e2e` | ✅ Arabic RTL and English LTR, desktop and mobile |
+| 2 | `npm run build` | ✅ web, api, worker |
+| 3 | Permission denied without the permission | ✅ tested per implemented endpoint |
+| 3 | Out-of-scope records absent from results, totals, and exports | ✅ tested |
+| 3 | Protected fields absent for unauthorized actors, including exports | ✅ tested |
+| 3 | Out-of-scope record returns `404`, not `403` | ✅ tested |
+| 3 | Audit record for every mutation and every export | ✅ tested, and enforced at runtime |
+| 3 | Privilege-escalation attempts fail | ✅ tested, and each refusal audited |
+| 3 | Unknown and malformed input rejected | ✅ tested |
+| 9 | Dependency scan, secret scan, log redaction | ✅ |
+
+Open, and therefore blocking:
+
+- Section 1 — no requirement is `verified`; **44 of 113** Phase 1 requirements are not started and 10 are
+  in progress. No stakeholder demonstration, no written approval.
+- Section 3 — **self-approval / separation of duties** untested because `APPROVAL-*` is not built.
+- Section 3 — **session invalidation on suspension and permission change** untested because there are no
+  sessions (`SEC-010`–`SEC-022`). Grant changes do take effect immediately
+  ([ADR-0022](../decisions/adr-0022-authorization-resolved-per-request.md)).
+- Section 4 — Arabic glyph assertion in generated PDFs: no PDF generation exists yet.
+- Section 6 — the implemented scope is API-only; no new screens, so no UI states to verify.
+- Section 8 — no integrations built.
+- Section 10 — a data dictionary for the new collections is recorded in
+  [../architecture/security-model.md](../architecture/security-model.md) §9 rather than a separate document.
+
+Hosted CI has still never run: there is no remote.
