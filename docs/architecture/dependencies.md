@@ -65,6 +65,24 @@ Runtime: **Node.js 24** (`engines: >=24`, `.nvmrc`). Verified on Node 24.14.1 / 
 | TanStack Query, React Hook Form | Listed in MASTER-MAPPING §4.3; added with the first screen that fetches data or has a form. |
 | Sentry | Listed in MASTER-MAPPING §4.3; needs a DSN and an approved data-scrubbing configuration. |
 
+## Bundle-size budget
+
+Approved at the Phase 1 scaffolding review (2026-09-19). Enforced by `npm run check:bundle` (part of
+`npm run verify`), which fails when any JavaScript chunk in the web build exceeds:
+
+| Measure | Budget | Phase 1 measurement |
+|---|---|---|
+| Largest chunk, minified | 650 kB | 582 kB |
+| Largest chunk, gzip | 210 kB | ~185 kB |
+
+- **Technical debt:** the web app ships as a single 582 kB chunk, above Vite's 500 kB advisory warning. The
+  warning is intentionally left visible rather than silenced.
+- **Route-level code splitting** (`React.lazy` per route) must be introduced before feature-heavy phases
+  add screens — at the latest with the first Phase 2 feature screens, and in any case before a build
+  would exceed the budget.
+- Splitting was not done in Phase 1: there is one page, so there is nothing to split yet.
+- Raising the budget needs an approved decision recorded in `docs/MEMORY.md`.
+
 ## Windows path note
 
 The repository path contains `&` (`CRM & ERP REALESTATE`). npm's generated Windows `.cmd` shims expand

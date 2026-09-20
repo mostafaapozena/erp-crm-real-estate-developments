@@ -33,7 +33,7 @@ sources of truth**. Later written stakeholder decisions supersede conflicting st
 | Document | Purpose |
 |---|---|
 | [docs/decisions/](docs/decisions/) | 18 Architecture Decision Records — *why* the implementation is shaped as it is. |
-| [docs/decisions/open-decisions.md](docs/decisions/open-decisions.md) | Stakeholder decisions, each assigned to the phase it blocks. **18 open, none blocking Phase 1 scaffolding.** |
+| [docs/decisions/open-decisions.md](docs/decisions/open-decisions.md) | Stakeholder decisions, each assigned to the phase it blocks. **17 open, none blocking Phase 1 scaffolding.** |
 
 ### Architecture
 
@@ -57,9 +57,9 @@ sources of truth**. Later written stakeholder decisions supersede conflicting st
 
 ### Supplementary
 
-`نطاق_أعمال_نظام_شركة_العلا_للتطوير_العقاري.pdf` — the Arabic client-facing business scope document. It is
-a **supplementary client-facing business document**, not a technical source of truth. It is kept in the working
-tree but is not committed to the repository. See
+[docs/source/alola-client-business-scope-ar.pdf](docs/source/README.md) (originally `نطاق_أعمال_نظام_شركة_العلا_للتطوير_العقاري.pdf`) — the Arabic
+client-facing business scope document, committed byte-for-byte with its SHA-256 recorded. It is
+a **supplementary client-facing business document**, not a technical source of truth. See
 [ADR-0013](docs/decisions/adr-0013-arabic-scope-document-status.md).
 
 ## Non-negotiable constraints

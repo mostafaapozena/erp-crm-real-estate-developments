@@ -1,6 +1,6 @@
 # Requirement Registry
 
-Version: 1.1 · Last updated: 2026-09-19 · Scheme: [ADR-0014](decisions/adr-0014-requirement-id-scheme.md),
+Version: 1.2 · Last updated: 2026-09-19 · Scheme: [ADR-0014](decisions/adr-0014-requirement-id-scheme.md),
 namespaces [ADR-0016](decisions/adr-0016-phase-1-requirement-namespaces.md)
 
 ## How to use this registry
@@ -24,7 +24,7 @@ enumerated during that phase's discovery.
 
 | | Count |
 |---|---|
-| Phase 1 requirements registered | 111 |
+| Phase 1 requirements registered | 113 |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
@@ -40,7 +40,7 @@ below is `approved` and not started.
 | `PLAT` | Platform and application foundation | — (§4.1, §4.2) |
 | `I18N` | Localization, direction, typography | — (§5.1, §5.2) |
 | `THEME` | Light Mode and design tokens | — (§5.3) |
-| `SEC` | Authentication, authorization, encryption, security | `CORE-USER`, `CORE-RBAC` |
+| `SEC` | Authentication, user security accounts, sessions, authorization, encryption, security | `CORE-USER` (security account only), `CORE-RBAC` |
 | `AUDIT` | Audit infrastructure | `CORE-AUDIT` |
 | `APPROVAL` | Approval infrastructure | `CORE-APPROVAL` |
 | `INTEGRATION` | Provider adapter foundations | `CORE-INTEGRATION` |
@@ -49,6 +49,28 @@ below is `approved` and not started.
 
 `CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, and `CORE-IMPORT` are business-platform modules
 that no namespace covers; they keep their Master Mapping codes (ADR-0016 rule 3).
+
+### Ownership boundary: SEC, CORE-ORG, HR-EMP (approved — [ADR-0019](decisions/adr-0019-security-account-organization-employee-boundary.md))
+
+| Owner | Owns | Phase |
+|---|---|---|
+| `SEC` | Authentication; user security accounts; passwords; sessions; devices; MFA; account activation and suspension; roles; permissions; field restrictions; data scopes; authorization policies; security events | 1 |
+| `CORE-ORG` | Legal entities; branches; departments; teams; job titles; reporting hierarchy; organization placement references | 2 |
+| `HR-EMP` | Employee business profiles; employment contracts; HR documents; attendance identity; payroll identity; employee organization placement | 8 |
+
+A user security account may **reference** an employee record; it never becomes the employee HR aggregate.
+
+**Review of `SEC-011`–`SEC-032` against this boundary (2026-09-19):** every ID represents account security,
+authentication, sessions, authorization, roles, permissions, field restrictions, or data scopes, so all
+stay in `SEC`. **None holds employee or HR business data, so none is restored to `CORE-ORG` or `HR-EMP`.**
+Three were clarified and one was narrowed:
+
+| ID | Change | Why |
+|---|---|---|
+| `SEC-011` | Clarified: the account holds an optional *reference* to an employee | The account is not the employee aggregate |
+| `SEC-019` | Clarified: account suspension and *deactivation* | Employment termination is an `HR-EMP` event |
+| `SEC-021` | **Narrowed** to the account-security part of offboarding | Reassigning tasks, approvals, and customers is owned elsewhere: `CORE-TASK-005`, `APPROVAL-007` (new, Phase 1) and `CRM-OWNER` (Phase 3) |
+| `SEC-026` | Clarified: scopes reference organization units owned by `CORE-ORG` | `SEC` stores the assignment, not the hierarchy |
 
 ---
 
@@ -119,7 +141,7 @@ discovery enumerates them.
 
 | ID | Requirement | Source | Notes |
 |---|---|---|---|
-| SEC-011 | User accounts linked to employee records | MM §6 | Was `CORE-USER-001` |
+| SEC-011 | User security account with an optional reference to an `HR-EMP` employee record; no employee business data on the account | MM §6, ADR-0019 | Was `CORE-USER-001`. Reference validated once `HR-EMP` exists (Phase 8) |
 | SEC-012 | Invitation and activation flow | MM §6 | Was `CORE-USER-002` |
 | SEC-013 | Login/logout with Argon2id password hashing | MM §6 | Was `CORE-USER-003` |
 | SEC-014 | Short-lived access tokens; refresh tokens rotated in `Secure` `HttpOnly` cookies | MM §6 | Was `CORE-USER-004`. Never `localStorage` |
@@ -127,9 +149,9 @@ discovery enumerates them.
 | SEC-016 | Password reset | MM §6 | Was `CORE-USER-006` |
 | SEC-017 | Mandatory MFA for privileged roles | MM §6 | Was `CORE-USER-007`. Role categories fixed by MM §6; the concrete role list arrives with `SD-02` in Phase 2 |
 | SEC-018 | Device and session listing with individual and bulk revocation | MM §6 | Was `CORE-USER-008` |
-| SEC-019 | Suspension and termination without deletion | ADR-0009 | Was `CORE-USER-009`. Deleting a user orphans audit records |
+| SEC-019 | Account suspension and deactivation without deletion | ADR-0009, ADR-0019 | Was `CORE-USER-009`. Deleting an account orphans audit records. Employment termination is `HR-EMP` |
 | SEC-020 | Immediate server-side session invalidation on suspension, password reset, and permission change | G-08 | Was `CORE-USER-010` |
-| SEC-021 | Offboarding as one workflow: suspend, terminate sessions, transfer owned customers, tasks, approvals | **G-08** | Was `CORE-USER-011`. Arabic scope p19 |
+| SEC-021 | Account offboarding as one audited action: suspend the account and revoke all sessions, devices, and delegations | **G-08**, ADR-0019 | Was `CORE-USER-011`. Narrowed 2026-09-19; record reassignment moved to `CORE-TASK-005`, `APPROVAL-007`, `CRM-OWNER` |
 | SEC-022 | Personal accounts only; shared accounts prohibited | **G-10** | Was `CORE-USER-012`. Arabic scope p19 |
 
 ### Authorization — Master Mapping module `CORE-RBAC`
@@ -139,7 +161,7 @@ discovery enumerates them.
 | SEC-023 | Permission catalog of granular verbs | MM §6 | Was `CORE-RBAC-001` |
 | SEC-024 | Roles as named permission bundles | MM §6 | Was `CORE-RBAC-002`. Mechanism only; business role content arrives with `SD-02` |
 | SEC-025 | Server-side authorization evaluating **permissions, never role names** | ADR-0006 | Was `CORE-RBAC-003` |
-| SEC-026 | Data scope model: `self`…`all` | MM §6 | Was `CORE-RBAC-004`. Vocabulary fixed by MM §6; hierarchy values arrive with `SD-01` |
+| SEC-026 | Data scope model: `self`…`all` | MM §6, ADR-0019 | Was `CORE-RBAC-004`. Scopes reference `CORE-ORG` units; hierarchy values arrive with `SD-01` |
 | SEC-027 | Scoped repository: no method accepts a filter without a scope; fetch-then-filter prohibited | ADR-0006 | Was `CORE-RBAC-005`. The single most important control in the system |
 | SEC-028 | Scope applied to counts, aggregates, pagination totals, exports, and search | ADR-0006 | Was `CORE-RBAC-006` |
 | SEC-029 | Field-level restriction; protected fields **absent** from serialization, exports, and PDFs | ADR-0006 | Was `CORE-RBAC-007` |
@@ -174,6 +196,7 @@ discovery enumerates them.
 | APPROVAL-004 | Delegation, time-bounded and audited | MM §6 | Was `CORE-APPROVAL-004` |
 | APPROVAL-005 | Escalation of an overdue task **or approval** to the direct manager | **G-09** | Was `CORE-APPROVAL-005`. Arabic scope p17 |
 | APPROVAL-006 | Immutable approval history | ADR-0009 | Was `CORE-APPROVAL-006` |
+| APPROVAL-007 | Reassign an offboarded user's pending approvals to an authorized approver, audited | **G-08**, ADR-0019 | New 2026-09-19 — split from `SEC-021` |
 
 ## INTEGRATION — Provider adapter foundations (Master Mapping module `CORE-INTEGRATION`)
 
@@ -204,6 +227,7 @@ discovery enumerates them.
 | CORE-TASK-002 | Reminder scheduling computed in the organization timezone, stored in UTC | ADR-0008 | |
 | CORE-TASK-003 | Escalation on overdue | **G-09** | |
 | CORE-TASK-004 | Calendar view | MM §8 | |
+| CORE-TASK-005 | Reassign an offboarded user's open tasks, audited | **G-08**, ADR-0019 | New 2026-09-19 — split from `SEC-021` |
 
 ## CORE-DOC — Documents, templates, numbering
 
@@ -284,6 +308,8 @@ consistently. No code or commit used the old IDs. **Old IDs are retired and neve
 | CORE-USER-011 | SEC-021 | | | |
 | CORE-USER-012 | SEC-022 | | | |
 
+Added after re-keying (2026-09-19, ADR-0019): `CORE-TASK-005`, `APPROVAL-007` — split from `SEC-021`.
+
 Unchanged: all `I18N-*`, `THEME-*`, `SEC-001`…`SEC-010`, the remaining `PLAT-*`, and every `CORE-NOTIFY`,
 `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, and `CORE-IMPORT` ID.
 
@@ -305,7 +331,7 @@ receive IDs when their phase is elaborated.
 | G-05 | Approval-controlled beneficiary/payee data change | FIN-CASH | 6 | pending Phase 6 | `proposed` |
 | G-06 | Check/note custody state machine + numbered handover minutes | COL-CHECK, COL-NOTE | 5 | pending Phase 5 | `proposed` |
 | G-07 | Budget alert on **approaching** the limit, not only exceeding it | FIN-BUDGET | 6 | pending Phase 6 | `proposed` |
-| G-08 | Offboarding: suspend + terminate sessions + transfer owned records | SEC (`CORE-USER`) | 1 | `SEC-021` | `approved` |
+| G-08 | Offboarding: suspend + terminate sessions + transfer owned records | SEC, CORE-TASK, APPROVAL, CRM-OWNER | 1, 3 | `SEC-021`, `CORE-TASK-005`, `APPROVAL-007`; customer transfer pending Phase 3 `CRM-OWNER` | `approved` (Phase 1 parts) |
 | G-09 | Escalate overdue task or approval to the direct manager | CORE-TASK, APPROVAL | 1 | `CORE-TASK-003`, `APPROVAL-005` | `approved` |
 | G-10 | Personal accounts only; shared accounts prohibited | SEC (`CORE-USER`) | 1 | `SEC-022` | `approved` |
 | G-11 | Book balances and currency per treasury and bank account | FIN-CASH, FIN-BANK | 6 | pending Phase 6 | `proposed` |
@@ -321,13 +347,13 @@ MASTER-MAPPING §8.
 
 | Phase | Modules | Blocking decisions |
 |---|---|---|
-| 2 — Organization, projects, units, pricing, inventory | CORE-ORG, INV-PROJECT, INV-UNIT, INV-STATUS, INV-PRICE, INV-PLAN, INV-HOLD, INV-SEARCH | `SD-01`, `SD-02`, `SD-03` (incl. conflict `C-06`), `SD-05`, `SD-21`; Atlas cluster provisioned (`D2`) for transaction verification |
+| 2 — Organization, projects, units, pricing, inventory | CORE-ORG (legal entities, branches, departments, teams, job titles, reporting hierarchy, placement references — ADR-0019), INV-PROJECT, INV-UNIT, INV-STATUS, INV-PRICE, INV-PLAN, INV-HOLD, INV-SEARCH | `SD-01`, `SD-02`, `SD-03` (incl. conflict `C-06`), `SD-05`, `SD-21`; Atlas cluster provisioned (`D2`) for transaction verification |
 | 3 — CRM, WhatsApp, Meta, leads, attribution | CRM-PERSON, CRM-LEAD, CRM-OPP, CRM-PIPE, CRM-ASSIGN, CRM-OWNER, CRM-ACTIVITY, CRM-MATCH, CRM-LOSS, CRM-WA, CRM-REPORT, MKT-CONNECT, MKT-ASSET, MKT-CAMPAIGN, MKT-ADSET, MKT-CREATIVE, MKT-AD, MKT-LEADFORM, MKT-AUDIENCE, MKT-WORKFLOW, MKT-BUDGET, MKT-SPEND, MKT-INSIGHT, MKT-ATTRIBUTION, MKT-CAPI, MKT-POLICY, MKT-SYNC, MKT-AUDIT | Full Meta scope approved (`SD-14` closed). MKT-CAPI built with production delivery disabled (`SD-15`, ADR-0017). Open: `SD-04`, `SD-09`, `SD-19`, `SD-20` |
 | 4 — Quotations, reservations, contracts | SALE-QUOTE, SALE-DISCOUNT, SALE-RESERVE, SALE-CONTRACT, SALE-CHANGE, SALE-CANCEL | `SD-05`, `SD-10`, `SD-17` |
 | 5 — Installments, collections, checks, notes | COL-SCHEDULE, COL-INVOICE, COL-RECEIPT, COL-REMIND, COL-CHECK, COL-NOTE, COL-STATEMENT | `SD-05`, `SD-07` (incl. `G-06`), `SD-09`, `SD-20`, `SD-21` |
 | 6 — Accounting, treasury, banks, tax, assets, budgets | FIN-COA, FIN-GL, FIN-ARAP, FIN-INVOICE, FIN-CASH, FIN-BANK, FIN-FACILITY, FIN-BUDGET, FIN-TAX, FIN-ASSET, FIN-REPORT | **`SD-08` blocks the entire phase** — requires an appointed accounting reviewer |
 | 7 — Procurement, stores, contractors, construction | PROC-VENDOR, PROC-REQUEST, PROC-RFQ, PROC-PO, WH-ITEM, WH-TRANS, CONST-CONTRACT, CONST-CERT, CONST-PROGRESS | `SD-02` |
-| 8 — HR, payroll, commissions, custody | HR-EMP, HR-TIME, HR-PAY, HR-COMM, HR-ADV, HR-CUSTODY, HR-PERF | `SD-06`, `SD-08`, `SD-21` |
+| 8 — HR, payroll, commissions, custody | HR-EMP (employee profiles, contracts, HR documents, attendance and payroll identity, placement — ADR-0019), HR-TIME, HR-PAY, HR-COMM, HR-ADV, HR-CUSTODY, HR-PERF | `SD-06`, `SD-08`, `SD-21` |
 | 9 — Handover, after-sales, analytics, migration, launch | HAND-READY, HAND-APPT, HAND-INSPECT, HAND-DELIVER, CS-TICKET, PORTAL-CUSTOMER | `SD-11`, `SD-17`, `SD-18` |
 
 ## Maintenance

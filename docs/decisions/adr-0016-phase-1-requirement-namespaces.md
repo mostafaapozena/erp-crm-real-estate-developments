@@ -1,6 +1,6 @@
 # ADR-0016 — Approved Phase 1 requirement namespaces
 
-- Status: Accepted
+- Status: Accepted · `SEC` boundary refined by [ADR-0019](adr-0019-security-account-organization-employee-boundary.md)
 - Date: 2026-09-19
 - Deciders: ALOLA business owner (stakeholder decision `SD-22`), implementation team
 - Scope: Governance
@@ -77,6 +77,14 @@ ADR adds the requirement-ID layer beneath it.
 - A Phase 1 ID with a prefix outside the nine namespaces, or outside the five retained `CORE-*` codes, is a
   review defect.
 - Every commit implementing Phase 1 scope references at least one ID.
+
+## Status update — 2026-09-19
+
+The Phase 1 review approved the `SEC` split with an explicit boundary against `CORE-ORG` and `HR-EMP`,
+recorded in [ADR-0019](adr-0019-security-account-organization-employee-boundary.md). All of
+`SEC-011`–`SEC-032` remain in `SEC`; `SEC-011`, `SEC-019`, and `SEC-026` were clarified, and `SEC-021`
+was narrowed, with its record-reassignment part split into `CORE-TASK-005` and `APPROVAL-007` (Phase 1)
+and `CRM-OWNER` (Phase 3). Phase 1 now has 113 requirements.
 
 ## References
 

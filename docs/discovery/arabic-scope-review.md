@@ -21,7 +21,7 @@ recorded as an open item for stakeholder decision.
 
 | Role | Document | Version | Status |
 |---|---|---|---|
-| Supplementary business scope (client-facing) | `نطاق_أعمال_نظام_شركة_العلا_للتطوير_العقاري.pdf` | 1.0, September 2026 | `مسودة للمراجعة` — **draft for review, signature page blank** |
+| Supplementary business scope (client-facing) | [`docs/source/alola-client-business-scope-ar.pdf`](../source/README.md) (originally `نطاق_أعمال_نظام_شركة_العلا_للتطوير_العقاري.pdf`) | 1.0, September 2026 | `مسودة للمراجعة` — **draft for review, signature page blank** |
 | Technical source of truth | `CLAUDE.md` | n/a | Active |
 | Technical source of truth | `docs/MEMORY.md` | n/a | Active |
 | Technical source of truth | `docs/MASTER-MAPPING.md` | 2.0 | Approved implementation blueprint |
@@ -299,7 +299,7 @@ The PDF is not readable by the repository tooling directly (no `pdftoppm`/popple
 in this environment). Text was extracted with:
 
 ```sh
-pdftotext -enc UTF-8 -layout "نطاق_أعمال_نظام_شركة_العلا_للتطوير_العقاري.pdf" scope.txt
+pdftotext -enc UTF-8 -layout docs/source/alola-client-business-scope-ar.pdf scope.txt
 ```
 
 Page references above are the printed page numbers in the PDF footer.

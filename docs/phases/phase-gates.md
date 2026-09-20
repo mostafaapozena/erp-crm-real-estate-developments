@@ -19,8 +19,9 @@ check as passed unless it actually passed.
 - [ ] `npm run lint` passes
 - [ ] `npm run typecheck` passes — strict, no new `@ts-ignore` without written justification
 - [ ] `npm run test:unit` passes
-- [ ] `npm run test:integration` passes — **skipped is not passed**; if the Atlas development cluster
-      and Redis are not provisioned (`D2`), the gate stays open
+- [ ] `npm run test:integration:gate` passes — this mode **fails** rather than skips when MongoDB or
+      Redis is not configured, so the gate cannot be passed on skipped tests (`D2`)
+- [ ] `npm run check:bundle` passes — web bundle within the approved budget
 - [ ] `npm run test:e2e` passes in **both** locales and directions
 - [ ] `npm run build` produces a working production build of all applications
 

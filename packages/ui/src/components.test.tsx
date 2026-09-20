@@ -64,4 +64,25 @@ describe('LtrIsolate (I18N-005)', () => {
     expect(element.tagName).toBe('BDI');
     expect(element.getAttribute('dir')).toBe('ltr');
   });
+
+  /**
+   * SD-23: identifiers are never reformatted or localized — they are displayed exactly as stored, with
+   * Western digits, and isolated so their character order does not visibly reorder inside Arabic text.
+   */
+  describe.each([
+    ['phone number', '+201001234567'],
+    ['national ID', '29001011234567'],
+    ['bank account number (IBAN)', 'EG380019000500000000263180002'],
+    ['unit code', 'ALO-B3-07-1204'],
+  ])('%s', (_label, value) => {
+    it('renders verbatim with Western digits, isolated left-to-right', () => {
+      render(<LtrIsolate>{value}</LtrIsolate>);
+      const element = screen.getByText(value);
+      expect(element.tagName).toBe('BDI');
+      expect(element.getAttribute('dir')).toBe('ltr');
+      // Exactly as supplied: no grouping separators inserted, no digit-shape conversion, order intact.
+      expect(element.textContent).toBe(value);
+      expect(element.textContent).not.toMatch(/[\u0660-\u0669\u06F0-\u06F9]/);
+    });
+  });
 });

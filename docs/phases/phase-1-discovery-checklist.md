@@ -19,7 +19,7 @@ configurable mechanisms and seeds no business values.
 | Category | Items | Complete | Outstanding |
 |---|---|---|---|
 | Implementation team deliverables | 9 | **9** | 0 |
-| Stakeholder decisions (`SD-01` … `SD-22`) | 22 | **5** closed | 17 — none blocks Phase 1 scaffolding |
+| Stakeholder decisions (`SD-01` … `SD-23`) | 23 | **6** closed | 17 — none blocks Phase 1 scaffolding |
 | Environment prerequisites (`D1`, `D2`) | 2 | **1** (`D1`) | 1 (`D2`) |
 
 ---
@@ -30,9 +30,9 @@ configurable mechanisms and seeds no business values.
 |---|---|---|---|
 | A1 | Arabic/English glossary established | [../glossary.md](../glossary.md) | ✅ Complete — 12 domains; terms needing confirmation marked 🔶 |
 | A2 | Stable requirement ID scheme defined | [ADR-0014](../decisions/adr-0014-requirement-id-scheme.md), [ADR-0016](../decisions/adr-0016-phase-1-requirement-namespaces.md) | ✅ Complete — nine approved Phase 1 namespaces |
-| A3 | Requirement registry created, Phase 1 enumerated | [../REQUIREMENTS.md](../REQUIREMENTS.md) | ✅ Complete — 111 Phase 1 requirements |
+| A3 | Requirement registry created, Phase 1 enumerated | [../REQUIREMENTS.md](../REQUIREMENTS.md) | ✅ Complete — 113 Phase 1 requirements (111 re-keyed + 2 split from `SEC-021`, ADR-0019) |
 | A4 | Architecture defined and recorded | [../architecture/](../architecture/) | ✅ Complete — 7 documents |
-| A5 | Architecture decisions recorded | [../decisions/](../decisions/) | ✅ Complete — 18 ADRs |
+| A5 | Architecture decisions recorded | [../decisions/](../decisions/) | ✅ Complete — 19 ADRs |
 | A6 | Data conventions defined: identifiers, money, time, status machines, concurrency, transactions, idempotency, soft state, indexes | [../architecture/data-model-conventions.md](../architecture/data-model-conventions.md) | ✅ Complete |
 | A7 | Security model defined: identity, sessions, three authorization layers, field security, SoD, audit | [../architecture/security-model.md](../architecture/security-model.md) | ✅ Complete — policy *content* arrives with `SD-02` (Phase 2) |
 | A8 | Light Mode token set specified and **contrast verified by measurement** | [ADR-0005](../decisions/adr-0005-light-mode-design-tokens.md) | ✅ Complete — 3 usage constraints derived from measured failures |
@@ -67,7 +67,8 @@ Full detail and phase assignment in [../decisions/open-decisions.md](../decision
 - [x] `SD-14` **Meta campaign management scope** — approved and closed: full Master Mapping scope (conflict `C-02`)
 - [x] `SD-15` **Conversions API** — approved as optional; production delivery gated (conflict `C-03`, ADR-0017)
 - [x] `SD-16` Local development infrastructure — Atlas development cluster + Redis adapter (ADR-0018)
-- [x] `SD-22` Phase 1 requirement namespaces — nine approved (ADR-0016)
+- [x] `SD-22` Phase 1 requirement namespaces — nine approved (ADR-0016); `SEC` boundary refined (ADR-0019)
+- [x] `SD-23` Arabic digits — Western digits in both languages (ADR-0003 status update)
 
 ### Open — none blocks Phase 1 scaffolding
 
@@ -102,4 +103,5 @@ Remaining for later: the 🔶 glossary terms are confirmed within the phase that
 
 ## Next action
 
-Phase 1 build half: scaffolding per the Phase 1 prompt. Do not start Phase 2.
+Scaffolding complete and reviewed. **PHASE 1 BLOCKED — DEVELOPMENT SERVICES NOT CONFIGURED** until `D2`
+is provisioned and `npm run test:integration:gate` passes. Do not start Phase 2.

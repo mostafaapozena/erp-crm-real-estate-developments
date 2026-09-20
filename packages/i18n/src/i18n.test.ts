@@ -1,5 +1,6 @@
 import {
   BusinessDateSchema,
+  DecimalStringSchema,
   ERROR_CODES,
   InstantSchema,
   money,
@@ -9,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   checkResources,
   createFormatters,
+  formattingLocale,
   directionOf,
   localeSettings,
   requiredPluralCategories,
@@ -84,42 +86,104 @@ describe('direction and typography (I18N-003, I18N-007)', () => {
   });
 });
 
+const NBSP = ' ';
+const LRM = '\u200E';
+const ARABIC_INDIC = /[\u0660-\u0669\u06F0-\u06F9]/;
+
 describe('formatting (I18N-006)', () => {
   const instant = InstantSchema.parse('2026-09-19T22:30:00.000Z');
 
   it('displays instants in the organization timezone, not the process timezone', () => {
-    const utc = createFormatters('en', { timeZone: 'UTC' }).instant(instant, 'date');
-    const tokyo = createFormatters('en', { timeZone: 'Asia/Tokyo' }).instant(instant, 'date');
-    expect(utc).toContain('19');
-    expect(tokyo).toContain('20');
+    expect(createFormatters('en', { timeZone: 'UTC' }).instant(instant)).toBe('19/09/2026 22:30');
+    expect(createFormatters('en', { timeZone: 'Asia/Tokyo' }).instant(instant)).toBe(
+      '20/09/2026 07:30',
+    );
   });
 
   it('never shifts a business date', () => {
     const date = BusinessDateSchema.parse('2026-03-01');
     for (const timeZone of ['UTC', 'America/Los_Angeles', 'Pacific/Kiritimati']) {
-      expect(createFormatters('en', { timeZone }).businessDate(date)).toContain('Mar 1, 2026');
+      expect(createFormatters('ar', { timeZone }).businessDate(date)).toBe('01/03/2026');
     }
   });
 
   it('formats money exactly from its decimal string with the configured precision', () => {
     const f = createFormatters('en', { timeZone: 'UTC' });
-    expect(f.money(money('12345678901234567.89', 'EGP'), 2)).toContain('12,345,678,901,234,567.89');
-    expect(f.money(money('5', 'EGP'), 3)).toContain('5.000');
+    expect(f.money(money('12345678901234567.89', 'EGP'), 2)).toBe(
+      `EGP${NBSP}12,345,678,901,234,567.89`,
+    );
+    expect(f.money(money('5', 'EGP'), 3)).toBe(`EGP${NBSP}5.000`);
+  });
+});
+
+describe('SD-23: Western digits in Arabic and English', () => {
+  const ar = createFormatters('ar', { timeZone: 'UTC' });
+  const en = createFormatters('en', { timeZone: 'UTC' });
+  const date = BusinessDateSchema.parse('2026-09-15');
+  const instant = InstantSchema.parse('2026-09-15T08:05:00.000Z');
+
+  it.each([
+    ['number', ar.number('1234.5', 2), en.number('1234.5', 2), '1,234.50', '1,234.50'],
+    ['number, natural precision', ar.number('1234.5'), en.number('1234.5'), '1,234.5', '1,234.5'],
+    ['large number', ar.number('250000'), en.number('250000'), '250,000', '250,000'],
+    ['percentage', ar.percent('0.155'), en.percent('0.155'), '15.5%', '15.5%'],
+    [
+      'money, whole',
+      ar.money(money('250000', 'EGP'), 0),
+      en.money(money('250000', 'EGP'), 0),
+      `250,000${NBSP}ج.م.`,
+      `EGP${NBSP}250,000`,
+    ],
+    [
+      'money, two decimals',
+      ar.money(money('1234.5', 'EGP'), 2),
+      en.money(money('1234.5', 'EGP'), 2),
+      `1,234.50${NBSP}ج.م.`,
+      `EGP${NBSP}1,234.50`,
+    ],
+    ['business date', ar.businessDate(date), en.businessDate(date), '15/09/2026', '15/09/2026'],
+    ['date', ar.instant(instant, 'date'), en.instant(instant, 'date'), '15/09/2026', '15/09/2026'],
+    [
+      'date and time',
+      ar.instant(instant),
+      en.instant(instant),
+      '15/09/2026 08:05',
+      '15/09/2026 08:05',
+    ],
+  ])('%s', (_label, arabic, english, expectedArabic, expectedEnglish) => {
+    expect(arabic).toBe(expectedArabic);
+    expect(english).toBe(expectedEnglish);
+    expect(arabic).not.toMatch(ARABIC_INDIC);
   });
 
-  it('formats dates per locale and percentages exactly', () => {
-    const ar = createFormatters('ar', { timeZone: 'UTC' });
-    const en = createFormatters('en', { timeZone: 'UTC' });
-    expect(ar.instant(instant, 'date')).not.toBe(en.instant(instant, 'date'));
-    expect(en.percent('0.155')).toBe('15.5%');
+  it('keeps the minus sign attached to negative numbers in RTL text', () => {
+    expect(ar.number('-1234.5', 2)).toBe(`${LRM}-1,234.50`);
+    expect(ar.money(money('-250000', 'EGP'), 0)).toBe(`${LRM}-250,000${NBSP}ج.م.`);
+    expect(en.number('-1234.5', 2)).toBe(`${LRM}-1,234.50`);
   });
 
-  it('uses one digit shape for Arabic consistently (CLDR default for "ar")', () => {
-    // Western vs Arabic-Indic digits for Arabic is an open presentation decision. Until it is made,
-    // every formatter uses the same CLDR default, so digits never mix within a screen.
-    const ar = createFormatters('ar', { timeZone: 'UTC' });
-    const shape = (text: string) => (/[٠-٩]/.test(text) ? 'arab' : 'latn');
-    expect(shape(ar.number('1234.5'))).toBe(shape(ar.money(money('1234.5', 'EGP'), 2)));
-    expect(shape(ar.number('1234.5'))).toBe(shape(ar.percent('0.5')));
+  it('emits no other invisible bidi marks', () => {
+    for (const text of [
+      ar.number('1234.5', 2),
+      ar.percent('0.5'),
+      ar.money(money('1', 'EGP'), 2),
+      ar.instant(instant),
+    ]) {
+      expect(text).not.toMatch(/[\u200E\u200F\u061C\u2066-\u2069]/);
+    }
+  });
+
+  it('forces Western digits even for locales whose default is Arabic-Indic', () => {
+    expect(formattingLocale('ar')).toBe('ar-u-nu-latn');
+    expect(new Intl.NumberFormat('ar-EG').format(1234)).toMatch(ARABIC_INDIC);
+    expect(
+      new Intl.NumberFormat(formattingLocale('ar').replace('ar', 'ar-EG')).format(1234),
+    ).not.toMatch(ARABIC_INDIC);
+  });
+
+  it('keeps stored and API values language-neutral', () => {
+    expect(DecimalStringSchema.safeParse('١٢٣٤٫٥').success).toBe(false);
+    expect(DecimalStringSchema.safeParse('1234.5').success).toBe(true);
+    expect(BusinessDateSchema.safeParse('٢٠٢٦-٠٩-١٥').success).toBe(false);
   });
 });

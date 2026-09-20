@@ -25,7 +25,7 @@ silently violate a constraint whose reason was never written down.
 |---|---|---|---|
 | [ADR-0001](adr-0001-modular-monolith.md) | Modular monolith before microservices | Accepted | Architecture |
 | [ADR-0002](adr-0002-technology-stack.md) | TypeScript MERN stack and monorepo layout | Accepted | Architecture |
-| [ADR-0003](adr-0003-arabic-first-localization.md) | Arabic-first localization with Arabic and English shipped together | Accepted | Localization |
+| [ADR-0003](adr-0003-arabic-first-localization.md) | Arabic-first localization with Arabic and English shipped together | Accepted (digits: `SD-23`) | Localization |
 | [ADR-0004](adr-0004-light-mode-only.md) | Light Mode only; no Dark Mode, System Mode, or theme switcher | Accepted (`SD-13` closed) | Design |
 | [ADR-0005](adr-0005-light-mode-design-tokens.md) | Extended Light Mode semantic token set | Accepted | Design |
 | [ADR-0006](adr-0006-server-side-authorization.md) | Authorization enforced on the server and in query scope | Accepted | Security |
@@ -38,9 +38,10 @@ silently violate a constraint whose reason was never written down.
 | [ADR-0013](adr-0013-arabic-scope-document-status.md) | Arabic PDF is supplementary, not a technical source of truth | Accepted (extended 2026-09-19) | Governance |
 | [ADR-0014](adr-0014-requirement-id-scheme.md) | Stable requirement ID scheme | Accepted (amended by ADR-0016) | Governance |
 | [ADR-0015](adr-0015-secrets-and-repository-hygiene.md) | Secrets and repository hygiene | Accepted | Security |
-| [ADR-0016](adr-0016-phase-1-requirement-namespaces.md) | Approved Phase 1 requirement namespaces | Accepted | Governance |
+| [ADR-0016](adr-0016-phase-1-requirement-namespaces.md) | Approved Phase 1 requirement namespaces | Accepted (`SEC` boundary: ADR-0019) | Governance |
 | [ADR-0017](adr-0017-meta-conversions-api-gated-activation.md) | Meta Conversions API: optional, production delivery gated | Accepted | Integration |
 | [ADR-0018](adr-0018-development-infrastructure-selection.md) | Development infrastructure: MongoDB Atlas and a Redis adapter | Accepted | Environment |
+| [ADR-0019](adr-0019-security-account-organization-employee-boundary.md) | Security account, organization, and employee are separate aggregates | Accepted | Architecture |
 
 ## Open items
 

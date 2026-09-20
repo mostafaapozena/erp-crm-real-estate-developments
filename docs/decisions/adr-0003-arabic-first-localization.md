@@ -1,6 +1,6 @@
 # ADR-0003 — Arabic-first localization with Arabic and English shipped together
 
-- Status: Accepted
+- Status: Accepted · Digit rule added by stakeholder decision `SD-23`, 2026-09-19 (see status update)
 - Date: 2026-09-19
 - Deciders: Implementation team, ratified by ALOLA blueprint revision 2.0
 - Scope: Localization
@@ -68,6 +68,39 @@ change, or the change is not done.**
 - Every phase gate verifies Arabic RTL and English LTR across navigation, forms, tables, dialogs,
   charts, print, and PDFs.
 - PDF generation tests must assert Arabic glyph rendering, not merely that a file was produced.
+
+## Status update — 2026-09-19: digits and numeric formatting (`SD-23`)
+
+Stakeholder decision `SD-23`, **approved and closed**: the application uses **Western digits (0–9) in
+both Arabic and English** interfaces.
+
+| Value | Arabic UI | English UI |
+|---|---|---|
+| Number | `1,234.50` | `1,234.50` |
+| Money | `250,000 ج.م.` | `EGP 250,000` |
+| Percentage | `15.5%` | `15.5%` |
+| Date | `15/09/2026` | `15/09/2026` |
+| Date and time | `15/09/2026 08:05` (24-hour) | `15/09/2026 08:05` |
+
+Rules:
+
+1. Arabic text remains RTL. Western digits joined by `,` `.` `/` `:` form a single left-to-right run
+   inside RTL text, so numeric ordering stays clear. Phone numbers, IDs, account numbers, and unit codes
+   are additionally isolated with `LtrIsolate` (I18N-005).
+2. Separators and currency labels are locale-aware (CLDR): Arabic currency label `ج.م.` after the amount,
+   English `EGP` before it, a non-breaking space between.
+3. Every formatter uses the `-u-nu-latn` locale extension, so no locale default (for example `ar-EG`)
+   can switch to Arabic-Indic digits.
+4. Dates are numeric `dd/MM/yyyy` in both languages. The English order follows the approved Arabic
+   example so both languages read dates identically; month names are not used.
+5. Formatting is **display only.** Stored and API values stay language-neutral — decimal strings, ISO-8601
+   dates, `Decimal128` — and are never converted to Arabic-Indic characters. Contracts reject
+   Arabic-Indic digits in decimal strings and business dates.
+6. ICU's invisible bidi marks are removed for deterministic output, except one leading left-to-right mark
+   on negative numbers, which keeps the minus sign attached in RTL text.
+
+Implemented in `packages/i18n/src/format.ts`; verified by the `SD-23` tests in
+`packages/i18n/src/i18n.test.ts`.
 
 ## References
 

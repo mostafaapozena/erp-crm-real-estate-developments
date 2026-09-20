@@ -12,6 +12,18 @@ describe('serviceGate (TEST-001)', () => {
     warn.mockRestore();
   });
 
+  it('fails instead of skipping in gate mode', () => {
+    expect(() => serviceGate(['mongodb'], { ALOLA_REQUIRE_INTEGRATION_SERVICES: '1' })).toThrow(
+      /PHASE GATE FAILED.*MONGODB_URI, MONGODB_DB_NAME/,
+    );
+    expect(
+      serviceGate(['redis'], {
+        ALOLA_REQUIRE_INTEGRATION_SERVICES: '1',
+        REDIS_URL: 'redis://localhost:6379',
+      }).available,
+    ).toBe(true);
+  });
+
   it('is available when configured', () => {
     expect(serviceGate(['redis'], { REDIS_URL: 'redis://localhost:6379' }).available).toBe(true);
   });

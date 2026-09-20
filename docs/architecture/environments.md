@@ -177,8 +177,31 @@ E2E needs a one-time browser download: `node scripts/bin.mjs playwright install 
 Requiring infrastructure — **skipped, and reported as skipped, until it is provisioned**:
 
 ```sh
-npm run test:integration   # Atlas development cluster + Redis (ADR-0018)
+npm run test:integration        # Atlas development cluster + Redis (ADR-0018); skips if not configured
+npm run test:integration:gate   # the same tests, but FAILS if MongoDB or Redis is not configured
 ```
+
+### Running the integration tier
+
+Variables (placeholders only — real values go in the untracked `.env`, never in Git):
+
+| Variable | Value | Used by |
+|---|---|---|
+| `MONGODB_URI` | `mongodb+srv://<dev-user>:<dev-password>@<dev-cluster-host>/` — an Atlas **development** cluster (replica set) | MongoDB tests (`PLAT-014`) |
+| `MONGODB_DB_NAME` | `<dev-database-name>` — must not contain `prod` | MongoDB tests |
+| `REDIS_URL` | `rediss://<dev-user>:<dev-password>@<dev-redis-host>:<port>` (or `redis://` for an approved local instance) | Redis and BullMQ tests (`PLAT-015`, `INTEGRATION-006`) |
+| `TZ` | `UTC` | Set by the test configuration |
+
+Steps, from the repository root:
+
+```sh
+cp .env.example .env                 # PowerShell: Copy-Item .env.example .env
+# edit .env: set MONGODB_URI, MONGODB_DB_NAME, REDIS_URL to development values
+npm run test:integration:gate        # must report 3 passed, 0 skipped, for the Phase 1 gate
+```
+
+The integration configuration loads `.env` itself. `.env` is ignored by Git; confirm with
+`git check-ignore .env` before any commit.
 
 Development servers: `npm run dev:api`, `npm run dev:worker`, `npm run dev:web`. The API and worker read
 the untracked repository-root `.env` (copy `.env.example`).

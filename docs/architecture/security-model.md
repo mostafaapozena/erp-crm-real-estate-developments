@@ -9,8 +9,12 @@ mechanism; the policy fills it in.
 
 ## 1. Identity
 
-- **Accounts are linked to employee records.** A user is an employee with system access, not a free-standing
-  login. This is what makes offboarding complete: suspending the employee suspends the access.
+- **A user security account references an employee record; it is not the employee.** The account owns
+  credentials, sessions, devices, MFA, roles, and scopes (`SEC`). Organization structure belongs to
+  `CORE-ORG` and employee business data to `HR-EMP`
+  ([ADR-0019](../decisions/adr-0019-security-account-organization-employee-boundary.md)). Employment
+  termination in `HR-EMP` triggers account offboarding (`SEC-021`), which is what makes offboarding
+  complete.
 - **Personal accounts only. Shared accounts are prohibited** (gap `G-10`, Arabic scope p19). Enforced by
   policy and by the audit requirement — a shared account makes every audit record meaningless, which is
   the actual reason for the rule.

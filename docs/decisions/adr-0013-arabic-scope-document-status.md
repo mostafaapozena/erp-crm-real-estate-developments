@@ -7,7 +7,8 @@
 
 ## Context
 
-The repository contains `نطاق_أعمال_نظام_شركة_العلا_للتطوير_العقاري.pdf` — a 22-page Arabic
+The repository contains `نطاق_أعمال_نظام_شركة_العلا_للتطوير_العقاري.pdf` (stored since 2026-09-19 as
+`docs/source/alola-client-business-scope-ar.pdf`, see [../source/README.md](../source/README.md)) — a 22-page Arabic
 client-facing business scope document, version 1.0, September 2026.
 
 Two properties matter for how it is treated:
@@ -89,6 +90,10 @@ Stakeholder decision on PDF authority, confirming and extending the Decision abo
   `SD-13`, `SD-14`, and `SD-15` — see [open-decisions.md](open-decisions.md).
 - The reconciliation report [../discovery/arabic-scope-review.md](../discovery/arabic-scope-review.md) is
   kept for traceability.
+- **The PDF is committed for traceability** (Phase 1 review decision) at
+  `docs/source/alola-client-business-scope-ar.pdf`: moved and renamed only, bytes unchanged, SHA-256
+  `89fade53871af54f69527c3a23cee7171197525b322db0ed0d301e9c53199f7b`. The original filename and status
+  are recorded in [../source/README.md](../source/README.md).
 
 ## References
 

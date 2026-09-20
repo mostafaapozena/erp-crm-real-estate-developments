@@ -14,10 +14,10 @@ current gate is verified and explicitly approved** (`docs/PHASE-PROMPTS.md`).
 | | |
 |---|---|
 | Active phase | **1 — Discovery, architecture, core, security, localization, Light Mode** |
-| Sub-stage | Build half — application scaffolding |
-| Status | Discovery approved 2026-09-19; scaffolding authorized. Current verified status in `../MEMORY.md` |
+| Sub-stage | Build half — scaffolding complete and reviewed; review decisions applied |
+| Status | **PHASE 1 BLOCKED — DEVELOPMENT SERVICES NOT CONFIGURED.** Current verified status in `../MEMORY.md` |
 | Requirements `verified` | 0 — nothing is gate-verified before the Phase 1 review |
-| Blocking the phase gate | Integration tests need the Atlas development cluster and Redis (`D2`); the gate cannot pass on skipped tests |
+| Blocking the phase gate | Integration tests need the Atlas development cluster and Redis (`D2`). `npm run test:integration:gate` fails until they are configured; the gate cannot pass on skipped tests |
 
 ## Phase index
 

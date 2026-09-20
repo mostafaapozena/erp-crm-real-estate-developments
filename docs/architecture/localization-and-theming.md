@@ -77,14 +77,16 @@ state commit. A frame in which the locale is Arabic and the direction is still L
 
 ## 6. Formatting
 
-Locale-aware, via `Intl`, never hand-rolled:
+Locale-aware via `Intl`, with **Western digits (0–9) in both languages** (`SD-23`,
+[ADR-0003](../decisions/adr-0003-arabic-first-localization.md) status update). Implemented once, in
+`packages/i18n/src/format.ts`:
 
 | Value | Requirement |
 |---|---|
-| Dates | Locale format; organization timezone for display ([ADR-0008](../decisions/adr-0008-utc-storage-and-display-timezone.md)) |
-| Numbers | Locale digit and separator conventions; digit shape (Arabic-Indic vs Western) is a configuration decision, applied consistently — mixing shapes within one screen is a defect |
-| Currency | Locale placement and precision from currency configuration, never hard-coded to 2 |
-| Percentages | Locale format |
+| Dates | Numeric `dd/MM/yyyy` (`dd/MM/yyyy HH:mm`, 24-hour) in both languages; organization timezone for display ([ADR-0008](../decisions/adr-0008-utc-storage-and-display-timezone.md)); business dates never shifted |
+| Numbers | Western digits in Arabic and English (`1,234.50`); locale separators; forced with `-u-nu-latn`. Arabic-Indic digits never appear, in display or storage |
+| Currency | Locale label and placement — Arabic `250,000 ج.م.`, English `EGP 250,000`; precision from currency configuration, never hard-coded to 2 |
+| Percentages | `15.5%` in both languages |
 | Plurals | ICU rules. Arabic has six plural categories; an English-shaped singular/plural pair is insufficient |
 | Relative time | `Intl.RelativeTimeFormat` |
 

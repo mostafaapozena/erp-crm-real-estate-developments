@@ -42,7 +42,6 @@ two. `SD-13` onward are additions arising from the discovery review and the tech
 | `SD-19` | Meta Business ownership and assets | Phase 3 | No |
 | `SD-20` | Provider selection | Phase 3 | No |
 | `SD-21` | Timezone, fiscal calendar, working week | Phase 2 | No — configurable, placeholder `UTC` in development |
-| `SD-23` | Digit shape for Arabic numbers | Phase 2 | No — one formatter setting, CLDR default meanwhile |
 
 **No open item blocks Phase 1 scaffolding.** Each one does block its named phase, and must be answered
 before that phase starts.
@@ -202,18 +201,6 @@ zone). Development uses the placeholder `UTC`, which is explicitly **not** a bus
 calendar. See [adr-0008-utc-storage-and-display-timezone.md](adr-0008-utc-storage-and-display-timezone.md).
 **Status:** Open
 
-### SD-23 — Digit shape for Arabic numbers
-**Question:** In the Arabic interface, should numbers, amounts, and dates use Western digits (`1,234.5`)
-or Arabic-Indic digits (`١٬٢٣٤٫٥`)? Should exports and PDFs follow the same choice?
-**Owner:** ALOLA business owner / design authority · **First blocks:** Phase 2 (first screens showing
-prices and areas)
-**Phase 1 impact:** None. Found during scaffolding: the `ar` locale formats with **Western** digits by
-default, `ar-EG` with Arabic-Indic. All formatters use one setting from one place
-(`packages/i18n/src/format.ts`), so digits never mix within a screen; the chosen shape is a one-line
-change there.
-**Risk if assumed:** Mixed digit shapes across screens, exports, and PDFs read as a defect, and changing
-them after documents are issued creates inconsistent records. **Status:** Open
-
 ## Closed items
 
 | ID | Decision | Resolution | Date |
@@ -222,6 +209,7 @@ them after documents are issued creates inconsistent records. **Status:** Open
 | `SD-14` | Meta campaign management scope (conflict `C-02`) | **Approved and closed.** The full Meta scope in `docs/MASTER-MAPPING.md` is the current requirement and supersedes the narrower Arabic PDF scope. Employees do not need routine Ads Manager access. Payment methods stay with an authorized account owner in Meta's own billing tools; no card/CVV storage; no unsupported Add Funds. [ADR-0011](adr-0011-meta-operating-boundary.md) | 2026-09-19 |
 | `SD-15` | Meta Conversions API (conflict `C-03`) | **Approved — production activation gated.** Architecture and adapter are in scope; production event delivery is disabled by default and needs ten recorded preconditions before it is switched on. Does not block Phase 1 or the general Phase 3 architecture. [ADR-0017](adr-0017-meta-conversions-api-gated-activation.md) | 2026-09-19 |
 | `SD-16` | Local development infrastructure | **Approved.** MongoDB Atlas development cluster; Redis through an adapter that accepts a managed development instance or an approved local instance; no Docker; no production credentials; no live service required for scaffolding. [ADR-0018](adr-0018-development-infrastructure-selection.md). *Provisioning* the cluster is a separate environment task (`D2` in `docs/MEMORY.md`). | 2026-09-19 |
+| `SD-23` | Digit shape for Arabic numbers (raised during scaffolding) | **Approved and closed.** Western digits (0–9) in Arabic and English; locale-aware separators and currency labels; `dd/MM/yyyy` dates; display only — stored and API values stay language-neutral. [ADR-0003](adr-0003-arabic-first-localization.md) status update | 2026-09-19 |
 | `SD-22` | Phase 1 requirement namespaces | **Approved.** Nine stable namespaces: `PLAT`, `I18N`, `THEME`, `SEC`, `AUDIT`, `APPROVAL`, `INTEGRATION`, `TEST`, `OPS`. [ADR-0016](adr-0016-phase-1-requirement-namespaces.md) | 2026-09-19 |
 | — | Status of the Arabic business scope document | Supplementary client-facing business document, not a technical source of truth. Later written stakeholder decisions supersede conflicting PDF statements. [ADR-0013](adr-0013-arabic-scope-document-status.md) | 2026-09-19 |
 | — | Primary brand colour and extended Light Mode token set | Approved. Recorded in [adr-0005-light-mode-design-tokens.md](adr-0005-light-mode-design-tokens.md), contrast verified. | 2026-09-19 |
@@ -235,9 +223,8 @@ them after documents are issued creates inconsistent records. **Status:** Open
 |---|---|
 | Open, adopted from the client's own checklist (`SD-01`–`SD-12`) | 12 |
 | Open, raised by discovery or the technical baseline (`SD-17`–`SD-21`) | 5 |
-| Open, raised during Phase 1 scaffolding (`SD-23`) | 1 |
-| **Total open** | **18** |
+| **Total open** | **17** |
 | Open items blocking Phase 1 scaffolding | **0** |
 | Blocking an entire phase | `SD-08` blocks Phase 6 |
-| Closed stakeholder items (`SD-13`, `SD-14`, `SD-15`, `SD-16`, `SD-22`) | 5 |
+| Closed stakeholder items (`SD-13`, `SD-14`, `SD-15`, `SD-16`, `SD-22`, `SD-23`) | 6 |
 | Other closed decisions | 5 |
