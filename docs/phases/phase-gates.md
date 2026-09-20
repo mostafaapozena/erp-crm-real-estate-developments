@@ -20,7 +20,9 @@ check as passed unless it actually passed.
 - [ ] `npm run typecheck` passes — strict, no new `@ts-ignore` without written justification
 - [ ] `npm run test:unit` passes
 - [ ] `npm run test:integration:gate` passes — this mode **fails** rather than skips when MongoDB or
-      Redis is not configured, so the gate cannot be passed on skipped tests (`D2`)
+      Redis is not configured, so the gate cannot be passed on skipped tests. Start the services first with
+      `npm run dev:services:up` ([ADR-0020](../decisions/adr-0020-local-docker-development-services.md)).
+      Record the counts: passed / failed / **skipped must be 0**
 - [ ] `npm run check:bundle` passes — web bundle within the approved budget
 - [ ] `npm run test:e2e` passes in **both** locales and directions
 - [ ] `npm run build` produces a working production build of all applications

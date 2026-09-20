@@ -34,14 +34,15 @@ silently violate a constraint whose reason was never written down.
 | [ADR-0009](adr-0009-no-hard-delete.md) | No hard deletion of financial, contractual, or audited records | Accepted | Data |
 | [ADR-0010](adr-0010-integration-adapter-boundary.md) | All external providers behind versioned adapters | Accepted | Integration |
 | [ADR-0011](adr-0011-meta-operating-boundary.md) | Meta operating boundary and billing honesty | Accepted (`SD-14` closed) | Integration |
-| [ADR-0012](adr-0012-local-development-infrastructure.md) | Local development without mandatory Docker | Accepted (option selected by ADR-0018) | Environment |
+| [ADR-0012](adr-0012-local-development-infrastructure.md) | Local development without mandatory Docker | Accepted (development topology: ADR-0020) | Environment |
 | [ADR-0013](adr-0013-arabic-scope-document-status.md) | Arabic PDF is supplementary, not a technical source of truth | Accepted (extended 2026-09-19) | Governance |
 | [ADR-0014](adr-0014-requirement-id-scheme.md) | Stable requirement ID scheme | Accepted (amended by ADR-0016) | Governance |
 | [ADR-0015](adr-0015-secrets-and-repository-hygiene.md) | Secrets and repository hygiene | Accepted | Security |
 | [ADR-0016](adr-0016-phase-1-requirement-namespaces.md) | Approved Phase 1 requirement namespaces | Accepted (`SEC` boundary: ADR-0019) | Governance |
 | [ADR-0017](adr-0017-meta-conversions-api-gated-activation.md) | Meta Conversions API: optional, production delivery gated | Accepted | Integration |
-| [ADR-0018](adr-0018-development-infrastructure-selection.md) | Development infrastructure: MongoDB Atlas and a Redis adapter | Accepted | Environment |
+| [ADR-0018](adr-0018-development-infrastructure-selection.md) | Development infrastructure: MongoDB Atlas and a Redis adapter | Accepted (staging/production only since ADR-0020) | Environment |
 | [ADR-0019](adr-0019-security-account-organization-employee-boundary.md) | Security account, organization, and employee are separate aggregates | Accepted | Architecture |
+| [ADR-0020](adr-0020-local-docker-development-services.md) | Local Docker services for development; managed services for staging and production | Accepted | Environment |
 
 ## Open items
 

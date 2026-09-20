@@ -1,8 +1,9 @@
 # Environments and Local Development
 
 Implements [ADR-0012](../decisions/adr-0012-local-development-infrastructure.md),
-[ADR-0015](../decisions/adr-0015-secrets-and-repository-hygiene.md), and
-[ADR-0018](../decisions/adr-0018-development-infrastructure-selection.md).
+[ADR-0015](../decisions/adr-0015-secrets-and-repository-hygiene.md),
+[ADR-0018](../decisions/adr-0018-development-infrastructure-selection.md) (staging and production), and
+[ADR-0020](../decisions/adr-0020-local-docker-development-services.md) (development).
 
 ## 1. Current state
 
@@ -83,21 +84,22 @@ Per ADR-0012, the absence of infrastructure must not block development:
 | Tier | Needs services | Behaviour when absent |
 |---|---|---|
 | Unit | No | Always runs |
-| Integration | MongoDB replica set + Redis | **Skipped with an explicit message** |
+| Integration | MongoDB replica set + Redis | **Skipped with an explicit message**; `test:integration:gate` fails instead |
 | E2E | Full stack | Skipped |
 
 **A skipped test is never reported as a pass.** The distinction must be visible in test output and recorded
-honestly in `../MEMORY.md`. A phase gate requiring integration tests cannot pass on skipped tests — which
-means provisioning the Atlas development cluster genuinely gates Phase 2 verification, not merely its
-convenience.
+honestly in `../MEMORY.md`. A phase gate requiring integration tests cannot pass on skipped tests. Since
+2026-09-21 the local Docker services exist, so the integration tier **runs** — see §5.
 
 ## 5. Local infrastructure options
 
-**Selected (`SD-16`, 2026-09-19): Option B — MongoDB Atlas development cluster, with Redis through an
-adapter that accepts a managed development instance or an approved local instance.** See
-[ADR-0018](../decisions/adr-0018-development-infrastructure-selection.md). Docker is not installed and no
-compose file is committed. Option A is kept below for the record only. Never connect to production
-services from development.
+**Development (`SD-16` refined, 2026-09-21): local Docker containers** — MongoDB as a single-node replica
+set plus Redis, orchestrated by `docker/compose.dev.yml` and `scripts/dev-services.mjs`
+([ADR-0020](../decisions/adr-0020-local-docker-development-services.md)).
+
+**Staging and production: managed services** — MongoDB Atlas and a managed Redis instance
+([ADR-0018](../decisions/adr-0018-development-infrastructure-selection.md)). Nothing is provisioned there
+yet. Never connect to production services from development.
 
 **Transactions require a replica set.** A standalone `mongod` accepts connections and silently cannot
 provide transactions, so unit holds, reservations, contract activation, and accounting posting cannot be
@@ -127,16 +129,34 @@ A free or shared Atlas cluster, paired with managed or local Redis.
 | Local resources | Minimal |
 | Notes | A development cluster only. Never a production cluster, never production credentials. Redis still needed: either a managed instance or a local install |
 
-### Setting up the approved option
+### Setting up development services
 
-1. Create an Atlas **development** cluster (never a production cluster) and a database user with access
-   to a development database only.
-2. Allow-list the developer's IP in Atlas.
-3. Copy `.env.example` to `.env` (untracked) and set `MONGODB_URI` and `MONGODB_DB_NAME`. The database
-   name must not contain `prod`; configuration validation refuses it outside production.
-4. Set `REDIS_URL` to a managed development instance or an approved local instance.
-5. `GET /health/ready` reports each dependency separately, including whether MongoDB supports
-   transactions.
+Prerequisites: Docker Desktop with the WSL 2 backend. Installing them needs Administrator rights and a
+restart — a one-time human step.
+
+```sh
+npm run dev:services:up       # start, initiate the replica set, write .env (values never printed)
+npm run dev:services:status   # container health and replica-set state
+npm run dev:services:down     # stop containers, KEEP the data volumes
+```
+
+`dev:services:up` is idempotent and does, in order:
+
+1. Verifies the Docker daemon responds.
+2. Generates development credentials once into the untracked `docker/dev.env`, reusing them on later runs
+   so the data volumes stay valid.
+3. Starts `mongo:8.0.32` and `redis:8.10.1-alpine` with ports published to **`127.0.0.1` only**.
+4. Waits for both container health checks.
+5. Initiates the `rs0` single-node replica set and waits for a PRIMARY member — transactions need it.
+6. Creates `erp_dev_user` with `readWrite` on `real_estate_erp_dev` **only**.
+7. Writes `MONGODB_URI`, `MONGODB_DB_NAME`, `REDIS_URL`, and `TZ` into the ignored `.env` without
+   displaying them.
+
+Properties to preserve: pinned image versions; localhost-only publishing; persistent named volumes
+(`alola-dev-*`), which `down` does **not** delete; generated credentials that never reach Git, logs, or
+documentation; synthetic development data only.
+
+`GET /health/ready` reports each dependency separately, including whether MongoDB supports transactions.
 
 ## 6. Observability
 
@@ -174,7 +194,7 @@ npm run test:e2e      # Playwright against the production build, Arabic RTL and 
 E2E needs a one-time browser download: `node scripts/bin.mjs playwright install chromium` (run in
 `apps/web`).
 
-Requiring infrastructure — **skipped, and reported as skipped, until it is provisioned**:
+Requiring the development services (`npm run dev:services:up` first):
 
 ```sh
 npm run test:integration        # Atlas development cluster + Redis (ADR-0018); skips if not configured
@@ -183,20 +203,22 @@ npm run test:integration:gate   # the same tests, but FAILS if MongoDB or Redis 
 
 ### Running the integration tier
 
-Variables (placeholders only — real values go in the untracked `.env`, never in Git):
+`dev:services:up` writes these for you; the table records what they are, with placeholders only:
 
-| Variable | Value | Used by |
+| Variable | Development value | Used by |
 |---|---|---|
-| `MONGODB_URI` | `mongodb+srv://<dev-user>:<dev-password>@<dev-cluster-host>/` — an Atlas **development** cluster (replica set) | MongoDB tests (`PLAT-014`) |
-| `MONGODB_DB_NAME` | `<dev-database-name>` — must not contain `prod` | MongoDB tests |
-| `REDIS_URL` | `rediss://<dev-user>:<dev-password>@<dev-redis-host>:<port>` (or `redis://` for an approved local instance) | Redis and BullMQ tests (`PLAT-015`, `INTEGRATION-006`) |
+| `MONGODB_URI` | local replica set: host `127.0.0.1:27017`, `replicaSet=rs0`, `authSource=real_estate_erp_dev`, generated user info | MongoDB tests (`PLAT-014`) |
+| `MONGODB_DB_NAME` | `real_estate_erp_dev` — must not contain `prod` | MongoDB tests |
+| `REDIS_URL` | local Redis: host `127.0.0.1:6379`, generated password | Redis and BullMQ tests (`PLAT-015`, `INTEGRATION-006`) |
 | `TZ` | `UTC` | Set by the test configuration |
+
+For staging and production these same variables point at Atlas (`mongodb+srv://…`) and managed Redis
+(`rediss://…`); the application code is identical.
 
 Steps, from the repository root:
 
 ```sh
-cp .env.example .env                 # PowerShell: Copy-Item .env.example .env
-# edit .env: set MONGODB_URI, MONGODB_DB_NAME, REDIS_URL to development values
+npm run dev:services:up              # creates .env values; no manual editing
 npm run test:integration:gate        # must report 3 passed, 0 skipped, for the Phase 1 gate
 ```
 
@@ -210,7 +232,7 @@ the untracked repository-root `.env` (copy `.env.example`).
 
 | Item | Blocks |
 |---|---|
-| Atlas development cluster and Redis not yet provisioned (`D2`) | Integration coverage; all transaction-dependent verification |
+| ~~`D2` development services~~ | **Complete 2026-09-21** — local Docker MongoDB replica set + Redis; integration tier passing |
 | `SD-18` | Hosting region, data residency, environments, backup, recovery, incident policy |
 | `SD-21` | `ORG_TIMEZONE`, fiscal calendar, working week, quiet hours |
 | `SD-20` | Provider credentials for email, SMS, and the payment gateway |

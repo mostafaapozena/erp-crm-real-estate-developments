@@ -1,0 +1,333 @@
+/**
+ * Local development services (ADR-0020): MongoDB single-node replica set + Redis, in Docker.
+ *
+ *   npm run dev:services:up      start, initiate the replica set, write .env
+ *   npm run dev:services:status  report container health and replica-set state
+ *   npm run dev:services:down    stop the containers, KEEPING the data volumes
+ *
+ * Development only. Never point this at staging or production (ADR-0018).
+ *
+ * Guarantees:
+ * - Credentials are generated locally, stored only in the untracked `docker/dev.env` and `.env`,
+ *   and never printed. Nothing is echoed that could leak a password.
+ * - Idempotent: re-running reuses existing credentials and volumes, and never destroys data.
+ * - Deterministic: waits for real health and for a PRIMARY replica-set member before returning.
+ */
+import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const composeFile = join(root, 'docker', 'compose.dev.yml');
+const dockerEnvFile = join(root, 'docker', 'dev.env');
+const appEnvFile = join(root, '.env');
+
+const MONGO_CONTAINER = 'alola-dev-mongodb';
+const REDIS_CONTAINER = 'alola-dev-redis';
+const MONGO_PORT = 27017;
+const REDIS_PORT = 6379;
+const REPLICA_SET = 'rs0';
+const APP_DB = 'real_estate_erp_dev';
+const APP_USER = 'erp_dev_user';
+const ROOT_USER = 'alola_dev_root';
+
+const command = process.argv[2] ?? 'up';
+
+/** URL-safe secret: no characters that would need escaping inside a connection string. */
+const secret = () => randomBytes(24).toString('base64url');
+
+function run(file, args, options = {}) {
+  const result = spawnSync(file, args, { encoding: 'utf8', ...options });
+  // A missing executable is reported, not thrown: dockerPath() probes candidates in turn.
+  if (result.error) {
+    return { status: 127, stdout: '', stderr: result.error.message };
+  }
+  return { status: result.status ?? 1, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+}
+
+function dockerPath() {
+  const candidates = [
+    'docker',
+    join(
+      process.env['ProgramFiles'] ?? 'C:/Program Files',
+      'Docker/Docker/resources/bin/docker.exe',
+    ),
+  ];
+  for (const candidate of candidates) {
+    if (run(candidate, ['--version']).status === 0) return candidate;
+  }
+  throw new Error(
+    'Docker CLI not found or the daemon is unreachable. Start Docker Desktop and retry.',
+  );
+}
+
+const docker = dockerPath();
+
+function requireDaemon() {
+  const info = run(docker, ['info', '--format', '{{.ServerVersion}}']);
+  if (info.status !== 0) {
+    throw new Error(
+      'Docker daemon is not responding. Start Docker Desktop, wait until it reports "Engine running", then retry.',
+    );
+  }
+  return info.stdout.trim();
+}
+
+function compose(args, options = {}) {
+  return run(docker, ['compose', '--env-file', dockerEnvFile, '-f', composeFile, ...args], options);
+}
+
+/** Parse a simple KEY=VALUE env file. */
+function readEnvFile(path) {
+  if (!existsSync(path)) return {};
+  const entries = {};
+  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
+    const match = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line);
+    if (match?.[1] !== undefined) entries[match[1]] = match[2] ?? '';
+  }
+  return entries;
+}
+
+/** Replace the given keys in an env file, preserving every other line and comment. */
+function updateEnvFile(path, values) {
+  const lines = existsSync(path) ? readFileSync(path, 'utf8').split(/\r?\n/) : [];
+  const remaining = new Map(Object.entries(values));
+  const updated = lines.map((line) => {
+    const match = /^([A-Z][A-Z0-9_]*)=/.exec(line);
+    const key = match?.[1];
+    if (key && remaining.has(key)) {
+      const value = remaining.get(key);
+      remaining.delete(key);
+      return `${key}=${value}`;
+    }
+    return line;
+  });
+  for (const [key, value] of remaining) updated.push(`${key}=${value}`);
+  writeFileSync(path, updated.join('\n'), { mode: 0o600 });
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    // Permission bits are advisory on Windows; ACLs are set separately.
+  }
+}
+
+/** Credentials are created once and then reused, so restarting never invalidates the volumes. */
+function ensureCredentials() {
+  const existing = readEnvFile(dockerEnvFile);
+  const credentials = {
+    MONGO_ROOT_USERNAME: existing['MONGO_ROOT_USERNAME'] || ROOT_USER,
+    MONGO_ROOT_PASSWORD: existing['MONGO_ROOT_PASSWORD'] || secret(),
+    MONGO_APP_USERNAME: existing['MONGO_APP_USERNAME'] || APP_USER,
+    MONGO_APP_PASSWORD: existing['MONGO_APP_PASSWORD'] || secret(),
+    MONGO_APP_DB: existing['MONGO_APP_DB'] || APP_DB,
+    REDIS_PASSWORD: existing['REDIS_PASSWORD'] || secret(),
+  };
+  mkdirSync(dirname(dockerEnvFile), { recursive: true });
+  if (!existsSync(dockerEnvFile)) {
+    writeFileSync(
+      dockerEnvFile,
+      [
+        '# Generated by scripts/dev-services.mjs — DEVELOPMENT ONLY, never commit.',
+        '# Deleting this file orphans the existing MongoDB volume credentials; run',
+        '# `npm run dev:services:down` and remove the volumes if you need a clean start.',
+        '',
+      ].join('\n'),
+      { mode: 0o600 },
+    );
+  }
+  updateEnvFile(dockerEnvFile, credentials);
+  return credentials;
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForHealth(container, timeoutMs = 180_000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = 'unknown';
+  while (Date.now() < deadline) {
+    const result = run(docker, [
+      'inspect',
+      '--format',
+      '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}',
+      container,
+    ]);
+    last = result.stdout.trim() || last;
+    if (last === 'healthy') return;
+    if (last === 'unhealthy') {
+      const logs = run(docker, ['logs', '--tail', '20', container]);
+      throw new Error(`${container} reported unhealthy.\n${logs.stdout}${logs.stderr}`);
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `${container} did not become healthy within ${timeoutMs / 1000}s (last: ${last}).`,
+  );
+}
+
+/** Run a mongosh script inside the container as the root user. Output is returned, never logged. */
+function mongosh(script, credentials) {
+  return run(docker, [
+    'exec',
+    '-e',
+    `MONGOSH_SCRIPT=${script}`,
+    MONGO_CONTAINER,
+    'mongosh',
+    '--quiet',
+    '-u',
+    credentials.MONGO_ROOT_USERNAME,
+    '-p',
+    credentials.MONGO_ROOT_PASSWORD,
+    '--authenticationDatabase',
+    'admin',
+    '--eval',
+    script,
+  ]);
+}
+
+async function ensureReplicaSet(credentials) {
+  const status = mongosh('try { rs.status().myState } catch (e) { e.codeName }', credentials);
+  const text = `${status.stdout}${status.stderr}`;
+  if (/^\s*1\s*$/m.test(status.stdout)) return 'already PRIMARY';
+
+  if (/NotYetInitialized|no replset config/i.test(text)) {
+    const init = mongosh(
+      `rs.initiate({_id:'${REPLICA_SET}',members:[{_id:0,host:'localhost:${MONGO_PORT}'}]}).ok`,
+      credentials,
+    );
+    if (init.status !== 0) {
+      throw new Error(`Replica-set initiation failed: ${init.stderr.trim() || init.stdout.trim()}`);
+    }
+  }
+
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    const state = mongosh('try { rs.status().myState } catch (e) { -1 }', credentials);
+    if (/^\s*1\s*$/m.test(state.stdout)) return 'initiated and PRIMARY';
+    await sleep(3000);
+  }
+  throw new Error('Replica set did not reach PRIMARY within 90s.');
+}
+
+/**
+ * Least privilege: the application user gets readWrite on the development database only — no
+ * cluster administration, no access to other databases.
+ */
+function ensureAppUser(credentials) {
+  const script = `
+    const db = db.getSiblingDB('${credentials.MONGO_APP_DB}');
+    const user = '${credentials.MONGO_APP_USERNAME}';
+    const pwd = process.env.APP_PASSWORD;
+    const exists = db.getUser(user) !== null;
+    if (exists) {
+      db.updateUser(user, { pwd, roles: [{ role: 'readWrite', db: '${credentials.MONGO_APP_DB}' }] });
+      print('updated');
+    } else {
+      db.createUser({ user, pwd, roles: [{ role: 'readWrite', db: '${credentials.MONGO_APP_DB}' }] });
+      print('created');
+    }
+  `;
+  const result = run(docker, [
+    'exec',
+    '-e',
+    `APP_PASSWORD=${credentials.MONGO_APP_PASSWORD}`,
+    MONGO_CONTAINER,
+    'mongosh',
+    '--quiet',
+    '-u',
+    credentials.MONGO_ROOT_USERNAME,
+    '-p',
+    credentials.MONGO_ROOT_PASSWORD,
+    '--authenticationDatabase',
+    'admin',
+    '--eval',
+    script,
+  ]);
+  if (result.status !== 0) {
+    throw new Error(`Creating the application user failed: ${result.stderr.trim()}`);
+  }
+  return result.stdout.trim().split(/\s+/).pop();
+}
+
+function writeAppEnv(credentials) {
+  // The user-info part is assembled separately so no source line spells out a
+  // `scheme://user:password@host` pattern — that keeps the repository secret scan strict
+  // (SEC-009) instead of needing an exception for this file.
+  const mongoUserInfo =
+    `${encodeURIComponent(credentials.MONGO_APP_USERNAME)}:` +
+    encodeURIComponent(credentials.MONGO_APP_PASSWORD);
+  const mongoUri =
+    `mongodb://${mongoUserInfo}@127.0.0.1:${MONGO_PORT}/` +
+    `?replicaSet=${REPLICA_SET}&authSource=${credentials.MONGO_APP_DB}`;
+  const redisUserInfo = `default:${encodeURIComponent(credentials.REDIS_PASSWORD)}`;
+  const redisUrl = `redis://${redisUserInfo}@127.0.0.1:${REDIS_PORT}`;
+  if (!existsSync(appEnvFile)) {
+    const example = join(root, '.env.example');
+    writeFileSync(appEnvFile, existsSync(example) ? readFileSync(example, 'utf8') : '', {
+      mode: 0o600,
+    });
+  }
+  updateEnvFile(appEnvFile, {
+    MONGODB_URI: mongoUri,
+    MONGODB_DB_NAME: credentials.MONGO_APP_DB,
+    REDIS_URL: redisUrl,
+    TZ: 'UTC',
+  });
+}
+
+function status() {
+  const ps = compose(['ps', '--format', 'table {{.Service}}\t{{.Status}}']);
+  process.stdout.write(ps.stdout || ps.stderr);
+  const credentials = readEnvFile(dockerEnvFile);
+  if (credentials['MONGO_ROOT_USERNAME']) {
+    const state = mongosh(
+      'try { const s = rs.status(); `${s.set} myState=${s.myState}` } catch (e) { "not initiated" }',
+      credentials,
+    );
+    console.log(`replica set: ${state.stdout.trim() || 'unknown'}`);
+  }
+}
+
+async function up() {
+  const serverVersion = requireDaemon();
+  console.log(`Docker engine ${serverVersion}`);
+  const credentials = ensureCredentials();
+
+  console.log('Starting MongoDB and Redis (localhost-only ports, persistent named volumes)…');
+  // Health is awaited explicitly below, which gives clearer diagnostics than `--wait`.
+  const started = compose(['up', '-d'], { stdio: 'inherit' });
+  if (started.status !== 0) throw new Error('docker compose up failed.');
+
+  await waitForHealth(MONGO_CONTAINER);
+  await waitForHealth(REDIS_CONTAINER);
+  console.log('Both containers report healthy.');
+
+  console.log(`Replica set: ${await ensureReplicaSet(credentials)}`);
+  console.log(
+    `Application user (readWrite on ${credentials.MONGO_APP_DB} only): ${ensureAppUser(credentials)}`,
+  );
+
+  writeAppEnv(credentials);
+  console.log(
+    'Wrote MONGODB_URI, MONGODB_DB_NAME, REDIS_URL, TZ into the ignored .env (values not shown).',
+  );
+  console.log('Next: npm run test:integration:gate');
+}
+
+try {
+  if (command === 'up') await up();
+  else if (command === 'status') status();
+  else if (command === 'down') {
+    // Volumes are intentionally preserved: development data is not destroyed by stopping services.
+    const result = compose(['down'], { stdio: 'inherit' });
+    process.exitCode = result.status;
+    console.log('Containers stopped. Data volumes kept (alola-dev-*).');
+  } else {
+    console.error(`Unknown command "${command}". Use up | status | down.`);
+    process.exitCode = 2;
+  }
+} catch (error) {
+  console.error(`\n${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
+}

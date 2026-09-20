@@ -1,6 +1,6 @@
 # ADR-0012 — Local development without mandatory Docker
 
-- Status: Accepted · Option selected by [ADR-0018](adr-0018-development-infrastructure-selection.md) (2026-09-19)
+- Status: Accepted · Option selected by [ADR-0018](adr-0018-development-infrastructure-selection.md) (2026-09-19) · Development topology superseded for development by [ADR-0020](adr-0020-local-docker-development-services.md) (2026-09-21)
 - Date: 2026-09-19
 - Deciders: ALOLA business owner (approved decision), implementation team
 - Scope: Environment
@@ -96,6 +96,19 @@ as a blocker.
   [ADR-0018](adr-0018-development-infrastructure-selection.md). The Decision section above is unchanged.
 - **Disk space resolved.** The "Current environment note" above is historical: `C:` had about 21 GB free
   when re-measured on 2026-09-19, and dependency installation is no longer blocked.
+
+## Status update — 2026-09-21: Docker approved for development
+
+Decision 5 above ("Do not install Docker or external infrastructure without explicit approval") has been
+**satisfied by explicit approval**: the stakeholder authorized local Docker services for development on
+2026-09-21, and Docker Desktop with WSL 2 is now installed. Option A in this ADR is therefore the active
+**development** topology, in the form recorded by
+[ADR-0020](adr-0020-local-docker-development-services.md): a single-node replica set plus Redis, pinned
+images, localhost-only ports, generated local credentials.
+
+Everything else in this ADR stands unchanged and is still enforced — scaffold without live services, fail
+safely and legibly, `.env.example` with placeholders only, service-dependent tests separated and never
+reported as passes when skipped, and no production credentials in development.
 
 ## References
 

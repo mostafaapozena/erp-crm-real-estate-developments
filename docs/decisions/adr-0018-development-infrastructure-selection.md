@@ -1,6 +1,6 @@
 # ADR-0018 — Development infrastructure: MongoDB Atlas and a Redis adapter
 
-- Status: Accepted
+- Status: Accepted · Development scope superseded by [ADR-0020](adr-0020-local-docker-development-services.md) (2026-09-21); this ADR now governs staging and production
 - Date: 2026-09-19
 - Deciders: ALOLA business owner (stakeholder decision `SD-16`), implementation team
 - Scope: Environment
@@ -49,6 +49,17 @@ development `.env` — before any connection is attempted.
 - `npm run lint`, `typecheck`, `test:unit`, and `build` succeed with no services configured.
 - A test asserts that a production-marked database name is refused outside production.
 - `.env.example` contains no real host, user, or password.
+
+## Status update — 2026-09-21: development moved to local Docker
+
+The stakeholder declined the managed-service route **for development** because it required external
+accounts, browser authentication, API keys, and hand-copied connection strings. Development now uses local
+Docker containers ([ADR-0020](adr-0020-local-docker-development-services.md)).
+
+**This ADR remains the intended staging and production direction:** MongoDB Atlas and a managed Redis
+instance. Nothing was provisioned — no Atlas project, cluster, or database user exists, and no managed
+Redis instance exists. The production guard described above (a non-production environment refusing a
+production-looking database name) is implemented and unchanged.
 
 ## References
 

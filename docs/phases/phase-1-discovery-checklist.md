@@ -20,7 +20,7 @@ configurable mechanisms and seeds no business values.
 |---|---|---|---|
 | Implementation team deliverables | 9 | **9** | 0 |
 | Stakeholder decisions (`SD-01` … `SD-23`) | 23 | **6** closed | 17 — none blocks Phase 1 scaffolding |
-| Environment prerequisites (`D1`, `D2`) | 2 | **1** (`D1`) | 1 (`D2`) |
+| Environment prerequisites (`D1`, `D2`) | 2 | **2** | 0 |
 
 ---
 
@@ -32,7 +32,7 @@ configurable mechanisms and seeds no business values.
 | A2 | Stable requirement ID scheme defined | [ADR-0014](../decisions/adr-0014-requirement-id-scheme.md), [ADR-0016](../decisions/adr-0016-phase-1-requirement-namespaces.md) | ✅ Complete — nine approved Phase 1 namespaces |
 | A3 | Requirement registry created, Phase 1 enumerated | [../REQUIREMENTS.md](../REQUIREMENTS.md) | ✅ Complete — 113 Phase 1 requirements (111 re-keyed + 2 split from `SEC-021`, ADR-0019) |
 | A4 | Architecture defined and recorded | [../architecture/](../architecture/) | ✅ Complete — 7 documents |
-| A5 | Architecture decisions recorded | [../decisions/](../decisions/) | ✅ Complete — 19 ADRs |
+| A5 | Architecture decisions recorded | [../decisions/](../decisions/) | ✅ Complete — 20 ADRs |
 | A6 | Data conventions defined: identifiers, money, time, status machines, concurrency, transactions, idempotency, soft state, indexes | [../architecture/data-model-conventions.md](../architecture/data-model-conventions.md) | ✅ Complete |
 | A7 | Security model defined: identity, sessions, three authorization layers, field security, SoD, audit | [../architecture/security-model.md](../architecture/security-model.md) | ✅ Complete — policy *content* arrives with `SD-02` (Phase 2) |
 | A8 | Light Mode token set specified and **contrast verified by measurement** | [ADR-0005](../decisions/adr-0005-light-mode-design-tokens.md) | ✅ Complete — 3 usage constraints derived from measured failures |
@@ -87,7 +87,7 @@ Full detail and phase assignment in [../decisions/open-decisions.md](../decision
 | # | Prerequisite | Status |
 |---|---|---|
 | D1 | Free disk space on `C:` | ✅ **Resolved.** ~21 GB free, measured 2026-09-19 before installation. |
-| D2 | Atlas development cluster and Redis provisioned | ❌ Option approved (`SD-16`), **not yet provisioned.** Scaffolding does not need it; integration tests stay skipped — and are reported as skipped — until it exists. |
+| D2 | Development MongoDB (replica set) and Redis available | ✅ **Complete 2026-09-21.** Local Docker: `mongo:8.0.32` single-node replica set `rs0` + `redis:8.10.1-alpine`, localhost-only ports, persistent named volumes ([ADR-0020](../decisions/adr-0020-local-docker-development-services.md)). Integration tier: **3 passed, 0 skipped**. |
 
 ---
 
@@ -103,5 +103,10 @@ Remaining for later: the 🔶 glossary terms are confirmed within the phase that
 
 ## Next action
 
-Scaffolding complete and reviewed. **PHASE 1 BLOCKED — DEVELOPMENT SERVICES NOT CONFIGURED** until `D2`
-is provisioned and `npm run test:integration:gate` passes. Do not start Phase 2.
+Scaffolding complete and reviewed; `D2` complete and the integration gate passing as of 2026-09-21.
+
+**Phase 1 is not yet approved.** The foundation verification suite passes in full, but Phase 1 scope is
+incomplete: 60 of 113 requirements are not started (identity and authorization `SEC-010`–`SEC-032`,
+`AUDIT-*`, `APPROVAL-*`, `INTEGRATION-001`–`005`, `CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`,
+`CORE-IMPORT`), and the gate also requires a stakeholder demonstration and written approval. Do not start
+Phase 2.

@@ -32,7 +32,7 @@ sources of truth**. Later written stakeholder decisions supersede conflicting st
 
 | Document | Purpose |
 |---|---|
-| [docs/decisions/](docs/decisions/) | 18 Architecture Decision Records — *why* the implementation is shaped as it is. |
+| [docs/decisions/](docs/decisions/) | 20 Architecture Decision Records — *why* the implementation is shaped as it is. |
 | [docs/decisions/open-decisions.md](docs/decisions/open-decisions.md) | Stakeholder decisions, each assigned to the phase it blocks. **17 open, none blocking Phase 1 scaffolding.** |
 
 ### Architecture
@@ -96,9 +96,17 @@ Requires Node.js 24 (see `.nvmrc`). No database, Redis, or Docker is needed to b
 
 ```sh
 npm install
-npm run verify      # lint, format, typecheck, i18n keys, secret scan, unit tests, production build
+npm run verify      # lint, format, typecheck, i18n keys, secret scan, unit tests, production build, bundle budget
 npm run dev:web     # http://localhost:5173 — Arabic RTL by default
-npm run dev:api     # http://localhost:4000 — copy .env.example to .env first
+npm run dev:api     # http://localhost:4000
+```
+
+For the database, Redis, and the integration tier (needs Docker Desktop with WSL 2):
+
+```sh
+npm run dev:services:up        # MongoDB replica set + Redis in Docker; writes .env for you
+npm run test:integration:gate  # fails rather than skips when the services are missing
+npm run dev:services:down     # stop containers, keep the data volumes
 ```
 
 The full command list, test tiers, and service setup are in

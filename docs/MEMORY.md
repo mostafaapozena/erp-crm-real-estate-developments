@@ -1,10 +1,10 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-20
+Last updated: 2026-09-21
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: local Git · Branch: `main` · **No remote, nothing pushed, nothing deployed**
-Commits: `7a840b3` documentation baseline → `4c988db` Phase 1 scaffolding → Phase 1 review decisions
-(the commit containing this file, created during recovery on 2026-09-20)
+Commits: `7a840b3` documentation baseline → `4c988db` Phase 1 scaffolding → `4365775` Phase 1 review
+decisions → development services + Phase 1 verification evidence (the commit containing this file)
 
 ## Project identity
 
@@ -19,10 +19,16 @@ Commits: `7a840b3` documentation baseline → `4c988db` Phase 1 scaffolding → 
 ## Current phase
 
 - Phase: **1 — Discovery, architecture, core, security, localization, Light Mode**
-- Sub-stage: Build half — scaffolding complete and reviewed; review decisions applied
-- Gate status: **PHASE 1 BLOCKED — DEVELOPMENT SERVICES NOT CONFIGURED** (`D2`). Phase 1 cannot be
-  approved while MongoDB and Redis integration tests are skipped; `npm run test:integration:gate` fails.
-- Requirements `verified`: **0** (nothing is gate-verified before stakeholder review)
+- Sub-stage: Build half — foundation complete; development services provisioned; verification suite green
+- `D2`: **COMPLETE 2026-09-21.** Local Docker MongoDB (single-node replica set `rs0`) + Redis
+  ([ADR-0020](decisions/adr-0020-local-docker-development-services.md)). Integration tier: **3 passed,
+  0 failed, 0 skipped.**
+- Gate status: **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Every mandatory verification check passes and
+  the services blocker is gone, but 60 of 113 Phase 1 requirements are not started (identity and
+  authorization `SEC-010`–`SEC-032`, `AUDIT-*`, `APPROVAL-*`, `INTEGRATION-001`–`005`, `CORE-NOTIFY`,
+  `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`), and the gate also requires a stakeholder
+  demonstration and written approval (phase-gates §1).
+- Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
 - Requirements `implemented` (code + passing tests): **43 of 113** · `in-progress`: 10 · not started: 60
 
 ## Phase status
@@ -89,25 +95,43 @@ committing**. Recovery verified each decision against the repository rather than
 Nothing was reset, discarded, or duplicated; no destructive Git command was run; the two existing commits
 were left untouched.
 
-## Verification — actual results, 2026-09-19 (re-verified 2026-09-20)
+### 5. Development services and Phase 1 verification (2026-09-21, the commit containing this file)
+
+The stakeholder cancelled the managed-service route for development (no external accounts, API keys, or
+hand-copied connection strings) and approved local Docker instead — [ADR-0020](decisions/adr-0020-local-docker-development-services.md).
+Atlas and managed Redis remain the staging/production direction ([ADR-0018](decisions/adr-0018-development-infrastructure-selection.md)
+status update). **Nothing was provisioned in any cloud: no Atlas project, cluster, user, or managed Redis
+instance exists, and no payment method was ever entered.**
+
+| Item | Result |
+|---|---|
+| Prerequisites | Docker Desktop 4.91.0 + Docker Engine 29.8.0 + Compose v5.5.1 on WSL 2. Installing WSL 2 needed Administrator rights and a restart — done by the stakeholder, it is not automatable from here |
+| MongoDB | `mongo:8.0.32`, single-node replica set `rs0`, PRIMARY, keyfile internal auth, published to `127.0.0.1:27017` only |
+| Redis | `redis:8.10.1-alpine`, password-protected, `appendonly yes`, published to `127.0.0.1:6379` only |
+| Volumes | Persistent named volumes `alola-dev-mongodb-data`, `alola-dev-mongodb-config`, `alola-dev-redis-data`; `dev:services:down` keeps them |
+| Least privilege | `erp_dev_user` = `readWrite` on `real_estate_erp_dev` only; `listDatabases` as that user returns `[]` |
+| Credentials | Generated locally, stored only in the ignored `docker/dev.env` and `.env`; never printed, never committed. `.env` ACL restricted to the current user |
+| Connectivity checks | **9/9 passed** — Mongo connect, write, read, multi-document **transaction**, delete + collection drop; Redis connect, set + get, delete, `appendonly` confirmed. All test records and keys removed |
+| Added | `docker/compose.dev.yml`, `scripts/dev-services.mjs`, npm scripts `dev:services:up|status|down` |
+
+## Verification — actual results, 2026-09-21 (full suite re-run)
 
 | Check | Command | Result |
 |---|---|---|
 | Lint | `npm run lint` | ✅ 0 errors, 0 warnings |
 | Format | `npm run format:check` | ✅ |
-| Documentation links | link check over all Markdown | ✅ 41 files, 242 relative links, 0 broken |
 | Typecheck (strict) | `npm run typecheck` | ✅ root + 9 workspaces |
+| Unit tests | `npm run test:unit` | ✅ **220 passed**, 14 files, 10 projects |
+| **Integration gate** | `npm run test:integration:gate` | ✅ **3 passed, 0 failed, 0 skipped**, 2 files, exit 0 — real MongoDB and Redis, no mocks |
 | i18n keys | `npm run check:i18n` | ✅ |
-| Secret scan | `npm run check:secrets` | ✅ no credential patterns |
-| Unit tests | `npm run test:unit` | ✅ **220 passed**, 14 files, 10 projects — stable across 3 consecutive runs (2026-09-20) |
-| Production build | `npm run build` | ✅ web, api, worker. Warning: web JS chunk 582 kB (> 500 kB) |
-| E2E | `npm run test:e2e` | ✅ **14 passed** — desktop + mobile Chromium, Arabic RTL and English LTR |
-| Integration | `npm run test:integration` | ⏭ **3 skipped, 0 run** — no Atlas/Redis (`D2`). **Not a pass.** |
-| Integration gate | `npm run test:integration:gate` | ❌ **Fails by design** — `PHASE GATE FAILED — integration services not configured` |
+| Secret scan | `npm run check:secrets` | ✅ 169 files, no credential patterns |
+| Documentation links | link check over all Markdown | ✅ 42 files, 0 broken |
+| Production build | `npm run build` | ✅ web, api, worker |
 | Bundle budget | `npm run check:bundle` | ✅ 582.1 kB / 184.9 kB gzip (budget 650 / 210) |
+| E2E | `npm run test:e2e` | ✅ **14 passed** — 7 desktop-chromium + 7 mobile-chromium; every test starts in Arabic RTL, 2 per viewport also assert English LTR |
 | Dependency audit | `npm run check:deps` | ✅ 0 vulnerabilities |
-| Built API smoke | `node apps/api/dist/main.js` | ✅ value-free config errors, exit 1; with config: live 200, ready 503 `not_configured` per dependency |
-| Hosted CI | `.github/workflows/ci.yml` | ⚠ defined, **never run** — no remote |
+| Arabic PDF integrity | `sha256sum` working tree + committed blob | ✅ `89fade53…99f7b` — unchanged |
+| Hosted CI | `.github/workflows/ci.yml` | ⚠ defined, **never run** — no remote exists |
 
 What the tests prove, beyond compiling: all 39 token pairs in use meet their WCAG thresholds and the ratios recorded in ADR-0005 are reproduced; lint rules fire on
 fixtures (colors, physical CSS, dark mode, hard-coded text, module boundaries); secrets are redacted in
@@ -121,7 +145,12 @@ actually load; focus ring is 3px `#1D4ED8`; Light Mode holds under a dark system
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11)
 
-\* Connection code done; untested against real services until `D2`. † Local `npm run verify`; hosted CI never run.
+\* **Now verified against real services** (integration tier, 2026-09-21): `PLAT-014` reports
+`transactions: true` against `rs0`, `PLAT-015` answers `PING`, `PLAT-016`/`INTEGRATION-006` prove a
+duplicate enqueue creates one job. † Local `npm run verify`; hosted CI never run.
+
+`INTEGRATION-006` moved from `in-progress` to integration-verified behaviour (idempotent enqueue proven
+against real Redis); it stays `in-progress` overall because the adapter registry it belongs to is not built.
 
 **`in-progress` (10):** PLAT-007 (request, logs, jobs done; audit and provider calls wait for AUDIT and
 adapters) · PLAT-017 (interface and policy; no S3 adapter) · SEC-002 (origin guard; double-submit token
@@ -138,11 +167,9 @@ CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 1. **Stopped for the Phase 1 exit-gate review.** Do not start Phase 2. Do not begin AUDIT or authorization
    implementation until instructed.
-2. Provision `D2` — development values only, in the untracked `.env`:
-   `MONGODB_URI`, `MONGODB_DB_NAME` (Atlas **development** cluster), `REDIS_URL` (managed dev or approved
-   local instance). Then `npm run test:integration:gate` must report 3 passed, 0 skipped.
-3. When instructed: `AUDIT-001`–`006` and `SEC-023`–`032` (audit store, permission catalog, scoped
-   repository).
+2. To close the remaining Phase 1 scope, the next bounded group is `AUDIT-001`–`006` and `SEC-023`–`032`
+   (audit store, permission catalog, scoped repository) — prerequisites for every later feature.
+3. Start the services before any integration work: `npm run dev:services:up`.
 
 ## Approved decisions
 
@@ -154,7 +181,8 @@ CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
 - Server-side authorization inside queries; decimal-safe money; UTC storage; no hard deletes.
 - **Meta: full Master Mapping scope** (`SD-14`); billing honesty per ADR-0011. **CAPI** optional, production
   delivery off by default (ADR-0017).
-- **Dev infrastructure:** Atlas dev cluster + Redis adapter; no Docker; no production credentials (ADR-0018).
+- **Dev infrastructure:** local Docker MongoDB replica set + Redis for development (ADR-0020); Atlas +
+  managed Redis remain the staging/production direction (ADR-0018). No production credentials anywhere.
 - Sources of truth: `CLAUDE.md`, this file, Master Mapping, Phase Prompts, approved ADRs. Arabic PDF supplementary.
 - Requirement IDs: nine Phase 1 namespaces (ADR-0016); `SEC` / `CORE-ORG` / `HR-EMP` boundary (ADR-0019).
 - **Western digits (0–9) in Arabic and English** (`SD-23`, ADR-0003); display only, storage language-neutral.
@@ -168,6 +196,11 @@ CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
   `node scripts/bin.mjs <tool>`. Don't replace those with bare tool names. Moving the repository to a
   path without `&` removes the problem.
 - Integration tests use the `.int-test.ts` suffix; unit tests `.test.ts`. The integration config loads `.env`.
+- Start services with `npm run dev:services:up` (idempotent). It reuses `docker/dev.env` credentials, so
+  deleting that file while the volumes exist orphans the MongoDB users — remove the volumes too for a clean
+  start. `down` never deletes volumes.
+- `scripts/dev-services.mjs` assembles connection user-info separately from the scheme so no source line
+  spells `scheme://user:password@`, which keeps the secret scan strict rather than needing an exception.
 - Internal packages ship TypeScript source (`exports: ./src/index.ts`); the API and worker production
   builds bundle them with esbuild and keep third-party dependencies external.
 - `react-i18next` deliberately not used: `LocaleProvider` + `getFixedT(locale)` keeps language, direction,
@@ -202,8 +235,11 @@ CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 | ID | Blocker | Blocks |
 |---|---|---|
-| `D2` | Atlas dev cluster and Redis not provisioned | **Phase 1 gate** (`test:integration:gate` fails); transaction verification |
+| Phase 1 scope | 60 of 113 requirements not started; 10 in progress | **Phase 1 approval** (phase-gates §1) |
+| Stakeholder gate | Demonstration and written approval outstanding | **Phase 1 approval** |
 | `SD-01`–`SD-12`, `SD-17`–`SD-21` | Open stakeholder decisions (17) | Their assigned phases — none blocks Phase 1 |
+
+`D2` is **closed**: development services exist and the integration tier passes with zero skips.
 
 ## Risks and technical debt
 
@@ -212,17 +248,22 @@ CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
 | Hosted CI has never run (no remote) | Run `npm run verify` + E2E locally before each commit until a remote exists |
 | Secret scan is pattern-based, not a dedicated scanner | Add a dedicated scanner when CI exists |
 | Web bundle 582 kB in one chunk (above Vite's 500 kB advisory) | Budget enforced by `check:bundle`; route-level splitting before feature-heavy phases (latest: first Phase 2 feature screens) |
-| Integration tier untested | Provision `D2` |
+| Local topology is a single-node replica set, so failover is not exercised | Accepted for development; staging on Atlas is multi-node (ADR-0020) |
+| Docker Desktop + WSL 2 are now prerequisites for the integration tier | Documented in environments.md §5; unit tests, lint, typecheck and build still need no services |
 | `C:` free space dropped from ~21 GB to ~17 GB during the session (not caused by this project's ~0.6 GB) | Re-check before large installs |
 
 ## Handoff summary
 
-Documentation baseline (`7a840b3`) and Phase 1 scaffolding (`4c988db`) committed. The Phase 1 review
-decisions (SEC boundary, PDF, `SD-23`, integration gate, bundle budget) were written by a session that hit
-its usage limit before committing; recovery on 2026-09-20 verified them against the repository, fixed one
-placeholder defect, added the identifier tests decision C required, and committed them as one commit.
-All local quality checks pass: format, lint, strict typecheck, i18n keys, documentation links, secret scan,
-220 unit tests, bundle budget.
-**PHASE 1 BLOCKED — DEVELOPMENT SERVICES NOT CONFIGURED:** integration tests are skipped pending `D2`,
-which is not a pass, and `npm run test:integration:gate` fails by design. Stopped for the Phase 1
-exit-gate review. AUDIT and authorization-core implementation not started. Nothing pushed or deployed.
+Four local commits: documentation baseline (`7a840b3`), Phase 1 scaffolding (`4c988db`), Phase 1 review
+decisions (`4365775`), and this one — development services plus Phase 1 verification evidence.
+
+`D2` is **closed**: local Docker MongoDB (replica set `rs0`) and Redis run on localhost-only ports with
+persistent volumes and generated credentials, and the **integration gate passes with 3 passed, 0 failed,
+0 skipped**. The complete verification suite is green: format, lint, strict typecheck, 220 unit tests,
+integration gate, i18n keys, secret scan, documentation links, production build, bundle budget, 14 E2E
+tests across desktop and mobile in both locales, and 0 dependency vulnerabilities. The Arabic PDF is
+byte-identical. Nothing was provisioned in any cloud and no payment method was entered.
+
+**PHASE 1 IS NOT APPROVED.** The services blocker is gone, but 60 of 113 Phase 1 requirements are not
+started and the gate requires a stakeholder demonstration plus written approval. Stopped for that review.
+AUDIT and authorization-core implementation not started. No remote, nothing pushed, nothing deployed.
