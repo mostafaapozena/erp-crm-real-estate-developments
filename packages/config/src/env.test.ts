@@ -68,6 +68,8 @@ describe('API configuration (OPS-001)', () => {
     const problems = problemsOf(() => loadApiConfig({ ...baseEnv, APP_ENV: 'production' }));
     expect(problems.map((p) => p.variable).sort()).toEqual(
       [
+        // Authentication cannot run on a default signing key, so production must supply one (ADR-0023).
+        'AUTH_TOKEN_SIGNING_SECRET',
         'KMS_KEY_ID',
         'MONGODB_DB_NAME',
         'MONGODB_URI',
@@ -76,6 +78,51 @@ describe('API configuration (OPS-001)', () => {
         'S3_REGION',
       ].sort(),
     );
+  });
+
+  it('rejects a short token signing secret without echoing it', () => {
+    const problems = problemsOf(() =>
+      loadApiConfig({ ...baseEnv, AUTH_TOKEN_SIGNING_SECRET: 'too-short-secret' }),
+    );
+    expect(problems.map((p) => p.variable)).toEqual(['AUTH_TOKEN_SIGNING_SECRET']);
+    expect(JSON.stringify(problems)).not.toContain('too-short-secret');
+  });
+
+  it('refuses the development encryption key in staging and production (SEC-033 is not implemented)', () => {
+    for (const APP_ENV of ['staging', 'production'] as const) {
+      const problems = problemsOf(() =>
+        loadApiConfig({
+          ...baseEnv,
+          APP_ENV,
+          MONGODB_URI: 'mongodb+srv://cluster.invalid/',
+          MONGODB_DB_NAME: 'alola_app',
+          REDIS_URL: 'rediss://cache.invalid:6379',
+          S3_BUCKET: 'bucket',
+          S3_REGION: 'me-south-1',
+          KMS_KEY_ID: 'arn:aws:kms:me-south-1:000000000000:key/placeholder',
+          AUTH_TOKEN_SIGNING_SECRET: 'x'.repeat(48),
+          DEV_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
+        }),
+      );
+      expect(problems.map((p) => p.variable)).toEqual(['DEV_ENCRYPTION_KEY']);
+    }
+  });
+
+  it('accepts the authentication defaults in development', () => {
+    const config = loadApiConfig({ ...baseEnv, AUTH_TOKEN_SIGNING_SECRET: 'y'.repeat(48) });
+    expect(config.AUTH_ACCESS_TOKEN_TTL_SECONDS).toBe(600);
+    expect(config.AUTH_SESSION_IDLE_TIMEOUT_SECONDS).toBe(1800);
+    expect(config.AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS).toBe(43_200);
+    // OWASP minimum; the schema refuses anything weaker.
+    expect(config.ARGON2_MEMORY_COST).toBe(19_456);
+    expect(config.ARGON2_TIME_COST).toBe(2);
+  });
+
+  it('refuses Argon2 parameters below the approved minimum', () => {
+    expect(
+      problemsOf(() => loadApiConfig({ ...baseEnv, ARGON2_MEMORY_COST: '4096' })),
+    ).toHaveLength(1);
+    expect(problemsOf(() => loadApiConfig({ ...baseEnv, ARGON2_TIME_COST: '1' }))).toHaveLength(1);
   });
 
   it('refuses a production-looking database outside production (ADR-0018)', () => {

@@ -169,16 +169,54 @@ A phase gate does not pass without these, per endpoint:
 ## 9. What is implemented today (2026-09-21)
 
 This section records the mechanism as built, so a later session can verify the document against the code.
-Requirement IDs: `AUDIT-001`–`AUDIT-006`, `SEC-023`–`SEC-032`.
+Requirement IDs: `SEC-010`–`SEC-032` and `AUDIT-001`–`AUDIT-006`.
+
+### Authentication, as built (`SEC-011`–`SEC-022`)
+
+| Concern | Mechanism | Where |
+|---|---|---|
+| Account | `securityAccounts`: credentials, lifecycle state, second factor, and an **opaque** employee reference. Never employee or organization data (ADR-0019) | `apps/api/src/modules/identity/model.ts` |
+| Lifecycle | `invited` → `active` → `suspended` → `terminated`, with a compare-and-set on the current state so a concurrent transition loses rather than overwrites. **No deletion** (ADR-0009) | `…/identity/service.ts` |
+| Password | Argon2id at the OWASP minimum, PHC format, transparent rehash when parameters rise, length-first policy, never trimmed or logged ([ADR-0023](../decisions/adr-0023-password-hashing-and-session-tokens.md)) | `packages/security/src/credentials/passwords.ts` |
+| Access token | Short-lived signed JWT held in memory by the client; **never trusted alone** | `packages/security/src/credentials/tokens.ts` |
+| Refresh token | 256-bit opaque secret, SHA-256 digest stored, rotated on every use, replay revokes the whole family (`SEC-015`) | `…/identity/service.ts` |
+| Cookie | `HttpOnly`, `SameSite=Strict`, path-scoped to `/api/v1/auth`, and `Secure` everywhere except development and test | `…/identity/cookies.ts` |
+| Session | Stored in MongoDB with idle and absolute expiry and a revocation **reason**, so revocation is durable and explainable | `…/identity/model.ts` |
+| Second factor | TOTP (RFC 6238) with the accepted step stored against replay; secret encrypted at rest; ten independently hashed single-use recovery codes | `packages/security/src/credentials/mfa.ts` |
+| Throttling | Redis counters per address and per identifier, every one with a TTL, so no counter can lock an account out permanently | `…/identity/throttle.ts` |
+
+**Why revocation is immediate (`SEC-020`).** Every authenticated request re-reads the session and the
+account and compares the token's credential generation with the account's. A suspension, an offboarding, a
+password change, or a permission change therefore ends access on the *next request* rather than when the
+token expires. A signature alone never authorizes anything.
+
+**Enumeration resistance.** An unknown identifier, a wrong password, an unactivated account, a suspended
+account, and a terminated account produce the **same** answer, and the unknown-identifier path performs a
+dummy Argon2id verification so the timing matches. The password-reset request answers identically whether
+or not the account exists and returns no token.
+
+**Offboarding (`SEC-021`) is one audited action**: terminate, revoke every session, and invalidate
+outstanding activation and reset tokens. It does **not** touch the employee record, and it does **not**
+reassign tasks, approvals, or customers — those are `CORE-TASK-005`, `APPROVAL-007`, and Phase 3
+`CRM-OWNER`. The caller acknowledges that explicitly, so "offboarded" is never mistaken for "handed over".
+
+**Personal accounts only (`SEC-022`)** is mechanical, not a policy note: the normalized login identifier is
+unique, and a partial unique index allows **one live account per employee reference** while still letting a
+rehired person receive a new account. The caller also attests that the account belongs to one named person,
+and the attestation is part of the audit record.
+
+**No default administrator.** Nothing is seeded and there is no public self-registration.
+`scripts/bootstrap-admin.ts` runs once, refuses if any account exists, and creates an `invited` account
+with no password.
 
 ### Enforcement points, in request order
 
 | Order | Where | What it enforces |
 |---|---|---|
 | 1 | `apps/api/src/http/audit-context.ts` | Opens the per-request audit-write counter (`AUDIT-003`) |
-| 2 | `apps/api/src/http/actor.ts` — `attachActor` | Rebuilds the actor from stored grants; nothing is read from the request (`SEC-025`, [ADR-0022](../decisions/adr-0022-authorization-resolved-per-request.md)) |
+| 2 | `apps/api/src/http/actor.ts` — `attachActor` + `…/identity` `resolveSession` | Verifies the access token, then re-checks session, account state, credential generation, and the second factor, and rebuilds permissions from stored grants. Nothing is read from the request (`SEC-013`, `SEC-020`, `SEC-025`, [ADR-0022](../decisions/adr-0022-authorization-resolved-per-request.md)) |
 | 3 | `apps/api/src/http/audit-context.ts` — `assertMutationAudited` | A successful mutation that recorded no audit event becomes `500` (`AUDIT-003`) |
-| 4 | `apps/api/src/http/actor.ts` — `requirePermission` | Layer 1. Default deny; the response never names the permission (`SEC-025`, `SEC-030`) |
+| 4 | `apps/api/src/http/actor.ts` — `requirePermission` / `requireAuthenticated` | Layer 1. Default deny; the response never names the permission (`SEC-025`, `SEC-030`). Self-service routes require identity only: nobody should need a permission to sign out |
 | 5 | `apps/api/src/http/validate.ts` | Strict schemas at the boundary; unknown fields rejected, so mass assignment fails before authorization logic |
 | 6 | `packages/security/src/authorization/sanitize.ts` | Rejects `# Security Model
 
@@ -352,6 +390,7 @@ A phase gate does not pass without these, per endpoint:
 | 7 | `packages/security/src/authorization/scope.ts` — `buildScopeFilter`, `withScope` | Layer 2. The scope is merged into the filter **before** the database answers, including for totals and exports (`SEC-026`–`SEC-028`) |
 | 8 | `packages/security/src/authorization/fields.ts` | Layer 3. Restricted fields are deleted from list responses, single reads, and exports (`SEC-029`) |
 | 9 | `packages/security/src/authorization/escalation.ts` | No self-grant, no granting unheld permissions, no widening scope (`SEC-031`) |
+| 10 | `…/identity/service.ts` — `assertNotSelfAdministration` | An administrative account route never applies to the caller's own account: a self-issued password or MFA reset would skip the re-authentication the self-service route requires (`SEC-010`, `SEC-031`) |
 
 A record that exists but falls outside the scope is reported as `404`, identically to an absent one
 (`SEC-030`). Denials and refused escalation attempts are recorded as `security.authorization.denied`.
@@ -370,12 +409,28 @@ by `apps/api/src/platform/indexes.ts` at startup.
 | | `audit_action_occurredAt` | Filter by action |
 | | `audit_outcome_occurredAt` | Denied/failed review |
 | | `audit_correlationId` | Everything that happened in one request |
+| `securityAccounts` | `accounts_accountId_unique` (unique) | Identity of an account |
+| | `accounts_loginIdentifier_unique` (unique) | The login key; what makes `SEC-022` mechanical |
+| | `accounts_employeeRef_live_unique` (unique, partial) | One live account per employee; a terminated one never blocks a replacement |
+| | `accounts_state_createdAt` | Administrative listing by state |
+| `authSessions` | `sessions_sessionId_unique` (unique) | Session lookup on every authenticated request |
+| | `sessions_accountId_createdAt` | The session list, and every bulk revocation |
+| | `sessions_familyId` | Family revocation on refresh-token reuse |
+| | `sessions_ttl` (TTL on `purgeAfter`) | Operational retention; the audit trail is separate and permanent |
+| `authRefreshTokens` | `refreshTokens_tokenHash_unique` (unique) | Rotation lookup by digest |
+| | `refreshTokens_familyId_issuedAt` | The rotation chain |
+| | `refreshTokens_sessionId` | Invalidating a session's tokens |
+| | `refreshTokens_ttl` (TTL on `purgeAfter`) | Retention |
+| `accountTokens` | `accountTokens_tokenHash_unique` (unique) | Activation and reset lookup by digest |
+| | `accountTokens_accountId_purpose` | Invalidating outstanding links on offboarding |
+| | `accountTokens_ttl` (TTL on `purgeAfter`) | Retention |
 | `roles` | `roles_key_unique` (unique) | One role per key |
 | `accountGrants` | `accountGrants_accountId_unique` (unique) | One grant per account; makes per-request resolution cheap |
 | | `accountGrants_roleKeys` | "Who holds this role" |
 
 `roles` and `accountGrants` are configuration and legitimately change; every change is audited. Only
-`auditEvents` is append-only.
+`auditEvents` is append-only. Session and token rows carry a `purgeAfter` date and are removed by MongoDB
+once they are long expired — the *evidence* of a session lives in the audit trail, which is not expired.
 
 ### Redaction
 
@@ -394,12 +449,18 @@ themselves restricted fields, requiring `audit.viewContext`.
 
 ### Deliberately not implemented yet
 
-- **Authentication.** There is no login, session, MFA, or device trust (`SEC-010`–`SEC-022`). The
-  production actor resolver returns **no actor**, so every protected endpoint answers `401`. Integration
-  tests inject their own resolver; no development bypass is compiled into the application.
 - **Separation of duties** (section 4) — `APPROVAL-001`–`APPROVAL-007`.
-- **Session invalidation on permission change** (`SEC-020`) — there are no sessions yet. Grant changes do
-  take effect immediately, which is the part that exists.
+- **Password-reset and invitation delivery** — `CORE-NOTIFY`. Until it exists, an administrator issues a
+  reset token through `POST /api/v1/security/accounts/{accountId}/password-reset` and delivers it out of
+  band, and an invitation's activation token is returned once to the administrator who created the account.
+  The self-service reset request answers identically for every identifier and returns nothing.
+- **Employee-reference validation** — the reference is opaque until `HR-EMP` exists (Phase 8). Nothing
+  validates that it names a real employee, and nothing here stores employee data.
+- **Organization-scoped account administration** — account rows carry no branch, department, or team, so a
+  team- or branch-scoped actor resolves to "no records" rather than a subset. That needs `CORE-ORG`
+  (Phase 2) and `SD-01`.
+- **Authentication screens** — the registry rows for `SEC-011`–`SEC-022` describe mechanism, not UI, so
+  this group is API-only. Screens are registered when they are specified.
 - **Cryptographic audit integrity** — not claimed; see
   [ADR-0021](../decisions/adr-0021-audit-trail-integrity.md) §2.
 - **The permission catalog is not the business role list.** Roles, assignments, and the SoD matrix remain

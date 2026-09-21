@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@alola/contracts": "0.1.0",
+    "@node-rs/argon2": "2.2.1",
+    "jose": "6.2.12",
+    "otpauth": "9.5.2",
     "pino": "10.3.1"
   }
 }

@@ -236,3 +236,43 @@ the untracked repository-root `.env` (copy `.env.example`).
 | `SD-18` | Hosting region, data residency, environments, backup, recovery, incident policy |
 | `SD-21` | `ORG_TIMEZONE`, fiscal calendar, working week, quiet hours |
 | `SD-20` | Provider credentials for email, SMS, and the payment gateway |
+
+## Authentication settings (added 2026-09-21)
+
+Declared in `packages/config/src/env.ts` and listed in `.env.example`. Every one has a defensible default
+except the signing secret, which has none: a default signing key is a shared key.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `AUTH_TOKEN_SIGNING_SECRET` | none | HS256 key for access tokens and MFA challenges. At least 32 characters of random material, generated per environment. **Required when `APP_ENV` is `staging` or `production`.** Without it the authentication routes answer `SERVICE_NOT_CONFIGURED`, exactly as they do without a database |
+| `AUTH_ACCESS_TOKEN_TTL_SECONDS` | 600 | Short by design; revocation does not wait for expiry |
+| `AUTH_SESSION_IDLE_TIMEOUT_SECONDS` | 1800 | Inactivity ends a session |
+| `AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS` | 43200 | A session ends at this deadline however active it is |
+| `AUTH_ACTIVATION_TOKEN_TTL_SECONDS` | 259200 | Invitation links |
+| `AUTH_PASSWORD_RESET_TTL_SECONDS` | 1800 | Reset links |
+| `AUTH_MFA_CHALLENGE_TTL_SECONDS` | 300 | How long a second-factor challenge stays valid |
+| `AUTH_TOTP_ISSUER` | `ALOLA ERP` | Shown in the authenticator application |
+| `ARGON2_MEMORY_COST` | 19456 | KiB. The schema refuses anything **below** the default, so configuration can only harden it |
+| `ARGON2_TIME_COST` | 2 | Iterations |
+| `ARGON2_PARALLELISM` | 1 | Lanes |
+| `DEV_ENCRYPTION_KEY` | none | **Development and test only.** 32-byte base64 key that encrypts MFA secrets so an enrolment survives a restart. Configuration **refuses** it when `APP_ENV` is `staging` or `production`, which require `KMS_KEY_ID` (`SEC-033`, not implemented) |
+
+### Local development versus staging and production
+
+| | Development and test | Staging and production |
+|---|---|---|
+| Cookie `Secure` | off (plain HTTP on localhost) | **on** — never relaxed to make local HTTP convenient |
+| MFA secret encryption | `DevKeyEncryptor` with `DEV_ENCRYPTION_KEY` | KMS. **Unavailable until `SEC-033` lands**; the unconfigured encryptor fails loudly rather than storing plaintext |
+| Signing secret | generated locally into the ignored `.env` | required, from the environment or a secrets manager |
+| Throttle store | Redis, with an in-memory insurance limiter | same |
+
+### Creating the first account
+
+```
+BOOTSTRAP_ADMIN_EMAIL=someone@example.com npm run bootstrap:admin
+```
+
+Runs once, refuses if any account already exists, creates an `invited` account with **no password**, and
+prints an activation token for the operator to use. There is no default administrator, no hard-coded
+password, and no public self-registration. The account it creates holds every permission, so `SEC-017`
+requires it to enrol a second factor at its first sign-in.

@@ -3,6 +3,8 @@
   "MALFORMED_REQUEST": "The request could not be read.",
   "PAYLOAD_TOO_LARGE": "The submitted data is larger than allowed.",
   "UNAUTHENTICATED": "You need to sign in.",
+  "MFA_REQUIRED": "A two-factor verification code is required.",
+  "REAUTHENTICATION_REQUIRED": "Re-enter your password to confirm your identity before this action.",
   "FORBIDDEN": "You do not have permission to perform this action.",
   "CSRF_REJECTED": "The request was rejected for security reasons. Reload the page and try again.",
   "NOT_FOUND": "The requested item was not found.",

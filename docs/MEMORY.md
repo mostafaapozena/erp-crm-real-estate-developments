@@ -4,8 +4,8 @@ Last updated: 2026-09-21
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: local Git · Branch: `main` · **No remote, nothing pushed, nothing deployed**
 Commits: `7a840b3` documentation baseline → `4c988db` Phase 1 scaffolding → `4365775` Phase 1 review
-decisions → `dfc0ac5` development services + integration gate → audit subsystem + authorization core
-(the commits containing this file)
+decisions → `dfc0ac5` development services + integration gate → `3d6bdf1` audit and authorization core →
+identity and authentication (the commits containing this file)
 
 ## Project identity
 
@@ -20,22 +20,21 @@ decisions → `dfc0ac5` development services + integration gate → audit subsys
 ## Current phase
 
 - Phase: **1 — Discovery, architecture, core, security, localization, Light Mode**
-- Sub-stage: Build half — foundation, audit subsystem, and authorization core complete; verification green
+- Sub-stage: Build half — foundation, audit, authorization, and identity complete; verification green
 - `D2`: **COMPLETE 2026-09-21.** Local Docker MongoDB (single-node replica set `rs0`) + Redis
   ([ADR-0020](decisions/adr-0020-local-docker-development-services.md)). Integration tier: **59 passed,
-  0 failed, 0 skipped.**
+  0 failed, 0 skipped** (132 tests).
 - Gate status: **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Every mandatory verification check passes, but
-  **44 of 113** Phase 1 requirements are not started (account security `SEC-010`–`SEC-022`, `APPROVAL-*`,
-  `INTEGRATION-001`–`005`, `CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`), 10 are in
-  progress, and the gate also requires a stakeholder demonstration and written approval (phase-gates §1).
+  **31 of 113** Phase 1 requirements are not started (`APPROVAL-*`, `INTEGRATION-001`–`005`,
+  `CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`), 9 are in progress, and the gate
+  also requires a stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
-- Requirements `implemented` (code + passing tests): **59 of 113** · `in-progress`: 10 · not started: 44
+- Requirements `implemented` (code + passing tests): **73 of 113** · `in-progress`: 9 · not started: 31
 
 ## Phase status
 
-- [ ] Phase 1 — *in progress: scaffolding, audit subsystem, and authorization core done; account security
-      and identity (`SEC-010`–`022`), approval, integration registry, notifications, tasks, documents,
-      search, and import not started*
+- [ ] Phase 1 — *in progress: scaffolding, audit, authorization, and identity/authentication done;
+      approval, integration registry, notifications, tasks, documents, search, and import not started*
 - [ ] Phases 2–9 — not started. **Do not start Phase 2.**
 
 ## Recently completed — 2026-09-19
@@ -167,6 +166,74 @@ import. The **production actor resolver returns no actor**, so every protected e
 resolves grants from the database: a fixture for exercising authorization, **not** authentication, and not
 compiled into the application.
 
+## Recently completed — 2026-09-21 (identity and authentication)
+
+Bounded group: `SEC-010` and `SEC-011`–`SEC-022`. Nothing outside it was implemented.
+
+**`SEC-010` is not an identity requirement.** The registry defines it as the privilege-escalation **test
+suite** (MM §13), in the general security block. It was implemented as registered — a dedicated suite — not
+reinterpreted as a feature.
+
+### What exists
+
+| Piece | Where | What it guarantees |
+|---|---|---|
+| Accounts | `apps/api/src/modules/identity/model.ts` | `securityAccounts`: credentials, lifecycle, second factor, and an **opaque** employee reference. Unique normalized identifier; one live account per employee (partial index). No deletion |
+| Lifecycle | `…/identity/service.ts` | `invited` → `active` → `suspended` → `terminated`, compare-and-set on the current state so a concurrent transition loses rather than overwrites |
+| Passwords | `packages/security/src/credentials/passwords.ts` | Argon2id (m=19456, t=2, p=1), PHC format, transparent rehash when parameters rise, length-first policy, never trimmed, never logged |
+| Tokens | `packages/security/src/credentials/tokens.ts` | Short-lived HS256 access token; 256-bit opaque refresh secret stored as a SHA-256 digest only |
+| Sessions | `…/identity/model.ts`, `service.ts` | MongoDB rows with idle and absolute expiry and a revocation **reason**; rotation on refresh; replay revokes the whole family |
+| Second factor | `packages/security/src/credentials/mfa.ts` | TOTP with the accepted step stored against replay; secret encrypted at rest; ten independently hashed single-use recovery codes |
+| Throttling | `…/identity/throttle.ts` | Redis counters per address and per identifier, **every one with a TTL** |
+| Cookie | `…/identity/cookies.ts` | `HttpOnly`, `SameSite=Strict`, path-scoped, `Secure` everywhere except development and test |
+| Bootstrap | `scripts/bootstrap-admin.ts` | Runs once, refuses if any account exists, creates an `invited` account with **no password** |
+
+Endpoints: 9 under `/api/v1/auth`, 6 under `/api/v1/me`, 11 under `/api/v1/security/accounts`. All 33
+documented paths resolve in the generated OpenAPI document with zero broken references.
+
+**Why revocation is immediate.** Every authenticated request re-reads the session and the account and
+compares the token's credential generation with the account's, so suspension, offboarding, a password
+change, and a permission change all take effect on the next request rather than at token expiry
+([ADR-0023](decisions/adr-0023-password-hashing-and-session-tokens.md) §4).
+
+### Decisions worth not reversing
+
+- **Argon2id via `@node-rs/argon2`, not `argon2`.** The named package's install script runs `cross-env`,
+  whose Windows shim breaks on the `&` in the repository path. Same algorithm, prebuilt binaries, no
+  install script. A unit test asserts the stored value really begins with `$argon2id$` (ADR-0023 §1).
+- **Password policy is length-first** (12–200, blocklist, no composition rules) per NIST SP 800-63B, and the
+  raw password is never trimmed or normalized.
+- **An access token is never trusted alone** — that is what makes `SEC-020` true.
+- **Lockout is a TTL-bounded counter, never a stored state**, so no sequence of failures can make an account
+  permanently unusable. `suspended` is the administrative decision.
+- **The per-address sign-in budget is generous (120/15 min)** because a branch office behind one NAT shares
+  an address; precision is the per-identifier rule's job.
+- **No default administrator, no seeded role, no self-registration.**
+
+### Defects this group's own tests found, and the fixes
+
+| Found | Fix |
+|---|---|
+| An administrator could reset **their own** MFA or password through the administrative routes, skipping the re-authentication the self-service routes require — a way around `SEC-017` | `assertNotSelfAdministration`: suspend, offboard, password reset, and MFA reset are refused on the caller's own account and the attempt is recorded |
+| A `429` from the authentication throttle carried no `Retry-After`, which invites an immediate retry loop | `AppError` gained an optional retry hint and the error pipeline sets the header |
+| The per-IP sign-in budget (30/15 min) would lock out a whole office behind one NAT | Raised to 120 with the reason recorded; the per-identifier rule stays tight at 8 |
+| `z.toJSONSchema` could not represent the login-identifier contract because it carried a `.transform` | Normalization moved to the service, which already did it at every entry point; the schema now only validates |
+| The integration suites reached into the security module's internals to seed roles and grants (ADR-0001) | `bootstrapRole` / `bootstrapGrant` published by that module, documented as the unguarded bootstrap path used by the script and by fixtures, never by a router |
+
+### Not done, deliberately
+
+- **`SEC-033` (KMS) is not implemented.** Development and test encrypt MFA secrets with a configured local
+  key; staging and production refuse that key and cannot store an MFA secret until the adapter exists.
+- **Delivery** of invitation and reset tokens is `CORE-NOTIFY`. An administrator issues and hands over a
+  reset token meanwhile; the self-service request answers identically for every identifier and returns
+  nothing.
+- **No authentication screens.** The registry rows for `SEC-011`–`SEC-022` describe mechanism, not UI, and
+  the Phase 1 prompt names no login screen. This group is API-only.
+- **Employee references are opaque** until `HR-EMP` (Phase 8); nothing validates them and nothing stores
+  employee data.
+- **Account administration has no organization scope**: account rows carry no branch, department, or team,
+  so a team-scoped actor resolves to "no records" rather than a subset. Needs `CORE-ORG` and `SD-01`.
+
 ## Verification — actual results, 2026-09-21 (full suite re-run)
 
 | Check | Command | Result |
@@ -174,16 +241,17 @@ compiled into the application.
 | Lint | `npm run lint` | ✅ 0 errors, 0 warnings |
 | Format | `npm run format:check` | ✅ |
 | Typecheck (strict) | `npm run typecheck` | ✅ root + 9 workspaces |
-| Unit tests | `npm run test:unit` | ✅ **284 passed**, 17 files |
-| **Integration gate** | `npm run test:integration:gate` | ✅ **59 passed, 0 failed, 0 skipped**, 4 files, exit 0 — real MongoDB and Redis, no mocks |
+| Unit tests | `npm run test:unit` | ✅ **324 passed**, 18 files |
+| **Integration gate** | `npm run test:integration:gate` | ✅ **132 passed, 0 failed, 0 skipped**, 6 files, exit 0 — real MongoDB and Redis, no mocks |
 | i18n keys | `npm run check:i18n` | ✅ |
-| Secret scan | `npm run check:secrets` | ✅ 197 files, no credential patterns |
+| Secret scan | `npm run check:secrets` | ✅ 212 files, no credential patterns |
 | Documentation links | link check over all Markdown | ✅ 44 files, 294 relative links, 0 broken |
 | Production build | `npm run build` | ✅ web, api, worker |
-| Bundle budget | `npm run check:bundle` | ✅ 585.2 kB / 185.8 kB gzip (budget 650 / 210) |
+| Bundle budget | `npm run check:bundle` | ✅ 589.9 kB / 187.1 kB gzip (budget 650 / 210) |
 | E2E | `npm run test:e2e` | ✅ **14 passed** — 7 desktop-chromium + 7 mobile-chromium; every test starts in Arabic RTL, 2 per viewport also assert English LTR |
 | Dependency audit | `npm run check:deps` | ✅ 0 vulnerabilities |
 | Arabic PDF integrity | `sha256sum` working tree + committed blob | ✅ `89fade53…99f7b` — unchanged |
+| Built API smoke | `node apps/api/dist/main.js` | ✅ starts, connects to Redis and MongoDB with transactions; 33 OpenAPI paths and 0 broken `$ref`s; `POST /auth/login` for an unknown account → 401; `GET /me` without a token → 401 |
 | Hosted CI | `.github/workflows/ci.yml` | ⚠ defined, **never run** — no remote exists |
 
 What the tests prove, beyond compiling: all 39 token pairs in use meet their WCAG thresholds and the ratios recorded in ADR-0005 are reproduced; lint rules fire on
@@ -200,11 +268,22 @@ read, and NDJSON export alike; keyset pages return each record exactly once; ope
 in path parameters are rejected; self-grant, over-granting, and scope widening are refused and each refusal
 is recorded; a grant written over HTTP changes the very next request's outcome, in both directions.
 
+Added by the identity group, against **real MongoDB and Redis**: a wrong password and an unknown identifier
+produce identical answers and comparable timing; an activation token works once and expires; a rotated
+refresh token replays into a family-wide revocation; idle and absolute timeouts end a session while its
+access token is still unexpired; suspension, offboarding, and a password change end a live session on the
+next request; a TOTP code cannot be replayed and a recovery code works once; an MFA secret is stored as
+ciphertext and appears in no audit record or log line; a privileged account cannot sign in without enrolling
+a second factor, and a session created before the account became privileged loses its authority; every
+throttle key carries a TTL and a successful sign-in clears the counter; 15 escalation attacks fail and leave
+nothing changed.
+
 ## Requirement status (Phase 1, 113 IDs)
 
 **`implemented` (59):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
-THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)**
+THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
+**SEC-002, 010, 011–022 (14)**
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -217,25 +296,32 @@ duplicate enqueue creates one job. † Local `npm run verify`; hosted CI never r
 `INTEGRATION-006` moved from `in-progress` to integration-verified behaviour (idempotent enqueue proven
 against real Redis); it stays `in-progress` overall because the adapter registry it belongs to is not built.
 
-**`in-progress` (10):** PLAT-007 (request, logs, jobs, **and audit** done; provider correlation waits for
-adapters) · PLAT-017 (interface and policy; no S3 adapter) · SEC-002 (origin guard; double-submit token
-with session cookies) · SEC-003 (global IP limiter; per-account limits with auth) · SEC-005 (validation +
-hook; no upload endpoint or scanner) · SEC-006 (env-only secrets; Secrets Manager not integrated) · SEC-008
-(TTL policy only) · SEC-033 (interface + dev encryptor; no KMS adapter) · INTEGRATION-006 (job IDs, retries,
-DLQ; integration test skipped) · THEME-009 (series order + test; no chart component yet)
+**`in-progress` (9):** PLAT-007 (request, logs, jobs, **and audit** done; provider correlation waits for
+adapters) · PLAT-017 (interface and policy; no S3 adapter) · SEC-003 (authentication endpoints now
+throttled per address and per identifier; export and provider-triggering endpoints not built) · SEC-005
+(validation + hook; no upload endpoint or scanner) · SEC-006 (env-only secrets; Secrets Manager not
+integrated) · SEC-008 (TTL policy only) · SEC-033 (interface + **configured** dev encryptor; **no KMS
+adapter**, so staging and production cannot store an MFA secret) · INTEGRATION-006 (job IDs, retries, DLQ;
+proven against real Redis, adapter registry not built) · THEME-009 (series order + test; no chart component)
 
-**Not started (44):** SEC-010–022 (accounts, passwords, sessions, devices, MFA, activation, offboarding) ·
-APPROVAL-001–007 · INTEGRATION-001–005 · CORE-NOTIFY-001–005 · CORE-TASK-001–005 · CORE-DOC-001–006 ·
-CORE-SEARCH-001 · CORE-IMPORT-001–002
+`SEC-002` moved to `implemented`: cookie authentication now exists, and its protection is the
+`SameSite=Strict` `HttpOnly` path-scoped cookie plus the origin guard. A double-submit token would add
+nothing while both hold; it becomes necessary only if a cookie ever needs `SameSite=Lax`.
+
+**Not started (31):** APPROVAL-001–007 · INTEGRATION-001–005 · CORE-NOTIFY-001–005 · CORE-TASK-001–005 ·
+CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 ## Next exact task
 
-1. **Stopped for review of the audit and authorization group.** Do not start Phase 2, and do not begin the
-   next group until instructed.
-2. The natural next bounded group is `SEC-010`–`SEC-022`: security accounts, password hashing, sessions,
-   devices, MFA, activation and suspension, offboarding. That group is what replaces the test-only actor
-   resolver with real authentication and makes `AUDIT-005`'s authentication half live.
+1. **Stopped for review of the identity and authentication group.** Do not start Phase 2, and do not begin
+   the next group until instructed.
+2. The remaining Phase 1 scope, in dependency order: `APPROVAL-001`–`007` (the approval engine, which
+   needs the maker-checker rules `SEC-031` already has the escalation half of), then `CORE-NOTIFY` (which
+   also unblocks invitation and reset **delivery** for `SEC-012` and `SEC-016`), then `CORE-TASK`,
+   `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`, and `INTEGRATION-001`–`005`.
 3. Start the services before any integration work: `npm run dev:services:up`.
+4. To sign in locally, create the first account once:
+   `BOOTSTRAP_ADMIN_EMAIL=… npm run bootstrap:admin`. It prints an activation token and sets no password.
 
 ## Approved decisions
 
@@ -259,7 +345,16 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 - **Authorization resolved per request** (ADR-0022): no permission cache, so `SEC-032` holds by
   construction. Adding a cache later needs a bounded TTL, explicit invalidation, a test, and its own ADR.
 - Domain errors carry a **published stable code**; `ERROR_STATUS` in contracts is the single code → status
-  map. A code outside the published list never chooses its own status.
+  map. A code outside the published list never chooses its own status. A throttled answer also carries
+  `Retry-After`.
+- **Passwords, tokens, and the second factor** (ADR-0023): Argon2id at the OWASP minimum through
+  `@node-rs/argon2` with transparent rehash; a length-first password policy and no composition rules; a
+  short-lived JWT access token that is **never trusted alone**; opaque rotated refresh tokens in a
+  `SameSite=Strict` `HttpOnly` cookie with family revocation on replay; TOTP with a stored accepted step
+  and independently hashed single-use recovery codes; TTL-bounded throttling that can never become a
+  permanent lockout; no default administrator.
+- Administrative account routes are **never** applied to the caller's own account: the self-service route
+  asks for the password first.
 - Web bundle budget: ≤ 650 kB minified / ≤ 210 kB gzip per chunk; route splitting before feature-heavy phases.
 - Git: local commits authorized. **No remote, no push, no deploy.**
 
@@ -305,14 +400,32 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
   records. That is the privileged path ADR-0021 documents as the residual risk, not a loophole.
 - A new route that legitimately mutates nothing must call `markAuditExempt(res)`, or `assertMutationAudited`
   turns its success into a `500`. Domain mutations are never exempt.
+- `argon2` (the npm package named in MM §4.3) **cannot be installed here**: its install script runs
+  `cross-env`, whose Windows shim breaks on the `&` in the path. `@node-rs/argon2` is used instead, same
+  algorithm, no install script (ADR-0023 §1).
+- `@node-rs/argon2` exports `Algorithm` as an ambient const enum, which `verbatimModuleSyntax` cannot
+  import as a value. The numeric variant is passed and a unit test asserts the `$argon2id$` prefix.
+- A Zod schema with `.transform` **cannot** become a JSON Schema, and the OpenAPI document is generated
+  from the contracts. Validate in the schema; normalize in the service.
+- An account holding any administrative permission needs a second factor (`SEC-017`), so **every test
+  fixture for an administrator must complete the enrol-or-verify flow** — a plain password sign-in returns
+  `mfaRequired`, not a session. Advance the test clock by 31 seconds per code so a step is never reused.
+- The integration suites send `X-Forwarded-For` with `TRUST_PROXY_HOPS: 1` so each logical client gets its
+  own address; otherwise one shared loopback address spends the whole per-IP budget for the file.
+- Sessions and tokens live in MongoDB with a `purgeAfter` TTL index; Redis holds only throttle counters.
+  Deleting Redis data can never lock an account out.
 
 ## Database state
 
 - Schema version: 1 (audit records carry `schemaVersion`) · Migrations: none · Seed data: **none**
-- Collections: `auditEvents` (append-only), `roles`, `accountGrants`. Indexes are created explicitly by
+- Collections: `auditEvents` (append-only), `roles`, `accountGrants`, `securityAccounts`, `authSessions`,
+  `authRefreshTokens`, `accountTokens` — 7 collections, 24 named indexes, created explicitly by
   `apps/api/src/platform/indexes.ts` at startup; the full list is in `architecture/security-model.md` §9.
-- No role, permission assignment, or scope value is seeded: that content is `SD-02`/`SD-01` stakeholder
-  input. A fresh database therefore authorizes nobody, which is the intended default.
+- Session, refresh-token, and account-token rows carry a `purgeAfter` TTL index. The audit trail is
+  separate and permanent.
+- No role, permission assignment, scope value, or **account** is seeded: role content is `SD-02`/`SD-01`
+  stakeholder input, and there is deliberately no default administrator. A fresh database authenticates
+  nobody and authorizes nobody until `npm run bootstrap:admin` is run once.
 - Mongoose configured `strict: 'throw'`, `strictQuery: 'throw'`, `autoIndex`/`autoCreate` off.
 
 ## Integration state
@@ -341,7 +454,10 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 |---|---|
 | Hosted CI has never run (no remote) | Run `npm run verify` + E2E locally before each commit until a remote exists |
 | Secret scan is pattern-based, not a dedicated scanner | Add a dedicated scanner when CI exists |
-| No authentication exists, so every protected endpoint answers `401` in the production configuration | Intended until `SEC-013`; the guard, scope, and field layers are already enforced beneath it |
+| **`SEC-033` (KMS) is not implemented**, so staging and production cannot store an MFA secret | Development and test use a configured local key, refused outside development. The KMS adapter is the blocker for enabling MFA anywhere real (ADR-0023 §6) |
+| Invitation and password-reset **delivery** does not exist | `CORE-NOTIFY`. An administrator issues and hands over the token meanwhile; the self-service request reveals nothing |
+| The password blocklist is a short built-in list, not a breach corpus | Replace with a checked corpus when one is available (`SD-18` operational scope); it is a data change, not a redesign |
+| An account holding administrative permissions must carry an authenticator application | That is `SEC-017`. The administrative MFA reset exists as the recovery path and is itself audited and refused on the caller's own account |
 | Audit retention and archival are not implemented; the collection grows without bound | Retention policy is `SD-18`/Phase 9. The existing indexes already support time-range scans |
 | An operator with direct database access can still alter audit records | ADR-0021 §2 records this as an operational control — restricted database roles, append-only backups — not an application one |
 | The test actor resolver could be mistaken for authentication | It exists only inside integration tests; the production default resolver returns no actor, and both are commented to say so |
@@ -353,8 +469,16 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 ## Handoff summary
 
 Local commits: documentation baseline (`7a840b3`), Phase 1 scaffolding (`4c988db`), Phase 1 review decisions
-(`4365775`), development services and the integration gate (`dfc0ac5`), and the audit subsystem plus
-authorization core added on 2026-09-21.
+(`4365775`), development services and the integration gate (`dfc0ac5`), the audit subsystem plus
+authorization core (`3d6bdf1`), and identity and authentication added on 2026-09-21.
+
+`SEC-010` and `SEC-011`–`SEC-022` are implemented with passing tests: security accounts with an opaque
+employee reference and no employee data, invitation and activation, Argon2id passwords with a length-first
+policy, short-lived access tokens that are never trusted alone, rotated refresh cookies with family
+revocation on replay, TOTP with replay protection and single-use recovery codes, device and session listing
+with individual and bulk revocation, suspension and offboarding without deletion, immediate server-side
+invalidation, personal-account uniqueness, and a 15-attack privilege-escalation suite. There is no default
+administrator: `npm run bootstrap:admin` runs once and sets no password.
 
 `AUDIT-001`–`006` and `SEC-023`–`032` are implemented with passing tests: an append-only audit store whose
 immutability is enforced in three application layers and whose limits are documented rather than overstated,
@@ -363,13 +487,15 @@ applies the data scope inside the query, strips restricted fields from every ser
 `404` rather than `403` for an out-of-scope record, refuses privilege escalation and records the attempt,
 and takes effect on the next request with no cache to invalidate.
 
-The full verification suite is green: format, lint, strict typecheck (root + 9 workspaces), **284 unit
-tests**, **integration gate 59 passed / 0 failed / 0 skipped against real MongoDB and Redis**, i18n keys,
-secret scan (197 files), 294 documentation links, production build, bundle budget, **14 E2E tests** across
-desktop and mobile in Arabic RTL and English LTR, and 0 dependency vulnerabilities. The Arabic PDF is
+The full verification suite is green: format, lint, strict typecheck (root + 9 workspaces), **324 unit
+tests**, **integration gate 132 passed / 0 failed / 0 skipped against real MongoDB and Redis**, i18n keys,
+secret scan (212 files), documentation links, production build, bundle budget, **14 E2E tests** across
+desktop and mobile in Arabic RTL and English LTR, and 0 dependency vulnerabilities. The built API starts and
+answers `401` on both `/auth/login` for an unknown account and `/me` without a token. The Arabic PDF is
 byte-identical (`89fade53…99f7b`). `.env` and `docker/dev.env` remain ignored and untracked.
 
-**PHASE 1 IS NOT APPROVED.** 44 of 113 Phase 1 requirements are not started — chiefly account security and
-identity, `SEC-010`–`SEC-022` — 10 are in progress, no requirement is `verified`, and the gate requires a
-stakeholder demonstration plus written approval. Stopped for review of this group. Phase 2 not started.
-No remote, nothing pushed, nothing deployed.
+**PHASE 1 IS NOT APPROVED.** 31 of 113 Phase 1 requirements are not started — `APPROVAL`, `INTEGRATION`,
+`CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT` — 9 are in progress, no requirement is
+`verified`, and the gate requires a stakeholder demonstration plus written approval. `SEC-033` (KMS) remains
+unimplemented, which blocks MFA in staging and production. Stopped for review of this group. Phase 2 not
+started. No remote, nothing pushed, nothing deployed.

@@ -1,12 +1,28 @@
 import { ConfigError, assertUtcRuntime, loadApiConfig, loadDotEnvIfPresent } from '@alola/config';
-import { createLogger } from '@alola/security';
+import {
+  DevKeyEncryptor,
+  PasswordHasher,
+  TokenIssuer,
+  UnconfiguredEncryptor,
+  createLogger,
+  type Encryptor,
+} from '@alola/security';
 import { fileURLToPath } from 'node:url';
 import { RateLimiterMemory, RateLimiterRedis } from 'rate-limiter-flexible';
 import { createApp, type ApiModule } from './app';
 import { AUDIT_ACTIONS } from '@alola/contracts';
 import { noteAuditWrite } from './http/audit-context';
 import { AuditService, auditRouter } from './modules/audit';
+import {
+  AuthThrottle,
+  IdentityService,
+  accountAdminRouter,
+  authRouter,
+  cookiePolicyFor,
+  meRouter,
+} from './modules/identity';
 import { SecurityService, securityRouter } from './modules/security';
+import type { ActorResolver } from './http/actor';
 import { ensureIndexes } from './platform/indexes';
 import { AppError } from './errors';
 import { MongoConnector, configureMongoose } from './platform/mongo';
@@ -80,6 +96,29 @@ function requireConnection() {
 
 let auditService: AuditService | undefined;
 let securityService: SecurityService | undefined;
+let identityService: IdentityService | undefined;
+
+/**
+ * Encryption for MFA secrets (`SEC-017`).
+ *
+ * `SEC-033` (a KMS adapter) is **not implemented**. When `KMS_KEY_ID` is set the unconfigured encryptor
+ * fails loudly rather than pretending a managed key is in use; development and test use a configured
+ * local key so that an enrolment survives a restart (ADR-0023).
+ */
+function buildEncryptor(): Encryptor {
+  if (!config.KMS_KEY_ID && config.DEV_ENCRYPTION_KEY) {
+    return new DevKeyEncryptor(config.APP_ENV, config.DEV_ENCRYPTION_KEY);
+  }
+  return new UnconfiguredEncryptor();
+}
+
+const passwordHasher = new PasswordHasher({
+  memoryCost: config.ARGON2_MEMORY_COST,
+  timeCost: config.ARGON2_TIME_COST,
+  parallelism: config.ARGON2_PARALLELISM,
+});
+const authThrottle = new AuthThrottle(redis.client ?? undefined);
+const cookiePolicy = cookiePolicyFor(config.APP_ENV);
 
 function getAuditService(): AuditService {
   const connection = requireConnection();
@@ -132,12 +171,77 @@ const guard = {
   },
 };
 
+/**
+ * Authentication needs a signing key. Without one the routes answer `SERVICE_NOT_CONFIGURED` exactly as
+ * they do without a database, instead of falling back to a built-in key (ADR-0012, ADR-0023).
+ */
+function getIdentityService(): IdentityService {
+  const connection = requireConnection();
+  if (!config.AUTH_TOKEN_SIGNING_SECRET) {
+    throw new AppError('SERVICE_NOT_CONFIGURED', 503);
+  }
+  identityService ??= new IdentityService({
+    connection,
+    logger,
+    audit: getAuditService(),
+    hasher: passwordHasher,
+    tokens: new TokenIssuer({
+      secret: config.AUTH_TOKEN_SIGNING_SECRET,
+      issuer: 'alola-erp-api',
+      audience: 'alola-erp',
+      accessTokenTtlSeconds: config.AUTH_ACCESS_TOKEN_TTL_SECONDS,
+      mfaChallengeTtlSeconds: config.AUTH_MFA_CHALLENGE_TTL_SECONDS,
+    }),
+    encryptor: buildEncryptor(),
+    throttle: authThrottle,
+    // Grants come from the SEC authorization module; identity never reads that storage itself.
+    resolveGrants: (accountId) => getSecurityService().resolveActor(accountId),
+    ttl: {
+      sessionIdleSeconds: config.AUTH_SESSION_IDLE_TIMEOUT_SECONDS,
+      sessionAbsoluteSeconds: config.AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS,
+      activationSeconds: config.AUTH_ACTIVATION_TOKEN_TTL_SECONDS,
+      passwordResetSeconds: config.AUTH_PASSWORD_RESET_TTL_SECONDS,
+    },
+    totpIssuer: config.AUTH_TOTP_ISSUER,
+  });
+  return identityService;
+}
+
+/**
+ * Turn a bearer access token into an actor (`SEC-013`, `SEC-020`).
+ *
+ * The token's signature is not enough: `resolveSession` re-reads the session and the account on every
+ * request, so a revoked session or a changed password stops working immediately. Anything wrong with the
+ * token yields **no actor**, and the guard then answers 401 — never a partially trusted request.
+ */
+const actorResolver: ActorResolver = async (req) => {
+  const header = req.get('authorization');
+  if (!header || !/^Bearer /.test(header)) return undefined;
+  const token = header.slice(7).trim();
+  if (!token) return undefined;
+  try {
+    return (await getIdentityService().resolveSession(token))?.actor;
+  } catch {
+    return undefined;
+  }
+};
+
+const identityRouterOptions = {
+  getService: getIdentityService,
+  cookiePolicy,
+  guard,
+};
+
 const modules: ApiModule[] = [
   { basePath: '/audit', router: auditRouter({ getService: getAuditService, guard }) },
+  { basePath: '/auth', router: authRouter(identityRouterOptions) },
+  { basePath: '/me', router: meRouter(identityRouterOptions) },
   { basePath: '/security', router: securityRouter({ getService: getSecurityService, guard }) },
+  // Mounted at the same base path: account administration lives beside role and grant administration.
+  { basePath: '/security', router: accountAdminRouter(identityRouterOptions) },
 ];
 
-const app = createApp({ config, logger, mongo, redis, rateLimiter, modules });
+const app = createApp({ config, logger, mongo, redis, rateLimiter, modules, actorResolver });
 
 const server = app.listen(config.PORT, () => {
   logger.info({ port: config.PORT, env: config.APP_ENV }, 'API listening');

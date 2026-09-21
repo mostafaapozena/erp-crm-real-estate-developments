@@ -20,6 +20,20 @@ export const PERMISSIONS = [
   /** Reveals request context (IP, user agent) on an audit record. */
   'audit.viewContext',
 
+  // Security accounts (SEC-011 … SEC-022). Administration only: a person needs no permission to
+  // manage their own sessions or their own second factor.
+  'security.account.view',
+  'security.account.create',
+  'security.account.suspend',
+  'security.account.reactivate',
+  'security.account.offboard',
+  /** Clear another account's second factor — a recovery path, and an obvious escalation route. */
+  'security.account.resetMfa',
+  /** Issue a password-reset token for another account, to be delivered out of band. */
+  'security.account.resetPassword',
+  'security.session.viewAny',
+  'security.session.revokeAny',
+
   // Security administration
   'security.role.view',
   'security.role.create',
@@ -38,11 +52,36 @@ export type Permission = z.infer<typeof PermissionSchema>;
  * carrying one is flagged so that `SD-02` role design can see them at a glance.
  */
 export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
+  'security.account.create',
+  'security.account.suspend',
+  'security.account.reactivate',
+  'security.account.offboard',
+  'security.account.resetMfa',
+  'security.account.resetPassword',
+  'security.session.revokeAny',
   'security.role.create',
   'security.role.edit',
   'security.grant.assign',
   'security.grant.assignAny',
 ];
+
+/**
+ * Permissions whose holder must complete a second factor to sign in (`SEC-017`).
+ *
+ * Master Mapping §6 names the privileged categories: system administration, Meta administration,
+ * payroll, treasury, banking, and finance approval. Only the first exists today, so this set is the
+ * administrative permissions plus the audit export — reading the whole audit trail is privileged even
+ * though it changes nothing. Later phases add their own; the concrete business role list is `SD-02`.
+ */
+export const MFA_REQUIRED_PERMISSIONS: readonly Permission[] = [
+  ...ADMINISTRATIVE_PERMISSIONS,
+  'audit.export',
+];
+
+/** True when any held permission makes a second factor mandatory. */
+export function requiresMfa(permissions: readonly Permission[]): boolean {
+  return permissions.some((permission) => MFA_REQUIRED_PERMISSIONS.includes(permission));
+}
 
 export function isAdministrativePermission(permission: Permission): boolean {
   return ADMINISTRATIVE_PERMISSIONS.includes(permission);

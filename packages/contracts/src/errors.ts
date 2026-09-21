@@ -12,6 +12,10 @@ export const ERROR_CODES = [
   'MALFORMED_REQUEST',
   'PAYLOAD_TOO_LARGE',
   'UNAUTHENTICATED',
+  /** Password accepted, second factor still required or not yet enrolled (SEC-017). */
+  'MFA_REQUIRED',
+  /** The action needs the credential re-entered, even though the session is valid. */
+  'REAUTHENTICATION_REQUIRED',
   'FORBIDDEN',
   'CSRF_REJECTED',
   'NOT_FOUND',
@@ -34,6 +38,8 @@ export const ERROR_STATUS: Readonly<Record<ErrorCode, number>> = {
   MALFORMED_REQUEST: 400,
   PAYLOAD_TOO_LARGE: 413,
   UNAUTHENTICATED: 401,
+  MFA_REQUIRED: 401,
+  REAUTHENTICATION_REQUIRED: 403,
   FORBIDDEN: 403,
   CSRF_REJECTED: 403,
   NOT_FOUND: 404,

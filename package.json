@@ -32,7 +32,8 @@
     "check:deps": "npm audit --audit-level=high",
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "build": "npm run build --workspaces --if-present",
-    "verify": "npm run lint && npm run format:check && npm run typecheck && npm run check:i18n && npm run check:secrets && npm run test:unit && npm run build && npm run check:bundle"
+    "verify": "npm run lint && npm run format:check && npm run typecheck && npm run check:i18n && npm run check:secrets && npm run test:unit && npm run build && npm run check:bundle",
+    "bootstrap:admin": "node scripts/bin.mjs tsx scripts/bootstrap-admin.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

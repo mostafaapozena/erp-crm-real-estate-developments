@@ -78,6 +78,46 @@ const sharedShape = {
   REDIS_URL: redisUrl,
 };
 
+/**
+ * Authentication settings (`SEC-013` … `SEC-017`, ADR-0023). Every one has a defensible default except
+ * the signing secret, which has none: a default signing key is a shared key.
+ */
+const authShape = {
+  /** HS256 key for access tokens and MFA challenges. At least 32 bytes. Never a literal in code. */
+  AUTH_TOKEN_SIGNING_SECRET: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(32, { message: 'must be at least 32 characters of random material' }).optional(),
+  ),
+  /** Short by design: revocation is immediate, but a stolen token should also simply expire. */
+  AUTH_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
+  AUTH_SESSION_IDLE_TIMEOUT_SECONDS: z.coerce.number().int().min(300).max(86_400).default(1800),
+  AUTH_SESSION_ABSOLUTE_TIMEOUT_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(900)
+    .max(2_592_000)
+    .default(43_200),
+  AUTH_ACTIVATION_TOKEN_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(600)
+    .max(1_209_600)
+    .default(259_200),
+  AUTH_PASSWORD_RESET_TTL_SECONDS: z.coerce.number().int().min(300).max(86_400).default(1800),
+  AUTH_MFA_CHALLENGE_TTL_SECONDS: z.coerce.number().int().min(60).max(1800).default(300),
+  /** Shown in the authenticator app next to the account name. */
+  AUTH_TOTP_ISSUER: z.string().trim().min(1).max(64).default('ALOLA ERP'),
+  /** Argon2id cost. Raise as hardware improves; a successful login rehashes transparently. */
+  ARGON2_MEMORY_COST: z.coerce.number().int().min(19_456).max(1_048_576).default(19_456),
+  ARGON2_TIME_COST: z.coerce.number().int().min(2).max(10).default(2),
+  ARGON2_PARALLELISM: z.coerce.number().int().min(1).max(16).default(1),
+  /**
+   * 32-byte base64 key used to encrypt MFA secrets in **development and test only**, so an enrolment
+   * survives a restart. Staging and production refuse it and require `KMS_KEY_ID` (`SEC-033`).
+   */
+  DEV_ENCRYPTION_KEY: optionalString,
+};
+
 export const apiEnvSchema = z.object({
   ...sharedShape,
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
@@ -89,6 +129,7 @@ export const apiEnvSchema = z.object({
   S3_BUCKET: optionalString,
   S3_REGION: optionalString,
   KMS_KEY_ID: optionalString,
+  ...authShape,
 });
 
 export const workerEnvSchema = z.object({
@@ -101,7 +142,12 @@ export type WorkerEnv = z.infer<typeof workerEnvSchema>;
 
 /** Variables that must be present in production (staging mirrors production). */
 const REQUIRED_OUTSIDE_DEVELOPMENT = ['MONGODB_URI', 'MONGODB_DB_NAME', 'REDIS_URL'] as const;
-const REQUIRED_FOR_API_OUTSIDE_DEVELOPMENT = ['S3_BUCKET', 'S3_REGION', 'KMS_KEY_ID'] as const;
+const REQUIRED_FOR_API_OUTSIDE_DEVELOPMENT = [
+  'S3_BUCKET',
+  'S3_REGION',
+  'KMS_KEY_ID',
+  'AUTH_TOKEN_SIGNING_SECRET',
+] as const;
 
 /** Every variable any server process reads — used to check `.env.example` completeness. */
 export const ENV_VARIABLES: readonly string[] = [
@@ -148,6 +194,17 @@ function crossFieldProblems(
   }
   if (config.MONGODB_URI && !config.MONGODB_DB_NAME) {
     problems.push({ variable: 'MONGODB_DB_NAME', problem: 'is required when MONGODB_URI is set' });
+  }
+  // The development encryption key is refused outside development, so a `.env` copied to a server
+  // cannot quietly become the key protecting real second factors (ADR-0023).
+  if (
+    (config.APP_ENV === 'production' || config.APP_ENV === 'staging') &&
+    env['DEV_ENCRYPTION_KEY']?.trim()
+  ) {
+    problems.push({
+      variable: 'DEV_ENCRYPTION_KEY',
+      problem: `must not be set when APP_ENV=${config.APP_ENV}; configure KMS_KEY_ID instead`,
+    });
   }
   // ADR-0018 production guard: a non-production process must never point at a production database.
   if (

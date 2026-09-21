@@ -85,3 +85,34 @@ export function requirePermission(
 }
 
 export const AUTHORIZATION_DENIED_ACTION = AUDIT_ACTIONS.authorizationDenied;
+
+/**
+ * Require an authenticated actor and nothing more (`SEC-013`).
+ *
+ * Self-service routes — your own sessions, your own password, your own second factor — need identity, not
+ * a permission. Granting a permission for "manage my own account" would be the wrong shape: it could be
+ * withheld, and then a person could not sign out.
+ */
+export function requireAuthenticated(options: GuardOptions = {}): RequestHandler {
+  return (req, res, next) => {
+    if (currentActor(res)) {
+      next();
+      return;
+    }
+    const denial: AuthorizationDenial = {
+      // Recorded as the permission that was effectively missing: being signed in at all.
+      requiredPermission: 'authenticated' as Permission,
+      actor: undefined,
+      correlationId: correlationIdOf(res),
+      method: req.method,
+      route: req.originalUrl.split('?')[0] ?? req.originalUrl,
+      ...(req.ip ? { ip: req.ip } : {}),
+    };
+    const finish = () => next(new AppError('UNAUTHENTICATED', 401));
+    if (!options.onDenied) {
+      finish();
+      return;
+    }
+    options.onDenied(denial).then(finish, finish);
+  };
+}

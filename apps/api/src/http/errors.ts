@@ -10,6 +10,9 @@ import { AppError } from '../errors';
 import { correlationIdOf } from './correlation';
 
 function send(res: Response, error: AppError): void {
+  if (error.retryAfterSeconds !== undefined) {
+    res.setHeader('Retry-After', String(error.retryAfterSeconds));
+  }
   const body: ErrorResponse = {
     error: {
       code: error.code,
@@ -52,7 +55,14 @@ function classifyDomainError(error: unknown): AppError | undefined {
   const parsed = ErrorCodeSchema.safeParse(code);
   if (!parsed.success) return undefined;
   const issues = (error as { issues?: FieldIssue[] }).issues;
-  return new AppError(parsed.data, ERROR_STATUS[parsed.data], issues);
+  // A domain error may also state how long to wait; a throttled one always does.
+  const retryAfter = (error as { retryAfterSeconds?: unknown }).retryAfterSeconds;
+  return new AppError(
+    parsed.data,
+    ERROR_STATUS[parsed.data],
+    issues,
+    typeof retryAfter === 'number' ? retryAfter : undefined,
+  );
 }
 
 /**

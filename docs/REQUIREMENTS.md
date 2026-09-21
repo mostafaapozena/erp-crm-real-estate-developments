@@ -1,6 +1,6 @@
 # Requirement Registry
 
-Version: 1.3 · Last updated: 2026-09-21 · Scheme: [ADR-0014](decisions/adr-0014-requirement-id-scheme.md),
+Version: 1.4 · Last updated: 2026-09-21 · Scheme: [ADR-0014](decisions/adr-0014-requirement-id-scheme.md),
 namespaces [ADR-0016](decisions/adr-0016-phase-1-requirement-namespaces.md)
 
 ## How to use this registry
@@ -25,7 +25,7 @@ enumerated during that phase's discovery.
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
-| Status `implemented` (code and passing tests) | **59** — see per-row status in `docs/MEMORY.md` |
+| Status `implemented` (code and passing tests) | **73** — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
@@ -216,6 +216,42 @@ behaviour regressed, not the file that contains the feature.
 activation, offboarding) and `SEC-033` (KMS adapter). The production actor resolver returns no actor, so
 protected endpoints answer `401` until `SEC-013` lands. The integration suites inject a test resolver;
 it is a fixture for exercising authorization and is **not** an authentication implementation.
+
+## Implementation evidence — identity and authentication (2026-09-21)
+
+Status `implemented`: code exists and its tests pass. **None of these is `verified`**; `verified` requires
+the Phase 1 exit-gate review. Evidence is the test that would fail if the behaviour regressed.
+
+`SEC-010` is listed here rather than with the identity rows because the registry defines it as the
+privilege-escalation **test suite** — a cross-cutting requirement, not an identity feature.
+
+| ID | Status | Evidence |
+|---|---|---|
+| SEC-010 | implemented | `apps/api/src/modules/identity/privilege-escalation.int-test.ts` — 15 attacks on the identity surface: every administrative route refused to a plain account; an account that may create accounts still cannot grant authority; self-targeted MFA and password resets refused and recorded; a session that predates the account becoming privileged loses its authority; a challenge token refused as an access token and as another account's enrolment; a reset token bound to one account; a replayed activation refused; suspended and offboarded accounts unable to act; an access token refused as a refresh cookie; claimed identity headers ignored. Authorization-core escalation is `SEC-031` in `security/authorization.int-test.ts` |
+| SEC-011 | implemented | `identity.int-test.ts` — an invited account with no credential in the response; employee business data refused by the strict schema; state, version, and credential generation refused from a body; the employee reference kept through offboarding |
+| SEC-012 | implemented | `identity.int-test.ts` — activation sets the first password and the token is single-use and expiring; a policy-violating password leaves the account invited; an unactivated account cannot sign in and is indistinguishable from an unknown one |
+| SEC-013 | implemented | `identity.int-test.ts` + `packages/security/src/credentials/credentials.test.ts` — Argon2id with the configured parameters, transparent rehash, a wrong password answered exactly as an unknown identifier with comparable work, logout ending the session immediately |
+| SEC-014 | implemented | `identity.int-test.ts` — access token in the body and refresh token only as an `HttpOnly` `SameSite=Strict` path-scoped cookie; rotation on refresh; idle and absolute timeouts end the session whatever the token says; `Secure` outside development |
+| SEC-015 | implemented | `identity.int-test.ts` — a replayed refresh token revokes the whole family, including the legitimate holder's newest session, and records `security.session.reuseDetected` |
+| SEC-016 | implemented | `identity.int-test.ts` — change with re-authentication (wrong current password answers `REAUTHENTICATION_REQUIRED`), identical answers for known and unknown identifiers, an administrative reset token that is single-use and expiring, and every session revoked on completion. **Delivery** of the self-service token is `CORE-NOTIFY` and is not part of this group |
+| SEC-017 | implemented | `identity.int-test.ts` — enrolment inactive until confirmed; a replayed TOTP code refused; a recovery code usable once; the secret stored as ciphertext and absent from audit and logs; a privileged account forced to enrol before signing in; disabling requires the password; the administrative reset needs its own permission. Mechanism only — the concrete privileged **role list** is `SD-02` |
+| SEC-018 | implemented | `identity.int-test.ts` — own sessions listed with the current one marked and no token or raw user agent; single and bulk revocation; another account's session reported as absent (`SEC-030`); administrative listing and revocation behind their own permissions |
+| SEC-019 | implemented | `identity.int-test.ts` — suspension ends sessions at once and login fails generically; the row survives with its reason (ADR-0009); reactivation works; an impossible transition is a conflict |
+| SEC-020 | implemented | `identity.int-test.ts` — suspension invalidates a live access token mid-session; a password change ends every session including the one that made it; a permission change applies to the very next request |
+| SEC-021 | implemented | `identity.int-test.ts` — one `security.account.offboarded` event terminates the account, ends every session, and invalidates outstanding activation and reset tokens; the employee reference is retained and nothing is deleted; the handover acknowledgement is required; a terminated account cannot be revived |
+| SEC-022 | implemented | `identity.int-test.ts` — case- and whitespace-insensitive identifier uniqueness; one live account per employee with a replacement allowed after termination; the personal-account attestation required and audited |
+
+**Related registry rows this group completes or advances:**
+
+| ID | Change | Evidence |
+|---|---|---|
+| SEC-002 | `in-progress` → **implemented**. Cookie authentication now exists, and so does its protection: the only cookie is `SameSite=Strict`, `HttpOnly`, and scoped to `/api/v1/auth`, so a browser never sends it cross-site, and the origin guard rejects a cookie-bearing state change from an unlisted origin. A double-submit token would add nothing while both hold; if a cookie ever needs `SameSite=Lax`, one becomes necessary and this row reopens | `apps/api/src/app.test.ts` (origin guard) and `identity.int-test.ts` (cookie attributes, `Secure` outside development) |
+| SEC-003 | stays `in-progress`. Now covers authentication per address and per identifier with TTL-bounded counters and `Retry-After`; export and provider-triggering endpoints do not exist yet | `identity.int-test.ts` — lockout, recovery, TTL, and second-factor throttling |
+| AUDIT-005 | its **authentication** half is now live: login success and failure, logout, session creation, rotation and revocation, password change and reset, lockout, and every MFA event are recorded | `identity.int-test.ts` — lifecycle coverage and redaction |
+
+**Not covered:** `SEC-033` (KMS) is **not implemented**. Development and test encrypt MFA secrets with a
+configured local key; staging and production refuse that key and cannot store an MFA secret until the KMS
+adapter exists ([ADR-0023](decisions/adr-0023-password-hashing-and-session-tokens.md) §6).
 
 ## APPROVAL — Approval infrastructure (Master Mapping module `CORE-APPROVAL`)
 

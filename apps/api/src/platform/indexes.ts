@@ -1,6 +1,12 @@
 import type { Logger } from '@alola/security';
 import type { Connection } from 'mongoose';
 import { auditModel } from '../modules/audit/model';
+import {
+  accountModel,
+  accountTokenModel,
+  refreshTokenModel,
+  sessionModel,
+} from '../modules/identity/model';
 import { accountGrantModel, roleModel } from '../modules/security/model';
 
 /**
@@ -10,7 +16,15 @@ import { accountGrantModel, roleModel } from '../modules/security/model';
  * therefore created explicitly at startup and by integration tests. `createIndexes` is idempotent.
  */
 export async function ensureIndexes(connection: Connection, logger: Logger): Promise<string[]> {
-  const models = [auditModel(connection), roleModel(connection), accountGrantModel(connection)];
+  const models = [
+    auditModel(connection),
+    roleModel(connection),
+    accountGrantModel(connection),
+    accountModel(connection),
+    sessionModel(connection),
+    refreshTokenModel(connection),
+    accountTokenModel(connection),
+  ];
   const created: string[] = [];
   for (const model of models) {
     await model.createIndexes();

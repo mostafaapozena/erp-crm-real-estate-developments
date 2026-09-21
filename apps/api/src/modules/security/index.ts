@@ -4,6 +4,8 @@
  * records to `HR-EMP`.
  */
 export { ACCOUNT_GRANTS_COLLECTION, ROLES_COLLECTION } from './model';
+export { bootstrapGrant, bootstrapRole } from './bootstrap';
+export type { BootstrapGrantInput, BootstrapRoleInput } from './bootstrap';
 export { RoleKeyConflictError, SecurityService, UnknownRoleError } from './service';
 export type { AuditRecorder, RequestContext } from './service';
 export { securityRouter } from './router';
