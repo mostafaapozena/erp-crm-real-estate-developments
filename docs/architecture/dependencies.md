@@ -116,6 +116,16 @@ Runtime: **Node.js 24** (`engines: >=24`, `.nvmrc`). Verified on Node 24.14.1 / 
 | TanStack Query, React Hook Form | Listed in MASTER-MAPPING §4.3; added with the first screen that fetches data or has a form. |
 | Sentry | Listed in MASTER-MAPPING §4.3; needs a DSN and an approved data-scrubbing configuration. |
 
+## Approvals (2026-09-21)
+
+**No dependency was added** for `APPROVAL-001`–`007`. Two capabilities that might have pulled one in were
+written instead, each a small closed rule with its own tests:
+
+| Capability | Why not a package |
+|---|---|
+| Decimal comparison of percentage thresholds | `compareMoney` already covers money with its currency. Percentages needed an ordered comparison of decimal strings — about fifteen lines, and adding a library to avoid them would have been the wrong trade (ADR-0007, ADR-0024) |
+| Workflow state machine | The transition matrix is a lookup table in `packages/contracts`, validated by `assertTransition`. A workflow library would own the vocabulary of a financial control that `SD-02` has not defined yet |
+
 ## Bundle-size budget
 
 Approved at the Phase 1 scaffolding review (2026-09-19). Enforced by `npm run check:bundle` (part of

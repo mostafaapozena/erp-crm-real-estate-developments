@@ -20,6 +20,7 @@ import {
   assertSafeFilter,
   buildChangeSummary,
   resolvePermissions,
+  type Logger,
 } from '@alola/security';
 import type { Connection } from 'mongoose';
 import {
@@ -107,11 +108,14 @@ export class SecurityService {
   private readonly roles;
   private readonly grants;
   private readonly audit;
+  /** Optional: without it, a failure to record a refusal is invisible rather than merely non-fatal. */
+  private readonly logger;
 
-  constructor(options: { connection: Connection; audit: AuditRecorder }) {
+  constructor(options: { connection: Connection; audit: AuditRecorder; logger?: Logger }) {
     this.roles = roleModel(options.connection);
     this.grants = accountGrantModel(options.connection);
     this.audit = options.audit;
+    this.logger = options.logger;
   }
 
   /**
@@ -143,8 +147,13 @@ export class SecurityService {
           reason: `privilege escalation refused: ${error.attempt}`,
           context,
         });
-      } catch {
-        // Already logged by the audit service; the refusal below is what matters here.
+      } catch (auditError) {
+        // The refusal below stands either way, but a swallowed error here is how a lost audit record
+        // goes unnoticed: a *validation* failure never reaches the audit service's own logging.
+        this.logger?.error(
+          { err: auditError, code: 'ESCALATION_REFUSAL_NOT_AUDITED', accountId: selfCheckId },
+          'A refused privilege escalation could not be recorded; the refusal itself still applies.',
+        );
       }
       throw error;
     }
@@ -324,6 +333,39 @@ export class SecurityService {
       scope: grant.scope,
       grantVersion: grant.version,
     });
+  }
+
+  /**
+   * Accounts that hold a permission through a role (SEC-024), for building an approver work queue
+   * (`APPROVAL-002`).
+   *
+   * Candidates only: an explicit denial on the grant removes the permission again, so the caller must
+   * resolve each candidate's actor before treating it as eligible. Bounded on purpose — a permission held
+   * by thousands of accounts is not a work queue, and silently truncating one would hide approvers.
+   */
+  async accountsWithPermission(
+    permission: Permission,
+    limit = 200,
+  ): Promise<{ accountIds: string[]; truncated: boolean }> {
+    const roles = await this.roles
+      .find({ permissions: permission })
+      .select({ key: 1 })
+      .lean<{ key: string }[]>()
+      .exec();
+    if (roles.length === 0) return { accountIds: [], truncated: false };
+    const grants = await this.grants
+      .find({
+        roleKeys: { $in: roles.map((role) => role.key) },
+        deniedPermissions: { $ne: permission },
+      })
+      .select({ accountId: 1 })
+      .limit(limit + 1)
+      .lean<{ accountId: string }[]>()
+      .exec();
+    return {
+      accountIds: grants.slice(0, limit).map((grant) => grant.accountId),
+      truncated: grants.length > limit,
+    };
   }
 
   /** Exposed for documentation and tests: which permissions are administrative (SEC-023). */

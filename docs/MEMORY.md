@@ -5,7 +5,8 @@ Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: local Git · Branch: `main` · **No remote, nothing pushed, nothing deployed**
 Commits: `7a840b3` documentation baseline → `4c988db` Phase 1 scaffolding → `4365775` Phase 1 review
 decisions → `dfc0ac5` development services + integration gate → `3d6bdf1` audit and authorization core →
-identity and authentication (the commits containing this file)
+`45f73ca` MEMORY repair → `2edc45e` identity and authentication → approval engine (the commit containing
+this file)
 
 ## Project identity
 
@@ -20,21 +21,22 @@ identity and authentication (the commits containing this file)
 ## Current phase
 
 - Phase: **1 — Discovery, architecture, core, security, localization, Light Mode**
-- Sub-stage: Build half — foundation, audit, authorization, and identity complete; verification green
+- Sub-stage: Build half — foundation, audit, authorization, identity, and approvals complete; green
 - `D2`: **COMPLETE 2026-09-21.** Local Docker MongoDB (single-node replica set `rs0`) + Redis
   ([ADR-0020](decisions/adr-0020-local-docker-development-services.md)). Integration tier: **59 passed,
-  0 failed, 0 skipped** (132 tests).
+  0 failed, 0 skipped** (191 tests).
 - Gate status: **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Every mandatory verification check passes, but
-  **31 of 113** Phase 1 requirements are not started (`APPROVAL-*`, `INTEGRATION-001`–`005`,
-  `CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`), 9 are in progress, and the gate
-  also requires a stakeholder demonstration and written approval (phase-gates §1).
+  **24 of 113** Phase 1 requirements are not started (`INTEGRATION-001`–`005`, `CORE-NOTIFY`,
+  `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`), 10 are in progress, and the gate also requires a
+  stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
-- Requirements `implemented` (code + passing tests): **73 of 113** · `in-progress`: 9 · not started: 31
+- Requirements `implemented` (code + passing tests): **79 of 113** · `in-progress`: 10 · not started: 24
 
 ## Phase status
 
-- [ ] Phase 1 — *in progress: scaffolding, audit, authorization, and identity/authentication done;
-      approval, integration registry, notifications, tasks, documents, search, and import not started*
+- [ ] Phase 1 — *in progress: scaffolding, audit, authorization, identity/authentication, and the
+      approval engine done; integration registry, notifications, tasks, documents, search, and import not
+      started*
 - [ ] Phases 2–9 — not started. **Do not start Phase 2.**
 
 ## Recently completed — 2026-09-19
@@ -234,6 +236,66 @@ change, and a permission change all take effect on the next request rather than 
 - **Account administration has no organization scope**: account rows carry no branch, department, or team,
   so a team-scoped actor resolves to "no records" rather than a subset. Needs `CORE-ORG` and `SD-01`.
 
+## Recently completed — 2026-09-21 (approval engine)
+
+Bounded group: `APPROVAL-001`–`APPROVAL-007`. Nothing outside it was implemented.
+
+**The engine is mechanism only.** No role, threshold, approver, operation type, or service-level target is
+seeded: that content is `SD-02`, whose own entry says Phase 1 builds "the approval engine and
+maker-checker enforcement as configuration, tested with fixture roles only". So this group was buildable
+without deciding a business rule, and it decided none.
+
+### What exists
+
+| Piece | Where | What it guarantees |
+|---|---|---|
+| Policies | `apps/api/src/modules/approval/model.ts` | `approvalPolicies`, versioned. A published version cannot be edited through the API **or** the model |
+| Conditions | `…/approval/rules.ts` | Exactly the seven axes Master Mapping §7 names; decimal-safe amounts with their currency; an ambiguous stage rule refused when the policy is written |
+| Requests | `…/approval/service.ts` | An **opaque** source reference and a sanitized summary; the policy version is recorded and never re-evaluated |
+| Decisions | `…/approval/model.ts` | `approvalDecisions`, append-only. A unique index on request + stage + approver is the concurrency control |
+| Maker-checker | `…/approval/rules.ts` | A policy field, evaluated after authorization has already succeeded, so no permission bypasses it |
+| Delegation | `…/approval/rules.ts` | Time-bounded, cycle-free, revoked rather than deleted, never widening the delegate's own authority |
+| Escalation | `…/approval/service.ts` | Adds the direct manager to the pending approvers once a stage is overdue, idempotently |
+| Atomicity | `apps/api/src/platform/transactions.ts` | Decision, stage counter, request state, and audit records commit together |
+
+Endpoints: 16 under `/api/v1/approvals`. The generated OpenAPI document covers all of them with zero
+broken references.
+
+### Decisions worth not reversing ([ADR-0024](decisions/adr-0024-approval-engine.md))
+
+- **Approving never executes the operation.** A request records a decision; the owning module observes the
+  outcome and acts. That is what keeps one engine usable by every module — and it means a module that
+  forgets to act leaves a visible approved request rather than a half-applied change.
+- **A request is bound to the policy version it was submitted under.** Publishing a newer version never
+  re-opens or retroactively satisfies an outstanding request.
+- **"All" and "quorum" require an enumerated approver set.** Over a permission-based rule the count would
+  change as grants change, so such a policy is refused at write time.
+- **Maker-checker is configuration, never a code branch** — the registry's own words.
+- **Concurrency is settled by a unique index**, not by application locking.
+- **Escalation resolves the manager through a port.** With no reporting line configured, an overdue stage
+  is reported as *unresolved* rather than escalated to an invented manager.
+
+### A defect this group surfaced in already-shipped code
+
+`PrivilegeEscalationError` built its reason from the **entire** list of permissions an actor lacked. With
+the approval permissions added, that string passed the audit contract's 500-character limit, so
+`AuditService.record` threw during validation — and `assertNoEscalation`'s blanket `catch {}` swallowed it.
+The refusal still happened, but **the evidence of it was silently lost**, which is exactly what
+`AUDIT-005` exists to prevent. Two fixes: the reason now names the first five and counts the rest, and the
+swallow logs through an optional logger instead of discarding the error. A unit test asserts the reason
+stays inside the contract's limit however many permissions are missing.
+
+### Not done, deliberately
+
+- **`APPROVAL-005` is `in-progress`.** The escalation mechanism is complete, tested, audited, and
+  idempotent, but the **direct manager cannot be resolved** until `CORE-ORG` supplies the reporting line
+  (Phase 2, `SD-01`). In the running system an overdue stage is reported as unresolved. The task half of
+  that registry row is `CORE-TASK-003`.
+- **`CORE-NOTIFY` and `CORE-TASK` are untouched.** The engine publishes a domain event after the
+  transaction commits, through a port with nothing wired to it; a publication failure is logged and
+  swallowed, because an approval must be correct with nothing listening.
+- **No approval screens.** The registry rows describe mechanism, not UI.
+
 ## Verification — actual results, 2026-09-21 (full suite re-run)
 
 | Check | Command | Result |
@@ -241,8 +303,8 @@ change, and a permission change all take effect on the next request rather than 
 | Lint | `npm run lint` | ✅ 0 errors, 0 warnings |
 | Format | `npm run format:check` | ✅ |
 | Typecheck (strict) | `npm run typecheck` | ✅ root + 9 workspaces |
-| Unit tests | `npm run test:unit` | ✅ **324 passed**, 18 files |
-| **Integration gate** | `npm run test:integration:gate` | ✅ **132 passed, 0 failed, 0 skipped**, 6 files, exit 0 — real MongoDB and Redis, no mocks |
+| Unit tests | `npm run test:unit` | ✅ **363 passed**, 19 files |
+| **Integration gate** | `npm run test:integration:gate` | ✅ **191 passed, 0 failed, 0 skipped**, 7 files, exit 0 — real MongoDB and Redis, no mocks |
 | i18n keys | `npm run check:i18n` | ✅ |
 | Secret scan | `npm run check:secrets` | ✅ 212 files, no credential patterns |
 | Documentation links | link check over all Markdown | ✅ 44 files, 294 relative links, 0 broken |
@@ -278,12 +340,25 @@ a second factor, and a session created before the account became privileged lose
 throttle key carries a TTL and a successful sign-in clears the counter; 15 escalation attacks fail and leave
 nothing changed.
 
+Added by the approval group, against **real MongoDB**: a published policy version cannot be edited through
+the API or the model; a request keeps the version it was submitted under even after a newer one is
+published; an ambiguous policy is refused and stored nowhere; stage order is enforced and a later-stage
+approver cannot act early; a quorum completes only at its threshold; one person cannot satisfy two stages;
+self-approval is refused by default, permitted only with a reason when the policy says so, and not bypassed
+by an administrative permission; two simultaneous approvals yield exactly one decision; a stale version is
+refused; a replayed submission returns the original and a conflicting replay is a conflict; a delegate acts
+only inside the window, only for the named policies, and never beyond their own authority; a cycle is
+refused; an overdue stage escalates to the manager when one is resolvable and is reported as unresolved
+when not; reassignment moves who is awaiting a decision and never alters one already recorded; a
+cross-scope request is absent rather than forbidden; and every refused action leaves the stored state
+untouched.
+
 ## Requirement status (Phase 1, 113 IDs)
 
 **`implemented` (59):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
-**SEC-002, 010, 011–022 (14)**
+**SEC-002, 010, 011–022 (14)** · **APPROVAL-001, 002, 003, 004, 006, 007 (6)**
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -308,17 +383,21 @@ proven against real Redis, adapter registry not built) · THEME-009 (series orde
 `SameSite=Strict` `HttpOnly` path-scoped cookie plus the origin guard. A double-submit token would add
 nothing while both hold; it becomes necessary only if a cookie ever needs `SameSite=Lax`.
 
-**Not started (31):** APPROVAL-001–007 · INTEGRATION-001–005 · CORE-NOTIFY-001–005 · CORE-TASK-001–005 ·
-CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
+`APPROVAL-005` is the tenth `in-progress` item: the escalation mechanism is complete and tested, but the
+**direct manager cannot be resolved** until `CORE-ORG` provides the reporting line (Phase 2, `SD-01`), so
+an overdue stage is reported as unresolved rather than escalated.
+
+**Not started (24):** INTEGRATION-001–005 · CORE-NOTIFY-001–005 · CORE-TASK-001–005 · CORE-DOC-001–006 ·
+CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 ## Next exact task
 
-1. **Stopped for review of the identity and authentication group.** Do not start Phase 2, and do not begin
-   the next group until instructed.
-2. The remaining Phase 1 scope, in dependency order: `APPROVAL-001`–`007` (the approval engine, which
-   needs the maker-checker rules `SEC-031` already has the escalation half of), then `CORE-NOTIFY` (which
-   also unblocks invitation and reset **delivery** for `SEC-012` and `SEC-016`), then `CORE-TASK`,
-   `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`, and `INTEGRATION-001`–`005`.
+1. **Stopped for review of the approval group.** Do not start Phase 2, and do not begin the next group
+   until instructed.
+2. The remaining Phase 1 scope, in dependency order: `CORE-NOTIFY-001`–`005` (which also unblocks
+   invitation and reset **delivery** for `SEC-012` and `SEC-016`, and gives the approval engine's event
+   port an implementation), then `CORE-TASK-001`–`005`, `CORE-DOC-001`–`006`, `CORE-SEARCH-001`,
+   `CORE-IMPORT-001`–`002`, and `INTEGRATION-001`–`005`.
 3. Start the services before any integration work: `npm run dev:services:up`.
 4. To sign in locally, create the first account once:
    `BOOTSTRAP_ADMIN_EMAIL=… npm run bootstrap:admin`. It prints an activation token and sets no password.
@@ -355,6 +434,12 @@ CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
   permanent lockout; no default administrator.
 - Administrative account routes are **never** applied to the caller's own account: the self-service route
   asks for the password first.
+- **Approval engine** (ADR-0024): mechanism only, with `SD-02` supplying the content. Approving records a
+  decision and never executes the operation; a request is bound to the policy version it was submitted
+  under; a published version is immutable; "all" and "quorum" require an enumerated approver set;
+  maker-checker is a policy field rather than a code branch; decisions are append-only and concurrency is
+  settled by a unique index; the decision and its audit records commit in one transaction; escalation
+  resolves the direct manager through a port and reports *unresolved* rather than inventing one.
 - Web bundle budget: ≤ 650 kB minified / ≤ 210 kB gzip per chunk; route splitting before feature-heavy phases.
 - Git: local commits authorized. **No remote, no push, no deploy.**
 
@@ -414,13 +499,28 @@ CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
   own address; otherwise one shared loopback address spends the whole per-IP budget for the file.
 - Sessions and tokens live in MongoDB with a `purgeAfter` TTL index; Redis holds only throttle counters.
   Deleting Redis data can never lock an account out.
+- **Approval and audit history carry no TTL index.** Operational rows expire; business evidence does not.
+- An audit `reason` is bounded at 500 characters by the contract, and `record` parses **before** its
+  try/catch — so an over-long reason throws at validation, not as an `AuditWriteError`. Any caller that
+  swallows audit failures must log, or the evidence disappears silently. This bit once: see the defect note
+  in the approval group above.
+- `AuditService.record` takes an optional `session`, so an audit write can join a caller's transaction.
+- `withTransaction` may run its callback more than once (MongoDB retries transient errors), so the callback
+  must not mutate anything outside the session.
+- A vitest filter matches **every** file whose path contains it: `vitest run rules.test` also picks up
+  `lint-rules.test.ts`. Check the per-file breakdown before trusting a count from a filtered run.
+- Approval requests are the first records carrying organization references, so `team`, `branch`,
+  `department`, `project`, and `legalEntity` scopes finally resolve to a real filter instead of failing
+  closed. Expect scope tests elsewhere to keep failing closed until their module stores those references.
 
 ## Database state
 
 - Schema version: 1 (audit records carry `schemaVersion`) · Migrations: none · Seed data: **none**
 - Collections: `auditEvents` (append-only), `roles`, `accountGrants`, `securityAccounts`, `authSessions`,
-  `authRefreshTokens`, `accountTokens` — 7 collections, 24 named indexes, created explicitly by
+  `authRefreshTokens`, `accountTokens`, `approvalPolicies`, `approvalRequests`, `approvalDecisions`
+  (append-only), `approvalDelegations` — 11 collections, 49 named indexes, created explicitly by
   `apps/api/src/platform/indexes.ts` at startup; the full list is in `architecture/security-model.md` §9.
+- No approval policy, request, or delegation is seeded either: the engine starts empty and `SD-02` fills it.
 - Session, refresh-token, and account-token rows carry a `purgeAfter` TTL index. The audit trail is
   separate and permanent.
 - No role, permission assignment, scope value, or **account** is seeded: role content is `SD-02`/`SD-01`
@@ -454,6 +554,9 @@ CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
 |---|---|
 | Hosted CI has never run (no remote) | Run `npm run verify` + E2E locally before each commit until a remote exists |
 | Secret scan is pattern-based, not a dedicated scanner | Add a dedicated scanner when CI exists |
+| Escalation cannot resolve a direct manager until `CORE-ORG` exists, so an overdue approval escalates to nobody | `APPROVAL-005` stays `in-progress`; the sweep reports unresolved stages rather than hiding them (Phase 2, `SD-01`) |
+| A module that forgets to act on an approved request leaves an approval that achieves nothing | Deliberate (ADR-0024 §2): the engine never executes the operation. Each consuming module needs its own test that it acts on the outcome |
+| A permission-based approver queue is bounded at 200 candidates | Logged when it truncates; a permission held by thousands of accounts is not a work queue. Narrow the stage rule instead |
 | **`SEC-033` (KMS) is not implemented**, so staging and production cannot store an MFA secret | Development and test use a configured local key, refused outside development. The KMS adapter is the blocker for enabling MFA anywhere real (ADR-0023 §6) |
 | Invitation and password-reset **delivery** does not exist | `CORE-NOTIFY`. An administrator issues and hands over the token meanwhile; the self-service request reveals nothing |
 | The password blocklist is a short built-in list, not a breach corpus | Replace with a checked corpus when one is available (`SD-18` operational scope); it is a data change, not a redesign |
@@ -470,7 +573,15 @@ CORE-DOC-001–006 · CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 Local commits: documentation baseline (`7a840b3`), Phase 1 scaffolding (`4c988db`), Phase 1 review decisions
 (`4365775`), development services and the integration gate (`dfc0ac5`), the audit subsystem plus
-authorization core (`3d6bdf1`), and identity and authentication added on 2026-09-21.
+authorization core (`3d6bdf1`), a MEMORY repair (`45f73ca`), identity and authentication (`2edc45e`), and
+the approval engine added on 2026-09-21.
+
+`APPROVAL-001`–`004`, `006`, and `007` are implemented with passing tests: versioned approval policies
+whose published versions are immutable, requests bound to the version they were submitted under, ordered
+multi-stage approval with quorum rules, maker-checker as configuration rather than a code branch,
+append-only decisions whose concurrency is settled by a unique index, time-bounded delegation that never
+widens authority, and reassignment of an offboarded approver's pending work. `APPROVAL-005` is
+`in-progress`: escalation is built and tested but cannot resolve a direct manager until `CORE-ORG` exists.
 
 `SEC-010` and `SEC-011`–`SEC-022` are implemented with passing tests: security accounts with an opaque
 employee reference and no employee data, invitation and activation, Argon2id passwords with a length-first
@@ -487,15 +598,16 @@ applies the data scope inside the query, strips restricted fields from every ser
 `404` rather than `403` for an out-of-scope record, refuses privilege escalation and records the attempt,
 and takes effect on the next request with no cache to invalidate.
 
-The full verification suite is green: format, lint, strict typecheck (root + 9 workspaces), **324 unit
-tests**, **integration gate 132 passed / 0 failed / 0 skipped against real MongoDB and Redis**, i18n keys,
+The full verification suite is green: format, lint, strict typecheck (root + 9 workspaces), **363 unit
+tests**, **integration gate 191 passed / 0 failed / 0 skipped against real MongoDB and Redis**, i18n keys,
 secret scan (212 files), documentation links, production build, bundle budget, **14 E2E tests** across
 desktop and mobile in Arabic RTL and English LTR, and 0 dependency vulnerabilities. The built API starts and
 answers `401` on both `/auth/login` for an unknown account and `/me` without a token. The Arabic PDF is
 byte-identical (`89fade53…99f7b`). `.env` and `docker/dev.env` remain ignored and untracked.
 
-**PHASE 1 IS NOT APPROVED.** 31 of 113 Phase 1 requirements are not started — `APPROVAL`, `INTEGRATION`,
-`CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT` — 9 are in progress, no requirement is
-`verified`, and the gate requires a stakeholder demonstration plus written approval. `SEC-033` (KMS) remains
-unimplemented, which blocks MFA in staging and production. Stopped for review of this group. Phase 2 not
-started. No remote, nothing pushed, nothing deployed.
+**PHASE 1 IS NOT APPROVED.** 24 of 113 Phase 1 requirements are not started — `INTEGRATION`,
+`CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT` — 10 are in progress, no requirement
+is `verified`, and the gate requires a stakeholder demonstration plus written approval. `SEC-033` (KMS)
+remains unimplemented, which blocks MFA in staging and production, and `APPROVAL-005` waits on
+`CORE-ORG`. Stopped for review of this group. Phase 2 not started. No remote, nothing pushed, nothing
+deployed.

@@ -157,7 +157,7 @@ A gate with any unchecked item in sections 2–9 has **not** passed. Say so plai
 
 ---
 
-## Phase 1 — gate status as of 2026-09-21 (identity and authentication group)
+## Phase 1 — gate status as of 2026-09-21 (approval engine group)
 
 **Phase 1 has NOT passed its gate.** Recorded here because the checklist above is a template; only proven
 facts appear below.
@@ -169,8 +169,8 @@ Proven for the scope implemented so far (commands run locally, results as observ
 | 2 | `npm run lint` | ✅ 0 errors, 0 warnings |
 | 2 | `npm run format:check` | ✅ |
 | 2 | `npm run typecheck` | ✅ strict, root + 9 workspaces, no new suppressions |
-| 2 | `npm run test:unit` | ✅ 324 passed, 18 files |
-| 2 | `npm run test:integration:gate` | ✅ 132 passed, 0 failed, **0 skipped**, 6 files |
+| 2 | `npm run test:unit` | ✅ 363 passed, 19 files |
+| 2 | `npm run test:integration:gate` | ✅ 191 passed, 0 failed, **0 skipped**, 7 files |
 | 2 | `npm run check:bundle` | ✅ within budget |
 | 2 | `npm run test:e2e` | ✅ Arabic RTL and English LTR, desktop and mobile |
 | 2 | `npm run build` | ✅ web, api, worker |
@@ -183,13 +183,17 @@ Proven for the scope implemented so far (commands run locally, results as observ
 | 3 | Unknown and malformed input rejected | ✅ tested |
 | 3 | **Session invalidated immediately on suspension and on permission change** | ✅ tested — suspension, offboarding, and a password change end a live session on the next request |
 | 3 | Privilege-escalation suite (`SEC-010`) | ✅ 15 attacks on the identity surface, each asserting that nothing changed |
+| 3 | **Self-approval rejected where separation of duties applies** | ✅ maker-checker is a policy field, refused by default, not bypassed by an administrative permission, and one person cannot satisfy two stages |
+| 7 | Multi-document state changes are transactional | ✅ an approval decision, its stage counter, the request state, and its audit records commit in one transaction |
+| 7 | Retryable operations idempotent | ✅ submission replays return the original request; a sweep, an escalation, and a reassignment each run twice with one effect |
 | 9 | Dependency scan, secret scan, log redaction | ✅ |
 
 Open, and therefore blocking:
 
-- Section 1 — no requirement is `verified`; **31 of 113** Phase 1 requirements are not started and 9 are in
-  progress. No stakeholder demonstration, no written approval.
-- Section 3 — **self-approval / separation of duties** untested because `APPROVAL-*` is not built.
+- Section 1 — no requirement is `verified`; **24 of 113** Phase 1 requirements are not started and 10 are
+  in progress. No stakeholder demonstration, no written approval.
+- Section 1 — `APPROVAL-005` is **in progress**: escalation works but cannot resolve a direct manager
+  until `CORE-ORG` supplies the reporting line (Phase 2, `SD-01`).
 - Section 4 — Arabic glyph assertion in generated PDFs: no PDF generation exists yet.
 - Section 6 — the implemented scope is API-only; no new screens, so no UI states to verify. The registry
   rows for `SEC-011`–`SEC-022` describe mechanism, not authentication screens.

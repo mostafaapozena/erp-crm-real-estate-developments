@@ -46,6 +46,7 @@ silently violate a constraint whose reason was never written down.
 | [ADR-0021](adr-0021-audit-trail-integrity.md) | Audit trail integrity: what the application guarantees, and what it cannot | Accepted | Security |
 | [ADR-0022](adr-0022-authorization-resolved-per-request.md) | Authorization state is resolved per request, with no permission cache | Accepted | Security |
 | [ADR-0023](adr-0023-password-hashing-and-session-tokens.md) | Password hashing, session tokens, and the second factor | Accepted | Security |
+| [ADR-0024](adr-0024-approval-engine.md) | Approval engine: generic, versioned, and append-only | Accepted | Architecture, Security |
 | [ADR-0023](adr-0023-password-hashing-and-session-tokens.md) | Password hashing, session tokens, and the second factor | Accepted | Security |
 
 ## Open items

@@ -105,6 +105,12 @@ changes (gap `G-05`), payroll runs, accounting posting, and financial period ope
 - Delegation and escalation are configured, time-bounded, and audited. A delegation must not become a
   permanent silent grant.
 
+**Implemented 2026-09-21** (`APPROVAL-001`–`007`,
+[ADR-0024](../decisions/adr-0024-approval-engine.md)). Self-approval is a policy field with two values, so
+no permission and no role bypasses it; a delegate acting for the requester is still the requester; one
+person may not satisfy two stages of the same request. The **policy content** — who approves what, at which
+threshold, and which duties may never meet in one person — is `SD-02` and is seeded nowhere.
+
 ## 5. Audit
 
 Append-only. Never deleted, never edited, not exempt for data cleanup
@@ -170,6 +176,24 @@ A phase gate does not pass without these, per endpoint:
 
 This section records the mechanism as built, so a later session can verify the document against the code.
 Requirement IDs: `SEC-010`–`SEC-032` and `AUDIT-001`–`AUDIT-006`.
+
+### Approvals, as built (`APPROVAL-001`–`007`)
+
+| Concern | Mechanism | Where |
+|---|---|---|
+| Policy | `approvalPolicies`: versioned workflow definitions. Conditions read exactly the seven axes Master Mapping §7 names; an ambiguous stage rule is refused when the policy is written | `apps/api/src/modules/approval/rules.ts` |
+| Immutability | A published version cannot be edited through the API **or** the model, and each request stores the version it was submitted under | `…/approval/model.ts` |
+| Request | `approvalRequests`: an **opaque** source reference and a sanitized summary. Approving records a decision; it never executes the operation | `…/approval/service.ts` |
+| Decisions | `approvalDecisions`: append-only, enforced as the audit trail is. A unique index on request + stage + approver settles concurrency | `…/approval/model.ts` |
+| Maker-checker | Policy field, evaluated after authorization has already succeeded, so no permission overrides it | `…/approval/rules.ts` |
+| Delegation | Time-bounded, cycle-free, revoked rather than deleted, and never widening the delegate's own authority | `…/approval/rules.ts` |
+| Escalation | Adds the requester's direct manager to the pending approvers once a stage is overdue, idempotently. The reporting line is resolved through a port | `…/approval/service.ts` |
+| Atomicity | The decision, the stage counter, the request state, and the audit records commit in one transaction | `apps/api/src/platform/transactions.ts` |
+
+Approval requests are the **first records carrying organization references**, so `team`, `department`,
+`branch`, `project`, and `legalEntity` scopes resolve to a real filter here instead of failing closed. The
+monetary context of a request is field-controlled: an actor without `approval.request.viewAmounts` sees
+that an approval is outstanding without seeing the amount that triggered it (`SEC-029`).
 
 ### Authentication, as built (`SEC-011`–`SEC-022`)
 
@@ -391,6 +415,7 @@ A phase gate does not pass without these, per endpoint:
 | 8 | `packages/security/src/authorization/fields.ts` | Layer 3. Restricted fields are deleted from list responses, single reads, and exports (`SEC-029`) |
 | 9 | `packages/security/src/authorization/escalation.ts` | No self-grant, no granting unheld permissions, no widening scope (`SEC-031`) |
 | 10 | `…/identity/service.ts` — `assertNotSelfAdministration` | An administrative account route never applies to the caller's own account: a self-issued password or MFA reset would skip the re-authentication the self-service route requires (`SEC-010`, `SEC-031`) |
+| 11 | `…/approval/rules.ts` — `evaluateSelfApproval`, `assertDistinctStageApprover` | Maker-checker, evaluated **after** authorization has succeeded and reading only the policy, so no permission bypasses it (`APPROVAL-003`) |
 
 A record that exists but falls outside the scope is reported as `404`, identically to an absent one
 (`SEC-030`). Denials and refused escalation attempts are recorded as `security.authorization.denied`.
@@ -424,6 +449,24 @@ by `apps/api/src/platform/indexes.ts` at startup.
 | `accountTokens` | `accountTokens_tokenHash_unique` (unique) | Activation and reset lookup by digest |
 | | `accountTokens_accountId_purpose` | Invalidating outstanding links on offboarding |
 | | `accountTokens_ttl` (TTL on `purgeAfter`) | Retention |
+| `approvalPolicies` | `approvalPolicies_key_version_unique` (unique) | One document per workflow version |
+| | `approvalPolicies_operation_state_effective` | Policy selection at submission |
+| | `approvalPolicies_state_updatedAt` | Administrative listing |
+| `approvalRequests` | `approvalRequests_requestId_unique` (unique) | Identity of a request |
+| | `approvalRequests_idempotencyKey_unique` (unique) | Idempotent submission, enforced by the database |
+| | `approvalRequests_liveSource_unique` (unique, partial) | One live request per protected operation |
+| | `approvalRequests_queue` | The approver work queue |
+| | `approvalRequests_requester_submittedAt` | A requester's history |
+| | `approvalRequests_state_keyset` | Deterministic keyset pagination |
+| | `approvalRequests_source` | "What is outstanding for this record" |
+| | `approvalRequests_scope_team` … `_legalEntity` (5) | Organization-scoped queues |
+| | `approvalRequests_expiry`, `approvalRequests_overdue` | Expiry and escalation sweeps |
+| `approvalDecisions` | `approvalDecisions_decisionId_unique` (unique) | Identity of a decision |
+| | `approvalDecisions_request_stage` | A request's history in order |
+| | `approvalDecisions_request_stage_approver_unique` (unique) | **The concurrency control**: one decision per approver per stage |
+| | `approvalDecisions_approver_decidedAt` | What one approver decided |
+| `approvalDelegations` | `approvalDelegations_delegationId_unique` (unique) | Identity of a delegation |
+| | `approvalDelegations_delegator_window`, `_delegate_window` | Active delegations in both directions |
 | `roles` | `roles_key_unique` (unique) | One role per key |
 | `accountGrants` | `accountGrants_accountId_unique` (unique) | One grant per account; makes per-request resolution cheap |
 | | `accountGrants_roleKeys` | "Who holds this role" |
@@ -449,7 +492,11 @@ themselves restricted fields, requiring `audit.viewContext`.
 
 ### Deliberately not implemented yet
 
-- **Separation of duties** (section 4) — `APPROVAL-001`–`APPROVAL-007`.
+- **Escalation to a direct manager** cannot resolve anyone until `CORE-ORG` supplies the reporting line
+  (Phase 2, `SD-01`). The mechanism is built and tested; an overdue stage is reported as *unresolved*
+  rather than escalated (`APPROVAL-005`).
+- **Notification and task delivery** for approvals — `CORE-NOTIFY`, `CORE-TASK`. The engine publishes a
+  domain event through a port with nothing wired to it, and is correct with nothing listening.
 - **Password-reset and invitation delivery** — `CORE-NOTIFY`. Until it exists, an administrator issues a
   reset token through `POST /api/v1/security/accounts/{accountId}/password-reset` and delivers it out of
   band, and an invitation's activation token is returned once to the administrator who created the account.

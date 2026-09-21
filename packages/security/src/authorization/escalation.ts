@@ -26,6 +26,20 @@ export function assertNotSelfGrant(actor: ActorContext, targetAccountId: string)
   }
 }
 
+/**
+ * How many missing permissions the refusal names. The attempt description ends up in an audit `reason`,
+ * which the contract bounds; listing every permission in a large catalog silently exceeded that bound, and
+ * the evidence was then lost at validation time rather than written. The count is always reported, so
+ * nothing about the scale of the attempt is hidden.
+ */
+const MAX_LISTED_PERMISSIONS = 5;
+
+export function describeExcess(excess: readonly string[]): string {
+  const listed = excess.slice(0, MAX_LISTED_PERMISSIONS).join(',');
+  const remaining = excess.length - MAX_LISTED_PERMISSIONS;
+  return remaining > 0 ? `${listed} and ${remaining} more` : listed;
+}
+
 export function assertCanGrantPermissions(
   actor: ActorContext,
   requestedPermissions: readonly Permission[],
@@ -34,7 +48,7 @@ export function assertCanGrantPermissions(
   const held = new Set(effectivePermissions(actor));
   const excess = requestedPermissions.filter((permission) => !held.has(permission));
   if (excess.length > 0) {
-    throw new PrivilegeEscalationError(`grant-exceeds-own:${excess.join(',')}`);
+    throw new PrivilegeEscalationError(`grant-exceeds-own:${describeExcess(excess)}`);
   }
 }
 

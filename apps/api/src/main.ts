@@ -12,6 +12,7 @@ import { RateLimiterMemory, RateLimiterRedis } from 'rate-limiter-flexible';
 import { createApp, type ApiModule } from './app';
 import { AUDIT_ACTIONS } from '@alola/contracts';
 import { noteAuditWrite } from './http/audit-context';
+import { ApprovalService, approvalRouter } from './modules/approval';
 import { AuditService, auditRouter } from './modules/audit';
 import {
   AuthThrottle,
@@ -97,6 +98,7 @@ function requireConnection() {
 let auditService: AuditService | undefined;
 let securityService: SecurityService | undefined;
 let identityService: IdentityService | undefined;
+let approvalService: ApprovalService | undefined;
 
 /**
  * Encryption for MFA secrets (`SEC-017`).
@@ -130,6 +132,28 @@ function getSecurityService(): SecurityService {
   const connection = requireConnection();
   securityService ??= new SecurityService({ connection, audit: getAuditService() });
   return securityService;
+}
+
+/**
+ * The approval engine (`APPROVAL-001` … `APPROVAL-007`).
+ *
+ * Two ports are deliberately left unconfigured here:
+ *
+ * - `resolveManager` — the reporting line belongs to `CORE-ORG` (Phase 2, `SD-01`). Until it exists,
+ *   escalation reports an overdue stage as **unresolved** rather than inventing a manager (`APPROVAL-005`).
+ * - `events` — `CORE-NOTIFY` and `CORE-TASK` are separate groups. The engine is correct with nothing
+ *   listening, so there is no null implementation to pretend otherwise.
+ */
+function getApprovalService(): ApprovalService {
+  const connection = requireConnection();
+  approvalService ??= new ApprovalService({
+    connection,
+    logger,
+    audit: getAuditService(),
+    accountsWithPermission: (permission) => getSecurityService().accountsWithPermission(permission),
+    resolveActor: (accountId) => getSecurityService().resolveActor(accountId),
+  });
+  return approvalService;
 }
 
 /** Authorization denials are security events (AUDIT-005). A failure to record must not hide the denial. */
@@ -233,6 +257,7 @@ const identityRouterOptions = {
 };
 
 const modules: ApiModule[] = [
+  { basePath: '/approvals', router: approvalRouter({ getService: getApprovalService, guard }) },
   { basePath: '/audit', router: auditRouter({ getService: getAuditService, guard }) },
   { basePath: '/auth', router: authRouter(identityRouterOptions) },
   { basePath: '/me', router: meRouter(identityRouterOptions) },

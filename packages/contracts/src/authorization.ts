@@ -20,6 +20,31 @@ export const PERMISSIONS = [
   /** Reveals request context (IP, user agent) on an audit record. */
   'audit.viewContext',
 
+  // Approvals (APPROVAL-001 … APPROVAL-007). Breadth comes from the data scope, as everywhere else
+  // (ADR-0006): there is deliberately no "viewAny" permission, because a second breadth mechanism
+  // alongside scopes is how the two drift apart.
+  'approval.policy.view',
+  /** Create or edit a **draft** policy. A published version is immutable (APPROVAL-006). */
+  'approval.policy.create',
+  /** Publish a draft, which makes it the version live requests are bound to. Administrative. */
+  'approval.policy.publish',
+  'approval.request.create',
+  'approval.request.view',
+  /** Reveals the monetary and percentage context of a request; financial values are field-controlled. */
+  'approval.request.viewAmounts',
+  'approval.request.approve',
+  'approval.request.reject',
+  /** Cancel someone else's request within scope. A requester may always cancel their own. */
+  'approval.request.cancel',
+  /** Move a pending stage to another approver — the offboarding path (APPROVAL-007). Administrative. */
+  'approval.request.reassign',
+  /** Escalate overdue stages to the direct manager (APPROVAL-005). Administrative. */
+  'approval.request.escalate',
+  /** Delegate your own approval authority, time-bounded (APPROVAL-004). */
+  'approval.delegation.manage',
+  /** Create or revoke a delegation on behalf of another account. Administrative. */
+  'approval.delegation.manageAny',
+
   // Security accounts (SEC-011 … SEC-022). Administration only: a person needs no permission to
   // manage their own sessions or their own second factor.
   'security.account.view',
@@ -52,6 +77,12 @@ export type Permission = z.infer<typeof PermissionSchema>;
  * carrying one is flagged so that `SD-02` role design can see them at a glance.
  */
 export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
+  // Approval controls: publishing a policy, moving someone else's pending decision, escalating, and
+  // delegating on another account's behalf all change who may approve what.
+  'approval.policy.publish',
+  'approval.request.reassign',
+  'approval.request.escalate',
+  'approval.delegation.manageAny',
   'security.account.create',
   'security.account.suspend',
   'security.account.reactivate',
@@ -183,7 +214,7 @@ export const SetAccountGrantRequestSchema = z.strictObject({
 export type SetAccountGrantRequest = z.infer<typeof SetAccountGrantRequestSchema>;
 
 /** Resources that carry field-level restrictions (SEC-029). */
-export const RESTRICTED_RESOURCES = ['auditEvent', 'accountGrant'] as const;
+export const RESTRICTED_RESOURCES = ['auditEvent', 'accountGrant', 'approvalRequest'] as const;
 export type RestrictedResource = (typeof RESTRICTED_RESOURCES)[number];
 
 /**
@@ -205,5 +236,13 @@ export const FIELD_RESTRICTIONS: Readonly<
      * can change it.
      */
     deniedPermissions: 'security.grant.assign',
+  },
+  approvalRequest: {
+    /**
+     * Master Mapping §6 lists financial values among the field-controlled classes. Someone may need to
+     * see that an approval is outstanding without seeing the amount that triggered it.
+     */
+    'context.amount': 'approval.request.viewAmounts',
+    'context.percentage': 'approval.request.viewAmounts',
   },
 };

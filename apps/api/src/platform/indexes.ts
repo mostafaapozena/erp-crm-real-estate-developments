@@ -1,5 +1,11 @@
 import type { Logger } from '@alola/security';
 import type { Connection } from 'mongoose';
+import {
+  decisionModel,
+  delegationModel,
+  policyModel,
+  requestModel,
+} from '../modules/approval/model';
 import { auditModel } from '../modules/audit/model';
 import {
   accountModel,
@@ -24,6 +30,10 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     sessionModel(connection),
     refreshTokenModel(connection),
     accountTokenModel(connection),
+    policyModel(connection),
+    requestModel(connection),
+    decisionModel(connection),
+    delegationModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {

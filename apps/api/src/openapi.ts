@@ -1,5 +1,20 @@
 import {
   AccountGrantSchema,
+  ApprovalDelegationSchema,
+  ApprovalPolicySchema,
+  ApprovalRequestSchema,
+  CancelRequestSchema,
+  CreateDelegationRequestSchema,
+  CreatePolicyRequestSchema,
+  DecisionRequestSchema,
+  DelegationListResponseSchema,
+  EscalationResultSchema,
+  PolicyListResponseSchema,
+  ReassignRequestSchema,
+  RejectRequestSchema,
+  RequestPageSchema,
+  SubmitRequestSchema,
+  UpdatePolicyRequestSchema,
   AccountListResponseSchema,
   ActivateAccountRequestSchema,
   AuditEventSchema,
@@ -46,6 +61,21 @@ const components = {
   CreateRoleRequest: CreateRoleRequestSchema,
   AccountGrant: AccountGrantSchema,
   SetAccountGrantRequest: SetAccountGrantRequestSchema,
+  ApprovalPolicy: ApprovalPolicySchema,
+  PolicyList: PolicyListResponseSchema,
+  CreatePolicyRequest: CreatePolicyRequestSchema,
+  UpdatePolicyRequest: UpdatePolicyRequestSchema,
+  ApprovalRequest: ApprovalRequestSchema,
+  RequestPage: RequestPageSchema,
+  SubmitRequest: SubmitRequestSchema,
+  DecisionRequest: DecisionRequestSchema,
+  RejectRequest: RejectRequestSchema,
+  CancelRequest: CancelRequestSchema,
+  ReassignRequest: ReassignRequestSchema,
+  ApprovalDelegation: ApprovalDelegationSchema,
+  DelegationList: DelegationListResponseSchema,
+  CreateDelegationRequest: CreateDelegationRequestSchema,
+  EscalationResult: EscalationResultSchema,
   SecurityAccount: SecurityAccountSchema,
   AccountList: AccountListResponseSchema,
   CreateAccountRequest: CreateAccountRequestSchema,
@@ -120,6 +150,65 @@ const auditQueryParameters = [
   { name: 'occurredFrom', in: 'query', required: false, schema: { type: 'string' } },
   { name: 'occurredTo', in: 'query', required: false, schema: { type: 'string' } },
   { name: 'correlationId', in: 'query', required: false, schema: { type: 'string' } },
+];
+
+const policyKeyParameter = {
+  name: 'key',
+  in: 'path',
+  required: true,
+  schema: { type: 'string' },
+  description: 'Workflow key. Versions of one key are the history of one workflow.',
+};
+
+const policyVersionParameter = {
+  name: 'version',
+  in: 'path',
+  required: true,
+  schema: { type: 'integer', minimum: 1 },
+  description: 'Workflow version. A published version is immutable (APPROVAL-006).',
+};
+
+const requestIdParameter = {
+  name: 'requestId',
+  in: 'path',
+  required: true,
+  schema: { type: 'string' },
+  description:
+    'Approval request identifier. One outside the actor\u2019s scope is reported as absent.',
+};
+
+/** Filters of the approval queue. Ordering is submittedAt desc, requestId desc. */
+const requestQueryParameters = [
+  {
+    name: 'limit',
+    in: 'query',
+    required: false,
+    schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+    description: 'Page size. Values above the maximum are rejected.',
+  },
+  { name: 'cursor', in: 'query', required: false, schema: { type: 'string' } },
+  {
+    name: 'state',
+    in: 'query',
+    required: false,
+    schema: {
+      type: 'string',
+      enum: ['pending', 'returned', 'approved', 'rejected', 'cancelled', 'expired'],
+    },
+  },
+  { name: 'operationType', in: 'query', required: false, schema: { type: 'string' } },
+  { name: 'policyKey', in: 'query', required: false, schema: { type: 'string' } },
+  { name: 'sourceType', in: 'query', required: false, schema: { type: 'string' } },
+  { name: 'sourceId', in: 'query', required: false, schema: { type: 'string' } },
+  { name: 'requesterAccountId', in: 'query', required: false, schema: { type: 'string' } },
+  {
+    name: 'awaitingMe',
+    in: 'query',
+    required: false,
+    schema: { type: 'boolean' },
+    description: 'Only requests awaiting this actor\u2019s decision on the current stage.',
+  },
+  { name: 'overdueOnly', in: 'query', required: false, schema: { type: 'boolean' } },
 ];
 
 const sessionIdParameter = {
@@ -231,6 +320,318 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           responses: {
             '200': json('AuditEvent', 'The audit event'),
             '404': json('ErrorResponse', 'Absent, or outside the scope (NOT_FOUND)'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/policies': {
+        get: {
+          operationId: 'listApprovalPolicies',
+          summary: 'List approval workflow versions',
+          description: 'Requires approval.policy.view.',
+          parameters: [
+            { name: 'key', in: 'query', required: false, schema: { type: 'string' } },
+            {
+              name: 'state',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ['draft', 'published', 'retired'] },
+            },
+          ],
+          responses: { '200': json('PolicyList', 'Policy versions'), ...authorizedErrors },
+        },
+        post: {
+          operationId: 'createApprovalPolicy',
+          summary: 'Create a draft workflow version',
+          description:
+            'Requires approval.policy.create. Creating under an existing key produces the next version. ' +
+            'Validation refuses an ambiguous configuration outright — a quorum without a number, "all" or ' +
+            'a quorum over an unbounded approver rule, a non-contiguous stage order, or a condition whose ' +
+            'operator does not fit its field (APPROVAL-002). No threshold or approver is seeded anywhere: ' +
+            'that content is SD-02.',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('CreatePolicyRequest') } },
+          },
+          responses: {
+            '201': json('ApprovalPolicy', 'The draft version'),
+            '409': json('ErrorResponse', 'That key and version already exist (CONFLICT)'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/policies/{key}/versions/{version}': {
+        get: {
+          operationId: 'getApprovalPolicy',
+          summary: 'Read one workflow version',
+          description: 'Requires approval.policy.view.',
+          parameters: [policyKeyParameter, policyVersionParameter],
+          responses: {
+            '200': json('ApprovalPolicy', 'The version'),
+            '404': json('ErrorResponse', 'No such version (NOT_FOUND)'),
+            ...authorizedErrors,
+          },
+        },
+        patch: {
+          operationId: 'updateApprovalPolicyDraft',
+          summary: 'Edit a draft version',
+          description:
+            'Requires approval.policy.create, and only a draft may be edited. A published version is ' +
+            'immutable even through the model layer (APPROVAL-006).',
+          parameters: [policyKeyParameter, policyVersionParameter],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('UpdatePolicyRequest') } },
+          },
+          responses: {
+            '200': json('ApprovalPolicy', 'The updated draft'),
+            '409': json('ErrorResponse', 'The version is not a draft (CONFLICT)'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/policies/{key}/versions/{version}/publish': {
+        post: {
+          operationId: 'publishApprovalPolicy',
+          summary: 'Publish a draft version',
+          description:
+            'Requires the administrative approval.policy.publish. From here the version is immutable and ' +
+            'new requests bind to it; requests already outstanding keep the version they were submitted ' +
+            'under (APPROVAL-006).',
+          parameters: [policyKeyParameter, policyVersionParameter],
+          responses: {
+            '200': json('ApprovalPolicy', 'The published version'),
+            '409': json('ErrorResponse', 'Already published, or not a draft (CONFLICT)'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/requests': {
+        get: {
+          operationId: 'listApprovalRequests',
+          summary: 'Query approval requests',
+          description:
+            'Requires approval.request.view. Results, the total, and the work queue are constrained by ' +
+            "the actor's data scope inside the query (SEC-028). Monetary context is absent without " +
+            'approval.request.viewAmounts (SEC-029). Keyset pagination by submittedAt then requestId.',
+          parameters: requestQueryParameters,
+          responses: { '200': json('RequestPage', 'A page of requests'), ...authorizedErrors },
+        },
+        post: {
+          operationId: 'submitApprovalRequest',
+          summary: 'Submit a request for approval',
+          description:
+            'Requires approval.request.create. The applicable published policy version is selected and ' +
+            'recorded. Idempotent on the caller\u2019s key: the same key with the same input returns the ' +
+            'original request with 200, and with different input it is a conflict. Where the policy ' +
+            'forbids it, a second live request for the same source is refused by a unique index rather ' +
+            'than by a read-then-write check.',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('SubmitRequest') } },
+          },
+          responses: {
+            '201': json('ApprovalRequest', 'The submitted request'),
+            '200': json('ApprovalRequest', 'The original request, replayed'),
+            '409': json(
+              'ErrorResponse',
+              'Conflicting replay, or a live request already exists (CONFLICT)',
+            ),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/requests/sweep': {
+        post: {
+          operationId: 'sweepApprovalRequests',
+          summary: 'Expire deadlines and escalate overdue stages',
+          description:
+            'Requires the administrative approval.request.escalate. Idempotent maintenance: expires ' +
+            'requests past their deadline and escalates an overdue stage to the requester\u2019s direct ' +
+            'manager, **adding** the manager to the approvers rather than replacing them (APPROVAL-005). ' +
+            'With no reporting line configured — that is CORE-ORG, Phase 2 — an overdue stage is reported ' +
+            'as unresolved rather than escalated to an invented manager.',
+          responses: {
+            '200': json('EscalationResult', 'What the sweep changed'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/requests/reassign-account': {
+        post: {
+          operationId: 'reassignAccountApprovals',
+          summary: 'Move every pending approval from one account to another',
+          description:
+            'Requires the administrative approval.request.reassign. The offboarding path (APPROVAL-007): ' +
+            'decisions already recorded are never touched, only who is awaiting one.',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('ReassignRequest') } },
+          },
+          responses: { '200': json('EscalationResult', 'How many moved'), ...authorizedErrors },
+        },
+      },
+      '/api/v1/approvals/requests/{requestId}': {
+        get: {
+          operationId: 'getApprovalRequest',
+          summary: 'Read one request with its decisions',
+          description:
+            'Requires approval.request.view. A request outside the scope returns 404, not 403 (SEC-030).',
+          parameters: [requestIdParameter],
+          responses: {
+            '200': json('ApprovalRequest', 'The request'),
+            '404': json('ErrorResponse', 'Absent, or outside the scope (NOT_FOUND)'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/requests/{requestId}/approve': {
+        post: {
+          operationId: 'approveApprovalRequest',
+          summary: 'Approve the current stage',
+          description:
+            'Requires approval.request.approve **and** eligibility for the current stage. Maker-checker ' +
+            'applies: self-approval is refused unless the policy permits it with a reason, and no ' +
+            'permission overrides that (APPROVAL-003). One person cannot satisfy two stages of the same ' +
+            'request. The decision, the stage counter, and the audit records commit in one transaction; ' +
+            'two concurrent approvals produce exactly one accepted decision.',
+          parameters: [requestIdParameter],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('DecisionRequest') } },
+          },
+          responses: {
+            '200': json('ApprovalRequest', 'The request after the decision'),
+            '409': json(
+              'ErrorResponse',
+              'Already decided, stale version, or an illegal transition (CONFLICT)',
+            ),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/requests/{requestId}/reject': {
+        post: {
+          operationId: 'rejectApprovalRequest',
+          summary: 'Reject the request',
+          description:
+            'Requires approval.request.reject and a reason. Ends the request at any stage.',
+          parameters: [requestIdParameter],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('RejectRequest') } },
+          },
+          responses: {
+            '200': json('ApprovalRequest', 'The rejected request'),
+            '409': json('ErrorResponse', 'Not in a state that may be rejected (CONFLICT)'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/requests/{requestId}/return': {
+        post: {
+          operationId: 'returnApprovalRequest',
+          summary: 'Return the request for correction',
+          description:
+            'Requires approval.request.reject: returning is a refusal that invites a corrected ' +
+            'resubmission. Every decision so far is kept (APPROVAL-006).',
+          parameters: [requestIdParameter],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('RejectRequest') } },
+          },
+          responses: {
+            '200': json('ApprovalRequest', 'The returned request'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/requests/{requestId}/resubmit': {
+        post: {
+          operationId: 'resubmitApprovalRequest',
+          summary: 'Resubmit a returned request',
+          description:
+            'The requester only, and only from the returned state. Stages reopen with their counters ' +
+            'reset; the decisions that caused the return remain.',
+          parameters: [requestIdParameter],
+          responses: {
+            '200': json('ApprovalRequest', 'The reopened request'),
+            '409': json('ErrorResponse', 'Not in the returned state (CONFLICT)'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/requests/{requestId}/cancel': {
+        post: {
+          operationId: 'cancelApprovalRequest',
+          summary: 'Cancel a request',
+          description:
+            'The requester may always cancel their own; anyone else needs approval.request.cancel. The ' +
+            'check reads the stored requester, never anything from the body.',
+          parameters: [requestIdParameter],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('CancelRequest') } },
+          },
+          responses: {
+            '200': json('ApprovalRequest', 'The cancelled request'),
+            '409': json('ErrorResponse', 'Already decided (CONFLICT)'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/requests/{requestId}/reassign': {
+        post: {
+          operationId: 'reassignApprovalRequest',
+          summary: 'Move one pending decision to another approver',
+          description: 'Requires the administrative approval.request.reassign (APPROVAL-007).',
+          parameters: [requestIdParameter],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('ReassignRequest') } },
+          },
+          responses: { '200': json('EscalationResult', 'How many moved'), ...authorizedErrors },
+        },
+      },
+      '/api/v1/approvals/delegations': {
+        get: {
+          operationId: 'listApprovalDelegations',
+          summary: 'Delegations you gave or received',
+          description:
+            'Authenticated; lists only the actor\u2019s own delegations in both directions.',
+          responses: { '200': json('DelegationList', 'Delegations'), ...authorizedErrors },
+        },
+        post: {
+          operationId: 'createApprovalDelegation',
+          summary: 'Delegate your approval authority for a bounded window',
+          description:
+            'Requires approval.delegation.manage for your own authority, and the administrative ' +
+            'approval.delegation.manageAny to name another delegator (APPROVAL-004). A delegation is ' +
+            'time-bounded, refused if it would close a cycle or delegate to oneself, and never widens what ' +
+            'the delegate may otherwise do: their own permissions and scope still apply to every request.',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: ref('CreateDelegationRequest') } },
+          },
+          responses: {
+            '201': json('ApprovalDelegation', 'The delegation'),
+            ...authorizedErrors,
+          },
+        },
+      },
+      '/api/v1/approvals/delegations/{delegationId}': {
+        delete: {
+          operationId: 'revokeApprovalDelegation',
+          summary: 'Revoke a delegation',
+          description:
+            'Takes effect immediately: the next decision attempt no longer finds an active delegation. ' +
+            'Revoked, never deleted — a delegation that was once live is history.',
+          parameters: [
+            { name: 'delegationId', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            '204': { description: 'Revoked' },
+            '404': json('ErrorResponse', 'Absent, or not yours (NOT_FOUND)'),
             ...authorizedErrors,
           },
         },

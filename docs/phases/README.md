@@ -14,10 +14,10 @@ current gate is verified and explicitly approved** (`docs/PHASE-PROMPTS.md`).
 | | |
 |---|---|
 | Active phase | **1 — Discovery, architecture, core, security, localization, Light Mode** |
-| Sub-stage | Build half — scaffolding complete and reviewed; review decisions applied |
-| Status | **PHASE 1 BLOCKED — DEVELOPMENT SERVICES NOT CONFIGURED.** Current verified status in `../MEMORY.md` |
+| Sub-stage | Build half — foundation, audit, authorization, identity, and approvals implemented |
+| Status | **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Current verified status in `../MEMORY.md` |
 | Requirements `verified` | 0 — nothing is gate-verified before the Phase 1 review |
-| Blocking the phase gate | Integration tests need the Atlas development cluster and Redis (`D2`). `npm run test:integration:gate` fails until they are configured; the gate cannot pass on skipped tests |
+| Blocking the phase gate | 24 of 113 requirements not started (`INTEGRATION-001`–`005`, `CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`), 10 in progress, and the gate needs a stakeholder demonstration and written approval. `D2` closed on 2026-09-21: the services run locally and the integration gate passes with zero skips |
 
 ## Phase index
 
@@ -26,7 +26,7 @@ Authoritative scope is `docs/MASTER-MAPPING.md` §12. Requirement registration i
 
 | Phase | Scope | Depends on | Exit result | Key blockers |
 |---|---|---|---|---|
-| **1** | Discovery, architecture, core platform, security, localization, Light Mode | — | Approved secure Arabic-first foundation | None for scaffolding; `D2` (Atlas + Redis provisioning) for integration tests |
+| **1** | Discovery, architecture, core platform, security, localization, Light Mode | — | Approved secure Arabic-first foundation | Remaining Phase 1 scope, then the stakeholder demonstration and written approval. `D2` closed |
 | 2 | Organization, projects, units, pricing, plans, inventory | 1 | Controlled saleable inventory | `SD-01`, `SD-02`, `SD-03`, `SD-05`, `SD-21`; `D2` |
 | 3 | CRM, WhatsApp, Meta campaigns, leads, insights, attribution | 1–2 | Campaign-to-opportunity workflow | `SD-04`, `SD-09`, `SD-19`, `SD-20`. Scope approved (`SD-14`); CAPI gated (`SD-15`) |
 | 4 | Quotations, reservations, contracts, amendments, cancellations | 1–3 | Auditable lead-to-contract workflow | `SD-05`, `SD-10`, `SD-17` |

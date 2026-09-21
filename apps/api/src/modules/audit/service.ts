@@ -18,7 +18,7 @@ import {
   type ScopeFieldMap,
 } from '@alola/security';
 import { randomUUID } from 'node:crypto';
-import type { Connection } from 'mongoose';
+import type { ClientSession, Connection } from 'mongoose';
 import { auditModel, type AuditEventDocument } from './model';
 
 /**
@@ -47,6 +47,11 @@ export interface AuditServiceOptions {
    * "every mutation is audited" becomes an enforced invariant rather than a convention (AUDIT-003).
    */
   onRecorded?: () => void;
+}
+
+/** Lets a caller enlist an audit write in its own transaction. */
+export interface AuditWriteOptions {
+  session?: ClientSession;
 }
 
 export class AuditWriteError extends Error {
@@ -118,8 +123,12 @@ export class AuditService {
    * Append one record (AUDIT-002). Security-critical evidence must not vanish quietly: a write failure is
    * logged at error level **and rethrown**, so the caller's operation fails rather than completing
    * unaudited (AUDIT-003).
+   *
+   * Pass `session` to write inside a caller's transaction, so a state change and its evidence commit
+   * together or not at all. The record itself is still append-only: joining a transaction changes when the
+   * insert becomes visible, never whether it can later be altered (ADR-0021).
    */
-  async record(input: RecordAuditInput): Promise<AuditEvent> {
+  async record(input: RecordAuditInput, options: AuditWriteOptions = {}): Promise<AuditEvent> {
     const parsed = RecordAuditInputSchema.parse(input);
     const document: AuditEventDocument = {
       eventId: randomUUID(),
@@ -135,7 +144,10 @@ export class AuditService {
       schemaVersion: 1,
     };
     try {
-      const created = await this.model.create(document);
+      const [created] = await this.model.create([document], {
+        ...(options.session ? { session: options.session } : {}),
+      });
+      if (!created) throw new Error('Audit insert returned no document.');
       this.onRecorded?.();
       return toContract(created.toObject());
     } catch (error) {

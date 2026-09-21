@@ -1,5 +1,7 @@
 import {
   ActorContextSchema,
+  PERMISSIONS,
+  RecordAuditInputSchema,
   ScopeAssignmentSchema,
   type ActorContext,
   type Permission,
@@ -14,6 +16,7 @@ import {
 } from './errors';
 import {
   assertCanGrantPermissions,
+  describeExcess,
   assertCanGrantScope,
   assertGrantAllowed,
   assertNotSelfGrant,
@@ -233,6 +236,32 @@ describe('privilege escalation prevention (SEC-031)', () => {
   it('refuses to let an actor edit their own grants', () => {
     expect(() => assertNotSelfGrant(admin, 'admin-1')).toThrow(PrivilegeEscalationError);
     expect(() => assertNotSelfGrant(admin, 'other-1')).not.toThrow();
+  });
+
+  it('describes a refusal within the audit reason limit, however many permissions are missing', () => {
+    // The attempt description becomes an audit `reason`, which the contract bounds at 500 characters.
+    // Listing every permission in a large catalog exceeded that bound, and the evidence was then lost at
+    // validation time instead of being written.
+    const empty = actor({ permissions: [] });
+    const thrown = (() => {
+      try {
+        assertCanGrantPermissions(empty, [...PERMISSIONS]);
+        return undefined;
+      } catch (error) {
+        return error as PrivilegeEscalationError;
+      }
+    })();
+
+    expect(thrown).toBeInstanceOf(PrivilegeEscalationError);
+    const reason = `privilege escalation refused: ${thrown?.attempt ?? ''}`;
+    expect(RecordAuditInputSchema.shape.reason.safeParse(reason).success).toBe(true);
+    expect(reason.length).toBeLessThanOrEqual(500);
+    // It still says how large the attempt was, rather than hiding the rest.
+    expect(thrown?.attempt).toMatch(/and \d+ more$/);
+  });
+
+  it('names every missing permission when the list is short', () => {
+    expect(describeExcess(['a', 'b'])).toBe('a,b');
   });
 
   it('refuses to grant a permission the actor does not hold', () => {

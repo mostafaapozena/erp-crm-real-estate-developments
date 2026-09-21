@@ -4,6 +4,6 @@
  */
 export { AUDIT_COLLECTION, AuditImmutableError } from './model';
 export { AuditService, AuditWriteError, AUDIT_SCOPE_FIELDS } from './service';
-export type { AuditServiceOptions } from './service';
+export type { AuditServiceOptions, AuditWriteOptions } from './service';
 export { auditRouter } from './router';
 export type { AuditRouterOptions } from './router';

@@ -1,6 +1,6 @@
 # Requirement Registry
 
-Version: 1.4 · Last updated: 2026-09-21 · Scheme: [ADR-0014](decisions/adr-0014-requirement-id-scheme.md),
+Version: 1.5 · Last updated: 2026-09-21 · Scheme: [ADR-0014](decisions/adr-0014-requirement-id-scheme.md),
 namespaces [ADR-0016](decisions/adr-0016-phase-1-requirement-namespaces.md)
 
 ## How to use this registry
@@ -25,7 +25,7 @@ enumerated during that phase's discovery.
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
-| Status `implemented` (code and passing tests) | **73** — see per-row status in `docs/MEMORY.md` |
+| Status `implemented` (code and passing tests) | **79** — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
@@ -216,6 +216,30 @@ behaviour regressed, not the file that contains the feature.
 activation, offboarding) and `SEC-033` (KMS adapter). The production actor resolver returns no actor, so
 protected endpoints answer `401` until `SEC-013` lands. The integration suites inject a test resolver;
 it is a fixture for exercising authorization and is **not** an authentication implementation.
+
+## Implementation evidence — approval engine (2026-09-21)
+
+Status `implemented`: code exists and its tests pass. **None of these is `verified`**; `verified` requires
+the Phase 1 exit-gate review. The engine is mechanism only — no role, threshold, approver, or operation
+type is seeded, because that content is `SD-02` ([ADR-0024](decisions/adr-0024-approval-engine.md)).
+
+| ID | Registry wording | Status | Evidence |
+|---|---|---|---|
+| APPROVAL-001 | Approval request entity and state machine | implemented | `rules.test.ts` — the transition matrix, including every refusal out of a terminal state; `approval.int-test.ts` — submission opens stage 1, approval completes only when every stage is satisfied, rejection and cancellation end it, an illegal transition answers `409` and is recorded, and expiry runs idempotently |
+| APPROVAL-002 | Rules configurable by amount, percentage, role, project, department, risk, exception | implemented | `rules.test.ts` — all seven axes accepted, decimal-safe amount comparison, mismatched currencies not comparable, and every ambiguous configuration refused with a code; `approval.int-test.ts` — draft, edit, publish, version selection by specificity, and a permission-based stage resolved to accounts within scope |
+| APPROVAL-003 | Maker-checker: self-approval rejected unless an explicit audited policy permits it | implemented | `rules.test.ts` — refusal by default, permitted only with a reason, a delegate acting for the requester still caught, one person refused across two stages; `approval.int-test.ts` — refused over HTTP with nothing stored, permitted case marked `selfApproved` in the response and in the audit record, and **not** bypassed by an administrative permission |
+| APPROVAL-004 | Delegation, time-bounded and audited | implemented | `rules.test.ts` — window, revocation, self-delegation, over-long window, and cycle detection; `approval.int-test.ts` — a delegate acts and both hands are recorded, revocation takes effect immediately, a future window does not work, a delegation applies only to the policies it names, and it never widens what the delegate may otherwise do |
+| APPROVAL-005 | Escalation of an overdue task **or approval** to the direct manager | **in-progress** | Mechanism complete and tested: `approval.int-test.ts` adds the manager to the pending approvers once a stage is overdue, idempotently, audited, and refuses the sweep without the permission. **The direct manager cannot be resolved in the running system**: the reporting line is `CORE-ORG` (Phase 2, `SD-01`), so an overdue stage is reported as *unresolved* rather than escalated. The task half is `CORE-TASK-003` |
+| APPROVAL-006 | Immutable approval history | implemented | `approval.int-test.ts` — a published policy version cannot be edited through the API or the model, a request keeps the version it was submitted under even after a newer one is published, and decisions survive a return, a resubmission, and a reassignment |
+| APPROVAL-007 | Reassign an offboarded user's pending approvals to an authorized approver, audited | implemented | `approval.int-test.ts` — one request and a whole account's pending approvals moved, each audited; decisions already recorded are untouched; the old approver can no longer act and the new one can; refused without the administrative permission |
+
+**Concurrency and idempotency:** two simultaneous approvals of the same stage, and two by the same
+approver, each yield exactly one accepted decision; a decision against a stale version is refused; a
+replayed submission returns the original request and a conflicting replay is a `409`.
+
+**Not part of this group:** `CORE-NOTIFY` and `CORE-TASK` remain unimplemented. The engine publishes a
+domain event after the transaction commits through a port with no implementation wired, and a failure to
+publish is logged and swallowed — an approval is correct with nothing listening.
 
 ## Implementation evidence — identity and authentication (2026-09-21)
 

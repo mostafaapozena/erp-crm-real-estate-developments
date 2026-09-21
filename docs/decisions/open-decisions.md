@@ -66,7 +66,10 @@ monetary and percentage thresholds at which approval escalates, and the segregat
 price approval limits, and project-scoped approvals); every later phase thereafter
 **Phase 1 impact:** None to scaffolding. Phase 1 builds the permission catalog mechanism, the approval
 engine, and maker-checker enforcement as configuration, tested with fixture roles only. No business role
-or threshold is seeded. The privileged-MFA role *categories* are already fixed by MASTER-MAPPING §6.
+or threshold is seeded. **Delivered 2026-09-21** (`APPROVAL-001`–`007`,
+[ADR-0024](adr-0024-approval-engine.md)): policies are versioned documents whose conditions read exactly
+the seven axes Master Mapping §7 names, maker-checker is a policy field rather than a code branch, and the
+engine is waiting for this decision's content — not for more code. The privileged-MFA role *categories* are already fixed by MASTER-MAPPING §6.
 **Risk if assumed:** Approval thresholds and maker-checker rules are the primary financial control.
 Guessed thresholds are either an unenforced control or an operational obstruction.
 **Note:** The Arabic document (p17) gives approval *examples* per department; those examples are useful
