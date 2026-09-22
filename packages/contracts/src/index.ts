@@ -5,6 +5,7 @@ export * from './errors';
 export * from './health';
 export * from './identifiers';
 export * from './identity';
+export * from './inventory';
 export * from './localized';
 export * from './money';
 export * from './organization';

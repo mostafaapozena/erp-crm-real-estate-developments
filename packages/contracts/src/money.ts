@@ -91,6 +91,39 @@ export function multiplyMoney(a: Money, factor: string): Money {
   };
 }
 
+/**
+ * Divide by a decimal divisor — a price per square metre, a per-installment share.
+ *
+ * Unlike the other operations this one **must** round, because most divisions do not terminate. So the
+ * caller names the scale and the mode rather than inheriting a default, and a zero divisor is an
+ * error rather than an infinity that would propagate silently through a total.
+ */
+export function divideMoney(
+  a: Money,
+  divisor: string,
+  scale: number,
+  mode: RoundingMode = 'halfEven',
+): Money {
+  const d = toDecimal(divisor);
+  if (d.isZero()) throw new MoneyError('INVALID_AMOUNT');
+  if (!Number.isInteger(scale) || scale < 0) throw new MoneyError('INVALID_AMOUNT');
+  return {
+    amount: asDecimalString(
+      toDecimal(a.amount).dividedBy(d).toDecimalPlaces(scale, ROUNDING_MODES[mode]),
+    ),
+    currency: a.currency,
+  };
+}
+
+/** True when the amount is below zero. Used wherever a negative value is a contract violation. */
+export function isNegativeMoney(a: Money): boolean {
+  return toDecimal(a.amount).isNegative();
+}
+
+export function isZeroMoney(a: Money): boolean {
+  return toDecimal(a.amount).isZero();
+}
+
 export function roundMoney(a: Money, scale: number, mode: RoundingMode): Money {
   if (!Number.isInteger(scale) || scale < 0) throw new MoneyError('INVALID_AMOUNT');
   return {

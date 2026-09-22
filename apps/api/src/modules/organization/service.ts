@@ -343,6 +343,26 @@ export class OrganizationService {
     return { legalEntities, branches, departments, teams, jobTitles, placements };
   }
 
+  /**
+   * One branch, unscoped, for another module resolving where a record it is creating belongs.
+   *
+   * Deliberately not scope-filtered: the caller has already been authorized for its own operation, and
+   * a record's placement must be derived from the organization rather than trusted from a request. The
+   * only thing exposed is the branch's own identifiers.
+   */
+  async findBranch(
+    branchId: string,
+  ): Promise<{ branchId: string; legalEntityId: string } | undefined> {
+    assertSafeFilter({ branchId });
+    const document = await this.branches
+      .findOne({ branchId, status: 'active' })
+      .lean<BranchDocument>()
+      .exec();
+    return document
+      ? { branchId: document.branchId, legalEntityId: document.legalEntityId }
+      : undefined;
+  }
+
   async getPlacementByAccount(accountId: string): Promise<Placement | undefined> {
     assertSafeFilter({ accountId });
     const document = await this.placements

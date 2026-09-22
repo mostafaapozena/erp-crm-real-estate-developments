@@ -22,6 +22,7 @@ import {
   cookiePolicyFor,
   meRouter,
 } from './modules/identity';
+import { InventoryService, inventoryRouter } from './modules/inventory';
 import { OrganizationService, organizationRouter } from './modules/organization';
 import { SecurityService, securityRouter } from './modules/security';
 import type { ActorResolver } from './http/actor';
@@ -101,6 +102,7 @@ let securityService: SecurityService | undefined;
 let identityService: IdentityService | undefined;
 let approvalService: ApprovalService | undefined;
 let organizationService: OrganizationService | undefined;
+let inventoryService: InventoryService | undefined;
 
 /**
  * Encryption for MFA secrets (`SEC-017`).
@@ -140,6 +142,21 @@ function getOrganizationService(): OrganizationService {
   const connection = requireConnection();
   organizationService ??= new OrganizationService({ connection, audit: getAuditService() });
   return organizationService;
+}
+
+/**
+ * Inventory takes `CORE-ORG` as a **port** rather than importing it: it needs exactly one fact about a
+ * branch — which legal entity it belongs to — and wiring that here keeps the dependency visible at the
+ * composition root instead of buried inside a call chain.
+ */
+function getInventoryService(): InventoryService {
+  const connection = requireConnection();
+  inventoryService ??= new InventoryService({
+    connection,
+    audit: getAuditService(),
+    resolveBranch: (branchId) => getOrganizationService().findBranch(branchId),
+  });
+  return inventoryService;
 }
 
 /**
@@ -273,6 +290,7 @@ const modules: ApiModule[] = [
     basePath: '/organization',
     router: organizationRouter({ getService: getOrganizationService, guard }),
   },
+  { basePath: '/inventory', router: inventoryRouter({ getService: getInventoryService, guard }) },
   { basePath: '/auth', router: authRouter(identityRouterOptions) },
   { basePath: '/me', router: meRouter(identityRouterOptions) },
   { basePath: '/security', router: securityRouter({ getService: getSecurityService, guard }) },

@@ -44,6 +44,7 @@ import {
   VerifyMfaRequestSchema,
 } from '@alola/contracts';
 import { z } from 'zod';
+import { inventoryComponents, inventoryPaths } from './inventory';
 import { organizationComponents, organizationPaths } from './organization';
 import { createHelpers, type PathMap } from './shared';
 
@@ -97,6 +98,7 @@ const components = {
   SuspendAccountRequest: SuspendAccountRequestSchema,
   OffboardAccountRequest: OffboardAccountRequestSchema,
   ...organizationComponents,
+  ...inventoryComponents,
 } as const;
 
 type ComponentName = keyof typeof components;
@@ -244,7 +246,10 @@ const accountIdParameter = {
 export function buildOpenApiDocument(): Record<string, unknown> {
   // Domain files receive helpers rather than importing this builder, so the dependency stays one-way.
   const helpers = createHelpers(new Set(Object.keys(components)));
-  const domainPaths: PathMap = { ...organizationPaths(helpers) };
+  const domainPaths: PathMap = {
+    ...organizationPaths(helpers),
+    ...inventoryPaths(helpers),
+  };
   const schemas = Object.fromEntries(
     Object.entries(components).map(([name, schema]) => {
       const { $schema: _ignored, ...jsonSchema } = z.toJSONSchema(schema, { io: 'output' });

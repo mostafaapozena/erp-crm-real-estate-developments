@@ -13,6 +13,7 @@ import {
   refreshTokenModel,
   sessionModel,
 } from '../modules/identity/model';
+import { buildingModel, projectModel, unitEventModel, unitModel } from '../modules/inventory/model';
 import {
   branchModel,
   departmentModel,
@@ -48,6 +49,10 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     teamModel(connection),
     jobTitleModel(connection),
     placementModel(connection),
+    projectModel(connection),
+    buildingModel(connection),
+    unitModel(connection),
+    unitEventModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {
