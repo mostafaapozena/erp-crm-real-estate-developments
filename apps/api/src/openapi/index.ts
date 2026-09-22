@@ -44,6 +44,8 @@ import {
   VerifyMfaRequestSchema,
 } from '@alola/contracts';
 import { z } from 'zod';
+import { organizationComponents, organizationPaths } from './organization';
+import { createHelpers, type PathMap } from './shared';
 
 /**
  * OpenAPI 3.1 document generated from the contracts package (PLAT-010). Component schemas come from
@@ -94,6 +96,7 @@ const components = {
   RevokedSessions: RevokedSessionsResponseSchema,
   SuspendAccountRequest: SuspendAccountRequestSchema,
   OffboardAccountRequest: OffboardAccountRequestSchema,
+  ...organizationComponents,
 } as const;
 
 type ComponentName = keyof typeof components;
@@ -239,6 +242,9 @@ const accountIdParameter = {
 };
 
 export function buildOpenApiDocument(): Record<string, unknown> {
+  // Domain files receive helpers rather than importing this builder, so the dependency stays one-way.
+  const helpers = createHelpers(new Set(Object.keys(components)));
+  const domainPaths: PathMap = { ...organizationPaths(helpers) };
   const schemas = Object.fromEntries(
     Object.entries(components).map(([name, schema]) => {
       const { $schema: _ignored, ...jsonSchema } = z.toJSONSchema(schema, { io: 'output' });
@@ -1081,6 +1087,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      ...domainPaths,
       '/api/v1/openapi.json': {
         get: {
           operationId: 'getOpenApiDocument',

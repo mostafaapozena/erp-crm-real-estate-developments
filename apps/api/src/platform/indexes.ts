@@ -13,6 +13,14 @@ import {
   refreshTokenModel,
   sessionModel,
 } from '../modules/identity/model';
+import {
+  branchModel,
+  departmentModel,
+  jobTitleModel,
+  legalEntityModel,
+  placementModel,
+  teamModel,
+} from '../modules/organization/model';
 import { accountGrantModel, roleModel } from '../modules/security/model';
 
 /**
@@ -34,6 +42,12 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     requestModel(connection),
     decisionModel(connection),
     delegationModel(connection),
+    legalEntityModel(connection),
+    branchModel(connection),
+    departmentModel(connection),
+    teamModel(connection),
+    jobTitleModel(connection),
+    placementModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {

@@ -67,6 +67,66 @@ export const PERMISSIONS = [
   'security.grant.assign',
   /** Grant permissions or scopes the actor does not personally hold. Deliberately separate. */
   'security.grant.assignAny',
+
+  /* ------------------------------------------------------------------------
+   * Demonstration-slice permissions (Macro Phase 1, ADR-0025).
+   *
+   * These name verbs in modules whose engineering phase has not started. They are registered here
+   * because authorization is never added retroactively: a route without a permission is a route that
+   * ships open. Breadth is still the data scope, never a `viewAny` permission (ADR-0006).
+   * ---------------------------------------------------------------------- */
+
+  // Organization (`CORE-ORG`)
+  'org.view',
+  /** Create or change the hierarchy every data scope resolves against. Administrative. */
+  'org.manage',
+  'org.placement.view',
+  /** Place a person, or change who they report to — which changes where approvals escalate. Administrative. */
+  'org.placement.manage',
+
+  // Inventory (`INV-*`)
+  'inventory.project.view',
+  'inventory.project.manage',
+  'inventory.unit.view',
+  /** Create units and change their status through the permitted transitions. */
+  'inventory.unit.manage',
+  /** Reveals a unit's pricing. Someone may need to see availability without seeing the price list. */
+  'inventory.unit.viewPricing',
+
+  // CRM (`CRM-*`)
+  'crm.customer.view',
+  'crm.customer.manage',
+  'crm.lead.view',
+  'crm.lead.create',
+  'crm.lead.edit',
+  /** Hand a lead to another sales owner — a manager's action, not an owner's. */
+  'crm.lead.assign',
+  'crm.activity.create',
+
+  // Sales (`SALE-*`)
+  'sales.reservation.view',
+  'sales.reservation.create',
+  'sales.reservation.confirm',
+  'sales.reservation.cancel',
+  'sales.contract.view',
+  'sales.contract.create',
+  'sales.contract.activate',
+  'sales.contract.cancel',
+
+  // Collections (`COL-*`)
+  'collection.installment.view',
+  'collection.receipt.view',
+  'collection.receipt.create',
+  /** Reverse a posted receipt. Never an edit: a posted receipt is immutable (ADR-0009). */
+  'collection.receipt.cancel',
+  'collection.instrument.view',
+  'collection.instrument.manage',
+  'collection.reminder.view',
+  'collection.reminder.manage',
+
+  // Marketing (`MKT-*`). Publication is absent on purpose: no provider is connected (ADR-0026).
+  'marketing.campaign.view',
+  'marketing.campaign.manage',
 ] as const;
 
 export const PermissionSchema = z.enum(PERMISSIONS);
@@ -94,15 +154,32 @@ export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
   'security.role.edit',
   'security.grant.assign',
   'security.grant.assignAny',
+  /**
+   * Organization structure is administrative because **every data scope resolves against it**
+   * (SEC-026) and the reporting line decides where an overdue approval escalates (`APPROVAL-005`).
+   * Moving a team between branches silently widens what its members can see, which is an
+   * authorization change wearing an org-chart costume.
+   */
+  'org.manage',
+  'org.placement.manage',
 ];
 
 /**
  * Permissions whose holder must complete a second factor to sign in (`SEC-017`).
  *
  * Master Mapping §6 names the privileged categories: system administration, Meta administration,
- * payroll, treasury, banking, and finance approval. Only the first exists today, so this set is the
- * administrative permissions plus the audit export — reading the whole audit trail is privileged even
- * though it changes nothing. Later phases add their own; the concrete business role list is `SD-02`.
+ * payroll, treasury, banking, and finance approval. Only system administration exists today —
+ * including the organization structure that scopes resolve against — so this set is the administrative
+ * permissions plus the audit export, since reading the whole audit trail is privileged even though it
+ * changes nothing.
+ *
+ * The demonstration slice's **business** verbs are deliberately not here. Cancelling a reservation or
+ * reversing a receipt is controlled by maker-checker and the approval engine, which is the control the
+ * domain actually needs; a second factor in front of a sales representative's daily work buys no
+ * security and trains people to treat the prompt as noise. Meta administration is likewise absent
+ * because no provider is connected and nothing can be published (ADR-0026) — when Macro Phase 4
+ * connects it, `marketing.campaign.publish` arrives administrative. Treasury, banking, and payroll
+ * arrive with Phases 6 and 8 and join this set then. The concrete business role list is `SD-02`.
  */
 export const MFA_REQUIRED_PERMISSIONS: readonly Permission[] = [
   ...ADMINISTRATIVE_PERMISSIONS,
@@ -214,7 +291,12 @@ export const SetAccountGrantRequestSchema = z.strictObject({
 export type SetAccountGrantRequest = z.infer<typeof SetAccountGrantRequestSchema>;
 
 /** Resources that carry field-level restrictions (SEC-029). */
-export const RESTRICTED_RESOURCES = ['auditEvent', 'accountGrant', 'approvalRequest'] as const;
+export const RESTRICTED_RESOURCES = [
+  'auditEvent',
+  'accountGrant',
+  'approvalRequest',
+  'unit',
+] as const;
 export type RestrictedResource = (typeof RESTRICTED_RESOURCES)[number];
 
 /**
@@ -244,5 +326,15 @@ export const FIELD_RESTRICTIONS: Readonly<
      */
     'context.amount': 'approval.request.viewAmounts',
     'context.percentage': 'approval.request.viewAmounts',
+  },
+  unit: {
+    /**
+     * Availability and pricing are different questions. A receptionist confirming that a unit is free
+     * does not need the price list, and a price list is the most commercially sensitive thing inventory
+     * holds. Absent, never masked — a masked price is still serialized (SEC-029).
+     */
+    basePrice: 'inventory.unit.viewPricing',
+    currentPrice: 'inventory.unit.viewPricing',
+    pricePerSquareMeter: 'inventory.unit.viewPricing',
   },
 };
