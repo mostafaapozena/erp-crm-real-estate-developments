@@ -1514,6 +1514,144 @@ export class SalesService {
     return { applied: amount, installment: toInstallment(updated) };
   }
 
+  /**
+   * Put a reversed payment back on an installment, inside the reversing transaction.
+   *
+   * The mirror of `applyPaymentToInstallment`, and it refuses to take back more than was paid — a
+   * negative `paidAmount` is not a state the schedule can be in, and reaching it would corrupt every
+   * balance computed from it afterwards.
+   */
+  async reversePaymentOnInstallment(
+    installmentId: string,
+    amount: Money,
+    session: ClientSession,
+  ): Promise<{ installment: Installment }> {
+    assertSafeFilter({ installmentId });
+    const current = await this.installments
+      .findOne({ installmentId })
+      .session(session)
+      .lean<InstallmentDocument>()
+      .exec();
+    if (!current) throw new SalesNotFoundError('installment');
+
+    const paid = toMoney(current.paidAmount);
+    if (paid.currency !== amount.currency) throw new SalesValidationError('currencyMismatch');
+    if (compareMoney(amount, paid) > 0) throw new SalesValidationError('reversalExceedsPaid');
+
+    const newPaid = subtractMoney(paid, amount);
+    const newRemaining = addMoney(toMoney(current.remainingAmount), amount);
+    const zero = money('0', amount.currency);
+    /**
+     * The row goes back to being open. Whether it is `due`, `overdue` or `upcoming` is a function of
+     * the calendar, not of this reversal, so it is set to `upcoming` and the refresh sweep — which is
+     * the single place that decides — puts it right.
+     */
+    const state: Installment['state'] =
+      compareMoney(newPaid, zero) === 0 ? 'upcoming' : 'partiallyPaid';
+
+    const updated = await this.installments
+      .findOneAndUpdate(
+        { installmentId, version: current.version },
+        {
+          $set: {
+            paidAmount: fromMoney(newPaid),
+            remainingAmount: fromMoney(newRemaining),
+            state,
+            updatedAt: new Date(),
+          },
+          $inc: { version: 1 },
+        },
+        { new: true, session },
+      )
+      .lean<InstallmentDocument>()
+      .exec();
+    if (!updated) throw new SalesConflictError('installmentChanged');
+    return { installment: toInstallment(updated) };
+  }
+
+  /** Open installments of a contract, oldest first — what a receipt allocates against. */
+  async listOpenInstallments(
+    contractId: string,
+    session?: ClientSession,
+  ): Promise<
+    {
+      installmentId: string;
+      sequence: number;
+      dueOn: BusinessDate;
+      remainingAmount: Money;
+      state: string;
+    }[]
+  > {
+    assertSafeFilter({ contractId });
+    const documents = await this.installments
+      .find({ contractId, state: { $in: ['upcoming', 'due', 'partiallyPaid', 'overdue'] } })
+      .sort({ sequence: 1 })
+      .session(session ?? null)
+      .lean<InstallmentDocument[]>()
+      .exec();
+    return documents.map((row) => ({
+      installmentId: row.installmentId,
+      sequence: row.sequence,
+      dueOn: row.dueOn as BusinessDate,
+      remainingAmount: toMoney(row.remainingAmount),
+      state: row.state,
+    }));
+  }
+
+  /**
+   * Installments falling due inside a window, for the reminder sweep.
+   *
+   * Unscoped, because the sweep runs for the organization rather than for a person; the reminders it
+   * produces carry the installment's own placement, so **reading** them is scoped normally.
+   */
+  async listInstallmentsDueWithin(
+    from: BusinessDate,
+    to: BusinessDate,
+    limit = 500,
+  ): Promise<
+    {
+      installmentId: string;
+      contractId: string;
+      customerId: string;
+      unitId: string;
+      projectId: string;
+      dueOn: BusinessDate;
+      remainingAmount: Money;
+      legalEntityId: string;
+      branchId: string;
+      teamId?: string;
+      salesOwnerAccountId: string;
+    }[]
+  > {
+    const documents = await this.installments
+      .find({
+        dueOn: { $gte: from, $lte: to },
+        state: { $in: ['upcoming', 'due', 'partiallyPaid', 'overdue'] },
+      })
+      .sort({ dueOn: 1, installmentId: 1 })
+      .limit(limit)
+      .lean<InstallmentDocument[]>()
+      .exec();
+    return documents.map((row) => ({
+      installmentId: row.installmentId,
+      contractId: row.contractId,
+      customerId: row.customerId,
+      unitId: row.unitId,
+      projectId: row.projectId,
+      dueOn: row.dueOn as BusinessDate,
+      remainingAmount: toMoney(row.remainingAmount),
+      legalEntityId: row.legalEntityId,
+      branchId: row.branchId,
+      ...(row.teamId ? { teamId: row.teamId } : {}),
+      salesOwnerAccountId: row.salesOwnerAccountId,
+    }));
+  }
+
+  /** Allocate the next number in a series. Shared with collections so numbering is one mechanism. */
+  async allocateNumber(prefix: string, session: ClientSession): Promise<string> {
+    return this.nextNumber(prefix, session);
+  }
+
   /** Recompute a contract's paid and outstanding totals from its installments, never incrementally. */
   async recomputeContractTotals(contractId: string, session: ClientSession): Promise<void> {
     const contract = await this.contracts

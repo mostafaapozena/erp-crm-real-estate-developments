@@ -1,6 +1,7 @@
 export * from './approval';
 export * from './audit';
 export * from './authorization';
+export * from './collections';
 export * from './crm';
 export * from './errors';
 export * from './health';

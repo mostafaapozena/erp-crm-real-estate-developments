@@ -101,11 +101,12 @@ describe('buildInstallmentSchedule', () => {
       egp('400000'),
       plan({ installmentCount: 4, frequency: 'quarterly', firstDueOn: date('2026-01-31') }),
     );
+    // Installment one falls on the first due date itself; the rest step from that origin.
     expect(quarterly.map((row) => row.dueOn)).toEqual([
+      '2026-01-31',
       '2026-04-30',
       '2026-07-31',
       '2026-10-31',
-      '2027-01-31',
     ]);
   });
 
@@ -120,9 +121,34 @@ describe('buildInstallmentSchedule', () => {
         egp('120000'),
         plan({ installmentCount: 2, frequency, firstDueOn: date('2026-01-15') }),
       );
-      expect(rows[0]?.dueOn).toBe(addMonths(date('2026-01-15'), months));
-      expect(rows[1]?.dueOn).toBe(addMonths(date('2026-01-15'), months * 2));
+      expect(rows[0]?.dueOn).toBe('2026-01-15');
+      expect(rows[1]?.dueOn).toBe(addMonths(date('2026-01-15'), months));
     }
+  });
+
+  it('dates the down payment separately from the first installment when asked', () => {
+    const rows = buildInstallmentSchedule(
+      egp('1000000'),
+      plan({
+        downPayment: egp('200000'),
+        installmentCount: 4,
+        downPaymentDueOn: date('2026-09-22'),
+        firstDueOn: date('2026-10-01'),
+      }),
+    );
+    // A deposit at signing and the first installment a period later is the common arrangement.
+    expect(rows[0]?.kind).toBe('downPayment');
+    expect(rows[0]?.dueOn).toBe('2026-09-22');
+    expect(rows[1]?.dueOn).toBe('2026-10-01');
+  });
+
+  it('dates the down payment with the installments when no separate date is given', () => {
+    const rows = buildInstallmentSchedule(
+      egp('1000000'),
+      plan({ downPayment: egp('200000'), installmentCount: 4, firstDueOn: date('2026-10-01') }),
+    );
+    expect(rows[0]?.dueOn).toBe('2026-10-01');
+    expect(rows[1]?.dueOn).toBe('2026-10-01');
   });
 
   it('handles a plan that is a down payment and nothing else', () => {
@@ -211,8 +237,9 @@ describe('buildInstallmentSchedule', () => {
 
 describe('lastDueDate', () => {
   it('is the last installment when there is no final payment', () => {
+    // Six monthly installments from 1 January: the sixth is 1 June, not 1 July.
     expect(lastDueDate(plan({ installmentCount: 6, firstDueOn: date('2026-01-01') }))).toBe(
-      '2026-07-01',
+      '2026-06-01',
     );
   });
 
@@ -221,7 +248,20 @@ describe('lastDueDate', () => {
       lastDueDate(
         plan({ installmentCount: 6, finalPayment: egp('1'), firstDueOn: date('2026-01-01') }),
       ),
-    ).toBe('2026-08-01');
+    ).toBe('2026-07-01');
+  });
+
+  it('agrees with the last row the builder produces', () => {
+    for (const options of [
+      { installmentCount: 6 },
+      { installmentCount: 6, finalPayment: egp('10000') },
+      { installmentCount: 1 },
+      { installmentCount: 12, frequency: 'quarterly' as const },
+    ]) {
+      const configured = plan({ ...options, firstDueOn: date('2026-01-31') });
+      const rows = buildInstallmentSchedule(egp('600000'), configured);
+      expect(rows.at(-1)?.dueOn, JSON.stringify(options)).toBe(lastDueDate(configured));
+    }
   });
 });
 

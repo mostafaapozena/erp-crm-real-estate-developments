@@ -46,8 +46,20 @@ export const PaymentPlanSchema = z.strictObject({
   downPayment: MoneySchema,
   installmentCount: z.number().int().min(0).max(MAX_INSTALLMENTS),
   frequency: InstallmentFrequencySchema,
-  /** When the first **installment** falls due; the down payment is dated at the contract date. */
+  /**
+   * The date installment **number one** falls due — not an origin one period before it. Installment
+   * *k* is due `firstDueOn + (k − 1) × frequency`, so a monthly plan starting 1 October has its first
+   * installment on 1 October.
+   */
   firstDueOn: BusinessDateSchema,
+  /**
+   * When the down payment is due. Omitted means the same day the installments start.
+   *
+   * Separate from `firstDueOn` because the common arrangement is a deposit at signing and the first
+   * installment a period later, and collapsing the two would date the deposit a month after the
+   * customer actually paid it.
+   */
+  downPaymentDueOn: BusinessDateSchema.optional(),
   /** A balloon payment after the last installment. May be omitted. */
   finalPayment: MoneySchema.optional(),
 });
@@ -130,8 +142,8 @@ export function buildInstallmentSchedule(total: Money, plan: PaymentPlan): Sched
     rows.push({
       sequence,
       kind: 'downPayment',
-      // The down payment is due when the first installment cycle opens, not a month later.
-      dueOn: plan.firstDueOn,
+      // Due at signing when the caller says so; otherwise the day the installments start.
+      dueOn: plan.downPaymentDueOn ?? plan.firstDueOn,
       amount: plan.downPayment,
     });
   }
@@ -148,8 +160,9 @@ export function buildInstallmentSchedule(total: Money, plan: PaymentPlan): Sched
       rows.push({
         sequence,
         kind: 'installment',
-        // Every date is computed from the **first** due date, so rounding cannot accumulate drift.
-        dueOn: addMonths(plan.firstDueOn, step * (index + 1)),
+        // Installment 1 falls on firstDueOn itself. Every date is computed from that origin rather
+        // than from the previous row, so a clamped month can never shift the whole tail.
+        dueOn: addMonths(plan.firstDueOn, step * index),
         amount: parts[index] as Money,
       });
     }
@@ -161,7 +174,8 @@ export function buildInstallmentSchedule(total: Money, plan: PaymentPlan): Sched
     rows.push({
       sequence,
       kind: 'finalPayment',
-      dueOn: addMonths(plan.firstDueOn, step * (plan.installmentCount + 1)),
+      // One period after the last installment.
+      dueOn: addMonths(plan.firstDueOn, step * plan.installmentCount),
       amount: finalPayment,
     });
   }
@@ -463,6 +477,8 @@ export const SALES_AUDIT_ACTIONS = {
 /** Convenience for a caller that needs the plan's last due date, e.g. to bound a reminder sweep. */
 export function lastDueDate(plan: PaymentPlan): BusinessDate {
   const step = MONTHS_PER_FREQUENCY[plan.frequency];
-  const cycles = plan.installmentCount + (plan.finalPayment ? 1 : 0);
-  return cycles === 0 ? plan.firstDueOn : addMonths(plan.firstDueOn, step * cycles);
+  const cycles = Math.max(plan.installmentCount - 1, 0) + (plan.finalPayment ? 1 : 0);
+  return plan.installmentCount === 0 && !plan.finalPayment
+    ? (plan.downPaymentDueOn ?? plan.firstDueOn)
+    : addMonths(plan.firstDueOn, step * cycles);
 }

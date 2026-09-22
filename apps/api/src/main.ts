@@ -22,6 +22,11 @@ import {
   cookiePolicyFor,
   meRouter,
 } from './modules/identity';
+import {
+  CollectionService,
+  SimulatedReminderDelivery,
+  collectionRouter,
+} from './modules/collections';
 import { CrmService, crmRouter } from './modules/crm';
 import { InventoryService, inventoryRouter } from './modules/inventory';
 import { OrganizationService, organizationRouter } from './modules/organization';
@@ -107,6 +112,7 @@ let organizationService: OrganizationService | undefined;
 let inventoryService: InventoryService | undefined;
 let crmService: CrmService | undefined;
 let salesService: SalesService | undefined;
+let collectionService: CollectionService | undefined;
 
 /**
  * Encryption for MFA secrets (`SEC-017`).
@@ -277,6 +283,76 @@ function getSalesService(): SalesService {
   return salesService;
 }
 
+/**
+ * Collections.
+ *
+ * The delivery port is configured with the **simulated** adapter in development and test, and with
+ * nothing anywhere else. There is no WhatsApp Business account, no approved template and no selected
+ * provider (`SD-20`), so a connected adapter would be a fiction. The reminder centre is correct with
+ * nothing behind the port: reminders are still generated, listed, previewed and audited — they simply
+ * stay `ready`, and every response says `deliveryConnected: false` (ADR-0026).
+ *
+ * Receipt numbering shares the sales counter, so the two series are produced by one mechanism rather
+ * than two that can drift.
+ */
+function getCollectionService(): CollectionService {
+  const connection = requireConnection();
+  collectionService ??= new CollectionService({
+    connection,
+    logger,
+    audit: getAuditService(),
+    sales: {
+      findContract: async (contractId, session) => {
+        const contract = await getSalesService().findContract(contractId, session);
+        return contract
+          ? {
+              contractId: contract.contractId,
+              contractNumber: contract.contractNumber,
+              customerId: contract.customerId,
+              unitId: contract.unitId,
+              projectId: contract.projectId,
+              legalEntityId: contract.legalEntityId,
+              branchId: contract.branchId,
+              ...(contract.teamId ? { teamId: contract.teamId } : {}),
+              salesOwnerAccountId: contract.salesOwnerAccountId,
+              state: contract.state,
+              totalPrice: contract.totalPrice,
+            }
+          : undefined;
+      },
+      listOpenInstallments: (contractId, session) =>
+        getSalesService().listOpenInstallments(contractId, session),
+      applyPaymentToInstallment: (installmentId, amount, session) =>
+        getSalesService().applyPaymentToInstallment(installmentId, amount, session),
+      reversePaymentOnInstallment: (installmentId, amount, session) =>
+        getSalesService().reversePaymentOnInstallment(installmentId, amount, session),
+      recomputeContractTotals: (contractId, session) =>
+        getSalesService().recomputeContractTotals(contractId, session),
+      listInstallmentsDueWithin: (from, to) =>
+        getSalesService().listInstallmentsDueWithin(from, to),
+    },
+    customers: {
+      find: async (customerId) => {
+        const customer = await getCrmService().findCustomerUnscoped(customerId);
+        return customer ? { customerId: customer.customerId, name: customer.name } : undefined;
+      },
+    },
+    units: {
+      find: async (unitId) => {
+        const unit = await getInventoryService().findUnitForUpdate(unitId);
+        return unit ? { unitId: unit.unitId, code: unit.code } : undefined;
+      },
+    },
+    ...(config.APP_ENV === 'development' || config.APP_ENV === 'test'
+      ? { delivery: new SimulatedReminderDelivery(config.APP_ENV) }
+      : {}),
+    today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
+    timeZone: config.ORG_TIMEZONE,
+    nextReceiptNumber: (session) => getSalesService().allocateNumber('RCT', session),
+  });
+  return collectionService;
+}
+
 /** Authorization denials are security events (AUDIT-005). A failure to record must not hide the denial. */
 const guard = {
   onDenied: async (denial: {
@@ -387,6 +463,10 @@ const modules: ApiModule[] = [
   { basePath: '/inventory', router: inventoryRouter({ getService: getInventoryService, guard }) },
   { basePath: '/crm', router: crmRouter({ getService: getCrmService, guard }) },
   { basePath: '/sales', router: salesRouter({ getService: getSalesService, guard }) },
+  {
+    basePath: '/collections',
+    router: collectionRouter({ getService: getCollectionService, guard }),
+  },
   { basePath: '/auth', router: authRouter(identityRouterOptions) },
   { basePath: '/me', router: meRouter(identityRouterOptions) },
   { basePath: '/security', router: securityRouter({ getService: getSecurityService, guard }) },

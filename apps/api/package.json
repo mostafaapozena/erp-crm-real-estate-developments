@@ -13,6 +13,7 @@
   "dependencies": {
     "@alola/config": "0.1.0",
     "@alola/contracts": "0.1.0",
+    "@alola/i18n": "0.1.0",
     "@alola/security": "0.1.0",
     "cors": "2.8.6",
     "express": "5.2.1",

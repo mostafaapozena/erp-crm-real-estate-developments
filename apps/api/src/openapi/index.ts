@@ -44,6 +44,7 @@ import {
   VerifyMfaRequestSchema,
 } from '@alola/contracts';
 import { z } from 'zod';
+import { collectionComponents, collectionPaths } from './collections';
 import { crmComponents, crmPaths } from './crm';
 import { inventoryComponents, inventoryPaths } from './inventory';
 import { organizationComponents, organizationPaths } from './organization';
@@ -103,6 +104,7 @@ const components = {
   ...inventoryComponents,
   ...crmComponents,
   ...salesComponents,
+  ...collectionComponents,
 } as const;
 
 type ComponentName = keyof typeof components;
@@ -255,6 +257,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     ...inventoryPaths(helpers),
     ...crmPaths(helpers),
     ...salesPaths(helpers),
+    ...collectionPaths(helpers),
   };
   const schemas = Object.fromEntries(
     Object.entries(components).map(([name, schema]) => {
