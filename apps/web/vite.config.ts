@@ -25,7 +25,17 @@ export default defineConfig({
       '/health': 'http://localhost:4000',
     },
   },
-  preview: { port: 4173, strictPort: true },
+  preview: {
+    port: 4173,
+    strictPort: true,
+    // The same proxy as `server`, because the end-to-end tests run against the **built** bundle. The
+    // browser must reach one origin for both the page and the API, or the session cookie — which is
+    // `SameSite=Strict` and path-scoped — is never sent back and every refresh fails.
+    proxy: {
+      '/api': 'http://localhost:4000',
+      '/health': 'http://localhost:4000',
+    },
+  },
   build: {
     outDir: 'dist',
     sourcemap: true,
