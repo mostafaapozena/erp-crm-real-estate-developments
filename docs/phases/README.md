@@ -19,6 +19,39 @@ current gate is verified and explicitly approved** (`docs/PHASE-PROMPTS.md`).
 | Requirements `verified` | 0 — nothing is gate-verified before the Phase 1 review |
 | Blocking the phase gate | 24 of 113 requirements not started (`INTEGRATION-001`–`005`, `CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`), 10 in progress, and the gate needs a stakeholder demonstration and written approval. `D2` closed on 2026-09-21: the services run locally and the integration gate passes with zero skips |
 
+## Delivery grouping: four macro phases
+
+Approved 2026-09-22 — [ADR-0025](../decisions/adr-0025-macro-delivery-phases.md).
+
+**The macro phases below are a schedule grouping. They do not replace the nine engineering phases, and
+they change no requirement ID, namespace, or status.** [../REQUIREMENTS.md](../REQUIREMENTS.md) remains
+the register of record, and [phase-gates.md](phase-gates.md) remains the checklist every engineering phase
+passes. Always write "Macro Phase N" in full; a bare "Phase N" always means the engineering phase.
+
+| Macro phase | Name | Covers engineering scope |
+|---|---|---|
+| **Macro Phase 1** | Client Demo MVP | A vertical demonstration slice crossing Phases 2–5, plus remaining shell work in Phase 1 |
+| **Macro Phase 2** | Complete Real Estate Sales and Finance | Phases 2, 4, 5, 6 in full |
+| **Macro Phase 3** | Operations, Procurement and Human Resources | Phases 7 and 8 in full |
+| **Macro Phase 4** | Marketing Integrations, Production Hardening and Launch | Phase 3 provider work and Phase 9 in full |
+
+### What a demonstration slice is, and is not
+
+Macro Phase 1 builds working code in domains whose engineering phase has not started. That code is real —
+it persists to MongoDB, enforces permissions and data scopes inside the query, runs financial changes in
+transactions, and writes audit records. It is nevertheless a **slice**, not the module:
+
+- A slice **never** moves a requirement to `implemented` or `verified`. Those statuses still mean what
+  [phase-gates.md](phase-gates.md) says they mean.
+- Demo-slice scope is recorded separately in [../MEMORY.md](../MEMORY.md), named by the module it
+  anticipates, alongside the statement that the module's own requirements are not started.
+- The client demonstration is **not** the Phase 1 stakeholder demonstration required by
+  [phase-gates.md](phase-gates.md) §1. Phase 1's gate stays open.
+
+Capabilities that depend on an unconnected provider — Meta, WhatsApp, payment providers — are simulated
+behind the adapter interface they will later use, and say so on screen in both languages
+([ADR-0026](../decisions/adr-0026-demonstration-mode-boundary.md)).
+
 ## Phase index
 
 Authoritative scope is `docs/MASTER-MAPPING.md` §12. Requirement registration is

@@ -20,6 +20,30 @@ Phase 1 is enumerated in full below because it is the active phase. Phases 2–9
 business rules no stakeholder has confirmed, which `CLAUDE.md` prohibits. Each phase's requirements are
 enumerated during that phase's discovery.
 
+## Macro delivery phases — a grouping, not a re-registration
+
+Approved 2026-09-22 — [ADR-0025](decisions/adr-0025-macro-delivery-phases.md).
+
+Delivery is now scheduled in four macro phases. **Nothing in this registry changes because of them.** No
+ID is renamed, renumbered, merged, retired, or moved to another namespace; no status is raised; the nine
+engineering phases and their gates keep their meaning.
+
+| Macro phase | Name | Covers engineering scope |
+|---|---|---|
+| Macro Phase 1 | Client Demo MVP | A vertical demonstration slice crossing Phases 2–5, plus remaining shell work in Phase 1 |
+| Macro Phase 2 | Complete Real Estate Sales and Finance | Phases 2, 4, 5, 6 in full |
+| Macro Phase 3 | Operations, Procurement and Human Resources | Phases 7 and 8 in full |
+| Macro Phase 4 | Marketing Integrations, Production Hardening and Launch | Phase 3 provider work and Phase 9 in full |
+
+Macro Phase 1 builds real, persisted, authorized, audited code in modules registered to Phases 2–5. That
+code is a **demonstration slice**, and a slice never satisfies a requirement:
+
+- Modules registered for Phases 2–9 below stay at their registered status. A slice touching `CORE-ORG`,
+  `INV-UNIT`, `CRM-LEAD`, `SALE-RESERVE`, `SALE-CONTRACT`, or `COL-*` does **not** make those modules
+  `in-progress` or `implemented` in the engineering sense.
+- `docs/MEMORY.md` records demo-slice scope in its own section, separately from requirement status.
+- No requirement becomes `verified` because of the client demonstration.
+
 ## Current status summary
 
 | | Count |

@@ -47,7 +47,8 @@ silently violate a constraint whose reason was never written down.
 | [ADR-0022](adr-0022-authorization-resolved-per-request.md) | Authorization state is resolved per request, with no permission cache | Accepted | Security |
 | [ADR-0023](adr-0023-password-hashing-and-session-tokens.md) | Password hashing, session tokens, and the second factor | Accepted | Security |
 | [ADR-0024](adr-0024-approval-engine.md) | Approval engine: generic, versioned, and append-only | Accepted | Architecture, Security |
-| [ADR-0023](adr-0023-password-hashing-and-session-tokens.md) | Password hashing, session tokens, and the second factor | Accepted | Security |
+| [ADR-0025](adr-0025-macro-delivery-phases.md) | Four macro delivery phases over the unchanged requirement registry | Accepted | Governance |
+| [ADR-0026](adr-0026-demonstration-mode-boundary.md) | Demonstration mode: what is real, what is simulated, and how the difference is shown | Accepted | Integration, Governance |
 
 ## Open items
 

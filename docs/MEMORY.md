@@ -18,6 +18,27 @@ this file)
 - Theme: **Light Mode only**
 - Fonts: Alexandria (Arabic), Inter (English), self-hosted via Fontsource
 
+## Delivery plan — rebaselined 2026-09-22
+
+Approved: [ADR-0025](decisions/adr-0025-macro-delivery-phases.md) (four macro phases) and
+[ADR-0026](decisions/adr-0026-demonstration-mode-boundary.md) (what is simulated, and how it is labelled).
+
+| Macro phase | Name | Covers engineering scope | State |
+|---|---|---|---|
+| **Macro Phase 1** | Client Demo MVP | A vertical demonstration slice crossing Phases 2–5, plus remaining shell work in Phase 1 | **in progress** |
+| Macro Phase 2 | Complete Real Estate Sales and Finance | Phases 2, 4, 5, 6 in full | not started |
+| Macro Phase 3 | Operations, Procurement and Human Resources | Phases 7 and 8 in full | not started |
+| Macro Phase 4 | Marketing Integrations, Production Hardening and Launch | Phase 3 provider work and Phase 9 in full | not started |
+
+**The macro phases group work; they do not re-register it.** `docs/REQUIREMENTS.md` is unchanged: no ID
+renamed, renumbered, merged, or retired, and no status raised. The nine engineering phases and
+`docs/phases/phase-gates.md` keep their meaning, and **Phase 1's gate is still open**.
+
+Macro Phase 1 produces a **demonstration slice** in modules registered to Phases 2–5. The slice is real
+code — persisted, permission- and scope-enforced inside the query, transactional, audited — and it is
+still not the module. Demo-slice scope is recorded in its own section below and **never** as an
+implemented or verified requirement.
+
 ## Current phase
 
 - Phase: **1 — Discovery, architecture, core, security, localization, Light Mode**
