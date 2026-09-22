@@ -12,5 +12,6 @@
   "RATE_LIMITED": "Too many requests in a short time. Wait a moment and try again.",
   "SERVICE_NOT_CONFIGURED": "This service is not configured in the current environment.",
   "SERVICE_UNAVAILABLE": "The service is temporarily unavailable.",
-  "INTERNAL_ERROR": "An unexpected error occurred."
+  "INTERNAL_ERROR": "An unexpected error occurred.",
+  "NETWORK_ERROR": "Could not reach the server. Check the connection and try again."
 }
