@@ -354,6 +354,26 @@ export class CrmService {
     return customer;
   }
 
+  /**
+   * One customer, with no actor and no scope, for another module inside its own transaction.
+   *
+   * The caller has already been authorized for its own operation; what it needs here is a fact about
+   * the customer — which legal entity they belong to — that must come from storage rather than from a
+   * request body. Narrow on purpose, so it cannot become a way around `getCustomer`'s scoping.
+   */
+  async findCustomerUnscoped(
+    customerId: string,
+    session?: ClientSession,
+  ): Promise<Customer | undefined> {
+    assertSafeFilter({ customerId });
+    const document = await this.customers
+      .findOne({ customerId })
+      .session(session ?? null)
+      .lean<CustomerDocument>()
+      .exec();
+    return document ? toCustomer(document) : undefined;
+  }
+
   /** Find or create the customer behind a lead, inside a caller's transaction. */
   async ensureCustomerForLead(
     actor: ActorContext,

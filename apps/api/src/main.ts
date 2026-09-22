@@ -12,7 +12,7 @@ import { RateLimiterMemory, RateLimiterRedis } from 'rate-limiter-flexible';
 import { createApp, type ApiModule } from './app';
 import { AUDIT_ACTIONS, businessDateInZone, nowInstant } from '@alola/contracts';
 import { noteAuditWrite } from './http/audit-context';
-import { ApprovalService, approvalRouter } from './modules/approval';
+import { ApprovalService, NoApplicablePolicyError, approvalRouter } from './modules/approval';
 import { AuditService, auditRouter } from './modules/audit';
 import {
   AuthThrottle,
@@ -25,6 +25,7 @@ import {
 import { CrmService, crmRouter } from './modules/crm';
 import { InventoryService, inventoryRouter } from './modules/inventory';
 import { OrganizationService, organizationRouter } from './modules/organization';
+import { SalesService, salesRouter } from './modules/sales';
 import { SecurityService, securityRouter } from './modules/security';
 import type { ActorResolver } from './http/actor';
 import { ensureIndexes } from './platform/indexes';
@@ -105,6 +106,7 @@ let approvalService: ApprovalService | undefined;
 let organizationService: OrganizationService | undefined;
 let inventoryService: InventoryService | undefined;
 let crmService: CrmService | undefined;
+let salesService: SalesService | undefined;
 
 /**
  * Encryption for MFA secrets (`SEC-017`).
@@ -199,6 +201,80 @@ function getApprovalService(): ApprovalService {
     resolveManager: (accountId) => getOrganizationService().resolveManagerAccount(accountId),
   });
   return approvalService;
+}
+
+/**
+ * Sales. Three ports are wired here rather than imported inside the module:
+ *
+ * - `units` — inventory owns the unit state machine, and sales asks it to move a unit inside the
+ *   sales transaction, so a hold and the reservation that took it commit together.
+ * - `crm` — the customer behind a reservation, and the lead's pipeline stage.
+ * - `approvals` — the discount control. The engine records a decision and never performs the
+ *   operation, so sales observes the outcome and acts (ADR-0024 §2). With no policy configured,
+ *   `submit` resolves to nothing and the reservation is an ordinary draft: the **absence** of a
+ *   control is not an approval.
+ */
+function getSalesService(): SalesService {
+  const connection = requireConnection();
+  salesService ??= new SalesService({
+    connection,
+    logger,
+    audit: getAuditService(),
+    units: {
+      find: async (unitId, session) => {
+        const unit = await getInventoryService().findUnitForUpdate(unitId, session);
+        return unit
+          ? {
+              unitId: unit.unitId,
+              projectId: unit.projectId,
+              legalEntityId: unit.legalEntityId,
+              branchId: unit.branchId,
+              code: unit.code,
+              status: unit.status,
+              ...(unit.currentPrice ? { currentPrice: unit.currentPrice } : {}),
+            }
+          : undefined;
+      },
+      changeStatus: (actor, change, context, session) =>
+        getInventoryService().applyStatusChange(
+          actor,
+          change as Parameters<InventoryService['applyStatusChange']>[1],
+          context,
+          session,
+        ),
+    },
+    crm: {
+      findCustomer: async (customerId, session) => {
+        const customer = await getCrmService().findCustomerUnscoped(customerId, session);
+        return customer
+          ? { customerId: customer.customerId, legalEntityId: customer.legalEntityId }
+          : undefined;
+      },
+      advanceLead: (actor, leadId, to, reason, context, session) =>
+        getCrmService().advanceStageInternal(actor, leadId, to, reason, context, session),
+    },
+    approvals: {
+      submit: async (actor, input, context) => {
+        try {
+          const result = await getApprovalService().submit(actor, input, context);
+          return { requestId: result.request.requestId, state: result.request.state };
+        } catch (error) {
+          // No policy configured for this operation is the normal case until `SD-02` supplies one.
+          if (error instanceof NoApplicablePolicyError) return undefined;
+          throw error;
+        }
+      },
+      state: async (requestId) => {
+        try {
+          return (await getApprovalService().findRequestOutcome(requestId))?.state;
+        } catch {
+          return undefined;
+        }
+      },
+    },
+    today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
+  });
+  return salesService;
 }
 
 /** Authorization denials are security events (AUDIT-005). A failure to record must not hide the denial. */
@@ -310,6 +386,7 @@ const modules: ApiModule[] = [
   },
   { basePath: '/inventory', router: inventoryRouter({ getService: getInventoryService, guard }) },
   { basePath: '/crm', router: crmRouter({ getService: getCrmService, guard }) },
+  { basePath: '/sales', router: salesRouter({ getService: getSalesService, guard }) },
   { basePath: '/auth', router: authRouter(identityRouterOptions) },
   { basePath: '/me', router: meRouter(identityRouterOptions) },
   { basePath: '/security', router: securityRouter({ getService: getSecurityService, guard }) },

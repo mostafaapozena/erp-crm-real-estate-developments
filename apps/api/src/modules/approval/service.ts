@@ -20,6 +20,7 @@ import {
   type RequestState,
 } from '@alola/contracts';
 import {
+  assertSafeFilter,
   buildScopeFilter,
   restrictDocument,
   restrictDocuments,
@@ -793,6 +794,28 @@ export class ApprovalService {
       .lean<ApprovalDecisionDocument[]>()
       .exec();
     return restrictDocument('approvalRequest', actor, this.toRequest(document, decisions));
+  }
+
+  /**
+   * The outcome of one request, with no actor and no scope.
+   *
+   * For the **owning module**, which has already authorized its own operation and now needs to know
+   * whether the control it raised was satisfied. Deliberately narrow: it returns the state and the
+   * source reference and nothing else, so it cannot become a way around `getRequest`'s scoping or
+   * its field restrictions (SEC-029).
+   */
+  async findRequestOutcome(
+    requestId: string,
+  ): Promise<{ state: string; source: { type: string; id: string } } | undefined> {
+    assertSafeFilter({ requestId });
+    const document = await this.requests
+      .findOne({ requestId })
+      .select({ state: 1, source: 1 })
+      .lean<ApprovalRequestDocument>()
+      .exec();
+    return document
+      ? { state: document.state, source: { type: document.source.type, id: document.source.id } }
+      : undefined;
   }
 
   /** Deterministic keyset pagination: `submittedAt desc, requestId desc`. */

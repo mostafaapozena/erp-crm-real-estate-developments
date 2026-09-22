@@ -10,4 +10,5 @@ export * from './inventory';
 export * from './localized';
 export * from './money';
 export * from './organization';
+export * from './sales';
 export * from './time';

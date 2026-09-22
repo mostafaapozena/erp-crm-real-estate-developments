@@ -23,6 +23,12 @@ import {
   placementModel,
   teamModel,
 } from '../modules/organization/model';
+import {
+  contractModel,
+  counterModel,
+  installmentModel,
+  reservationModel,
+} from '../modules/sales/model';
 import { accountGrantModel, roleModel } from '../modules/security/model';
 
 /**
@@ -57,6 +63,10 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     customerModel(connection),
     leadModel(connection),
     activityModel(connection),
+    reservationModel(connection),
+    contractModel(connection),
+    installmentModel(connection),
+    counterModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {
