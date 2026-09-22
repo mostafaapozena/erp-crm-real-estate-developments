@@ -44,6 +44,7 @@ import {
   VerifyMfaRequestSchema,
 } from '@alola/contracts';
 import { z } from 'zod';
+import { crmComponents, crmPaths } from './crm';
 import { inventoryComponents, inventoryPaths } from './inventory';
 import { organizationComponents, organizationPaths } from './organization';
 import { createHelpers, type PathMap } from './shared';
@@ -99,6 +100,7 @@ const components = {
   OffboardAccountRequest: OffboardAccountRequestSchema,
   ...organizationComponents,
   ...inventoryComponents,
+  ...crmComponents,
 } as const;
 
 type ComponentName = keyof typeof components;
@@ -249,6 +251,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
   const domainPaths: PathMap = {
     ...organizationPaths(helpers),
     ...inventoryPaths(helpers),
+    ...crmPaths(helpers),
   };
   const schemas = Object.fromEntries(
     Object.entries(components).map(([name, schema]) => {

@@ -10,7 +10,7 @@ import {
 import { fileURLToPath } from 'node:url';
 import { RateLimiterMemory, RateLimiterRedis } from 'rate-limiter-flexible';
 import { createApp, type ApiModule } from './app';
-import { AUDIT_ACTIONS } from '@alola/contracts';
+import { AUDIT_ACTIONS, businessDateInZone, nowInstant } from '@alola/contracts';
 import { noteAuditWrite } from './http/audit-context';
 import { ApprovalService, approvalRouter } from './modules/approval';
 import { AuditService, auditRouter } from './modules/audit';
@@ -22,6 +22,7 @@ import {
   cookiePolicyFor,
   meRouter,
 } from './modules/identity';
+import { CrmService, crmRouter } from './modules/crm';
 import { InventoryService, inventoryRouter } from './modules/inventory';
 import { OrganizationService, organizationRouter } from './modules/organization';
 import { SecurityService, securityRouter } from './modules/security';
@@ -103,6 +104,7 @@ let identityService: IdentityService | undefined;
 let approvalService: ApprovalService | undefined;
 let organizationService: OrganizationService | undefined;
 let inventoryService: InventoryService | undefined;
+let crmService: CrmService | undefined;
 
 /**
  * Encryption for MFA secrets (`SEC-017`).
@@ -157,6 +159,22 @@ function getInventoryService(): InventoryService {
     resolveBranch: (branchId) => getOrganizationService().findBranch(branchId),
   });
   return inventoryService;
+}
+
+/**
+ * CRM. "Today" is the calendar date in the **organization** timezone, not the server's (ADR-0008):
+ * a follow-up due today must mean today where the sales team is, and a business date is never
+ * converted through a timezone once it is stored.
+ */
+function getCrmService(): CrmService {
+  const connection = requireConnection();
+  crmService ??= new CrmService({
+    connection,
+    audit: getAuditService(),
+    resolveBranch: (branchId) => getOrganizationService().findBranch(branchId),
+    today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
+  });
+  return crmService;
 }
 
 /**
@@ -291,6 +309,7 @@ const modules: ApiModule[] = [
     router: organizationRouter({ getService: getOrganizationService, guard }),
   },
   { basePath: '/inventory', router: inventoryRouter({ getService: getInventoryService, guard }) },
+  { basePath: '/crm', router: crmRouter({ getService: getCrmService, guard }) },
   { basePath: '/auth', router: authRouter(identityRouterOptions) },
   { basePath: '/me', router: meRouter(identityRouterOptions) },
   { basePath: '/security', router: securityRouter({ getService: getSecurityService, guard }) },

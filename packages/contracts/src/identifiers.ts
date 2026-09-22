@@ -37,13 +37,25 @@ export type BusinessCode = z.infer<typeof BusinessCodeSchema>;
 /**
  * A phone number as entered. Stored and displayed verbatim (never reformatted, ADR-0003) and matched
  * for duplicates on a normalized form the service derives — the raw value is what a person recognizes.
+ *
+ * The shape check is deliberately loose and the **digit count** is the real constraint. People write
+ * `+20 100 555 0001`, `(020) 100-555-0001` and `0100.555.0001` for the same line, and a validator that
+ * insists on one of them just teaches people to strip the formatting that helps them read it back.
+ * ITU-T E.164 allows at most 15 digits; 6 is the shortest number worth accepting.
  */
 export const PhoneSchema = z
   .string()
   .trim()
   .min(6)
   .max(32)
-  .regex(/^\+?[0-9][0-9\s()-]*$/, { message: 'PHONE_EXPECTED' });
+  .regex(/^\+?[0-9(][0-9\s().-]*$/, { message: 'PHONE_EXPECTED' })
+  .refine(
+    (value) => {
+      const digits = value.replace(/[^0-9]/g, '').length;
+      return digits >= 6 && digits <= 15;
+    },
+    { message: 'PHONE_DIGITS_EXPECTED' },
+  );
 export type Phone = z.infer<typeof PhoneSchema>;
 
 /** Digits only, for duplicate detection. Never stored in place of the entered value. */

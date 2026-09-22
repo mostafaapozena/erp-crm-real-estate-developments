@@ -7,6 +7,7 @@ import {
   requestModel,
 } from '../modules/approval/model';
 import { auditModel } from '../modules/audit/model';
+import { activityModel, customerModel, leadModel } from '../modules/crm/model';
 import {
   accountModel,
   accountTokenModel,
@@ -53,6 +54,9 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     buildingModel(connection),
     unitModel(connection),
     unitEventModel(connection),
+    customerModel(connection),
+    leadModel(connection),
+    activityModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {
