@@ -21,6 +21,13 @@ See [docs/MEMORY.md](docs/MEMORY.md) for verified status.
 These four, together with the approved ADRs in [docs/decisions/](docs/decisions/), are the **implementation
 sources of truth**. Later written stakeholder decisions supersede conflicting statements in the Arabic PDF.
 
+### The client demonstration
+
+| Document | Purpose |
+|---|---|
+| [docs/demo/runbook.md](docs/demo/runbook.md) | How to run the demonstration: services, seed, accounts, reset, and what to do when something is wrong. |
+| [docs/demo/walkthrough-ar.md](docs/demo/walkthrough-ar.md) | The Arabic presentation script — what to say, in order, in ten to fifteen minutes. |
+
 ### Requirements and terminology
 
 | Document | Purpose |
@@ -108,6 +115,28 @@ npm run dev:services:up        # MongoDB replica set + Redis in Docker; writes .
 npm run test:integration:gate  # fails rather than skips when the services are missing
 npm run dev:services:down     # stop containers, keep the data volumes
 ```
+
+## Running the demonstration
+
+```sh
+npm run dev:services:up
+npm run seed:demo              # fictional organization, accounts, inventory, contracts, collections
+npm run dev:api                # then, in another terminal:
+npm run dev:web                # http://localhost:5173
+```
+
+The generated passwords are written to `.demo-credentials.md`, which is **ignored by Git**; nothing is
+printed to the terminal or written to a log. Open that file to sign in. `npm run seed:demo` is
+idempotent, refuses to run against anything that is not a local development database, and
+`npm run seed:demo:reset -- --confirm` removes exactly what it created.
+
+[docs/demo/runbook.md](docs/demo/runbook.md) is the operational guide — accounts, resets, and what to
+do when something is wrong. [docs/demo/walkthrough-ar.md](docs/demo/walkthrough-ar.md) is the Arabic
+presentation script for the client demonstration.
+
+**The demonstration is a vertical slice, not a finished product.** Meta advertising, WhatsApp delivery
+and payment providers are **not connected**, and the screens say so
+([ADR-0026](docs/decisions/adr-0026-demonstration-mode-boundary.md)).
 
 The full command list, test tiers, and service setup are in
 [docs/architecture/environments.md](docs/architecture/environments.md). Pinned dependency versions and

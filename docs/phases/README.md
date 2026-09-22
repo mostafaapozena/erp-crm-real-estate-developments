@@ -48,6 +48,10 @@ transactions, and writes audit records. It is nevertheless a **slice**, not the 
 - The client demonstration is **not** the Phase 1 stakeholder demonstration required by
   [phase-gates.md](phase-gates.md) §1. Phase 1's gate stays open.
 
+**Macro Phase 1 was completed on 2026-09-23** and is running: `npm run seed:demo`, then the usual
+development servers. See [the demonstration runbook](../demo/runbook.md). It changed no requirement
+status and closed no gate, exactly as this section requires.
+
 Capabilities that depend on an unconnected provider — Meta, WhatsApp, payment providers — are simulated
 behind the adapter interface they will later use, and say so on screen in both languages
 ([ADR-0026](../decisions/adr-0026-demonstration-mode-boundary.md)).

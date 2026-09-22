@@ -1,12 +1,16 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-21
+Last updated: 2026-09-23
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: local Git · Branch: `main` · **No remote, nothing pushed, nothing deployed**
+
 Commits: `7a840b3` documentation baseline → `4c988db` Phase 1 scaffolding → `4365775` Phase 1 review
 decisions → `dfc0ac5` development services + integration gate → `3d6bdf1` audit and authorization core →
-`45f73ca` MEMORY repair → `2edc45e` identity and authentication → approval engine (the commit containing
-this file)
+`45f73ca` MEMORY repair → `2edc45e` identity and authentication → `52cabbd` approval engine →
+**Macro Phase 1** — `b61b4df` delivery rebaseline (ADR-0025, ADR-0026) → `f16f8a0` `CORE-ORG` minimum →
+`5b2d89d` inventory → `a2d3ec6` CRM → `4f42474` reservations, contracts, schedules → `a514fb1`
+collections → `56857f3` marketing → `4806fef` web application → `98f1003` demonstration seed →
+`5cf39b8` end-to-end suite → documentation (the commit containing this file)
 
 ## Project identity
 
@@ -25,7 +29,7 @@ Approved: [ADR-0025](decisions/adr-0025-macro-delivery-phases.md) (four macro ph
 
 | Macro phase | Name | Covers engineering scope | State |
 |---|---|---|---|
-| **Macro Phase 1** | Client Demo MVP | A vertical demonstration slice crossing Phases 2–5, plus remaining shell work in Phase 1 | **in progress** |
+| **Macro Phase 1** | Client Demo MVP | A vertical demonstration slice crossing Phases 2–5, plus remaining shell work in Phase 1 | **complete — stopped for review** |
 | Macro Phase 2 | Complete Real Estate Sales and Finance | Phases 2, 4, 5, 6 in full | not started |
 | Macro Phase 3 | Operations, Procurement and Human Resources | Phases 7 and 8 in full | not started |
 | Macro Phase 4 | Marketing Integrations, Production Hardening and Launch | Phase 3 provider work and Phase 9 in full | not started |
@@ -43,6 +47,8 @@ implemented or verified requirement.
 
 - Phase: **1 — Discovery, architecture, core, security, localization, Light Mode**
 - Sub-stage: Build half — foundation, audit, authorization, identity, and approvals complete; green
+- Macro Phase 1 (Client Demo MVP) is **built and green**, and is a demonstration slice: it raises no
+  requirement status and closes no gate. See "Macro Phase 1 — the demonstration slice" below.
 - `D2`: **COMPLETE 2026-09-21.** Local Docker MongoDB (single-node replica set `rs0`) + Redis
   ([ADR-0020](decisions/adr-0020-local-docker-development-services.md)). Integration tier: **59 passed,
   0 failed, 0 skipped** (191 tests).
@@ -317,7 +323,125 @@ stays inside the contract's limit however many permissions are missing.
   swallowed, because an approval must be correct with nothing listening.
 - **No approval screens.** The registry rows describe mechanism, not UI.
 
-## Verification — actual results, 2026-09-21 (full suite re-run)
+## Macro Phase 1 — the demonstration slice (2026-09-22/23)
+
+Approved by [ADR-0025](decisions/adr-0025-macro-delivery-phases.md) and bounded by
+[ADR-0026](decisions/adr-0026-demonstration-mode-boundary.md).
+
+**Read this first: none of it raises a requirement status.** The modules below are registered to
+Phases 2–5. They are real code — persisted, permission- and scope-enforced inside the query,
+transactional, audited — and they are still a slice, not the module. `docs/REQUIREMENTS.md` is
+unchanged: no ID renamed, renumbered, merged or retired, and no status raised. Phase 1's gate is
+still open, and no requirement is `verified`.
+
+### What was built
+
+| Work package | Commit | Contents |
+|---|---|---|
+| Governance | `b61b4df` | ADR-0025 (four macro phases), ADR-0026 (the demonstration boundary and its bilingual labels), macro-phase sections in `REQUIREMENTS.md`, `phases/README.md` and this file, `scripts/check-doc-links.mjs` + `check:links` added to `verify` |
+| `CORE-ORG` minimum | `f16f8a0` | Legal entity → branch → department → team, job titles, placements with a cycle-free reporting line; `resolveManagerAccount` wired into the approval engine's escalation port |
+| Inventory | `5b2d89d` | Projects, buildings, units, append-only unit events; a **conditional-update state machine** that names the state it read, so a unit cannot be sold twice |
+| CRM | `a2d3ec6` | Customers, leads, activities; a pipeline whose backwards moves are allowed and whose terminal stages are not; duplicate phone is a **warning**, never a refusal |
+| Sales | `4f42474` | Reservations, contracts, instalment schedules, atomic document numbering; discount approval submitted through the approval engine's port |
+| Collections | `a514fb1` | Receipts with exact allocation, reversal instead of edit, cheques and promissory notes in custody, the reminder centre behind a `ReminderDeliveryAdapter` |
+| Marketing | `56857f3` | Campaigns as **local drafts**: no publish route, no publish permission, no published state, `demoMetrics` never `metrics`, `providerConnected: false` on every response |
+| Web application | `4806fef` | Sign-in with the second-factor step, the shell, and 20 lazily-loaded screens; route-level and vendor code splitting |
+| Demonstration seed | `98f1003` | `npm run seed:demo` / `seed:demo:reset`, written through the product's own services as the seeded accounts; `platform/domain-services.ts` extracted so the seed and the API share one composition root |
+| End-to-end suite | `5cf39b8` | 37 Playwright tests against the built web application, the built API, real MongoDB and real Redis |
+
+### The demonstration journey, as it actually runs
+
+Dashboard → lead → opportunity → unit → reservation → contract → instalment schedule → collection →
+receipt → upcoming-instalment reminder. Two contracts exist with full schedules, six receipts are
+allocated against them, two instalments are genuinely overdue, and two reminders fall inside the
+fifteen-day window. One reservation carrying a 12% discount sits at **pending approval**, left
+undecided on purpose so the live demonstration has something to decide.
+
+### Honesty, enforced structurally rather than by labels
+
+- **Marketing**: there is no publish route, no publish permission and no `published` state. A provider
+  cannot be faked because there is nothing to fake it into.
+- **Reminders**: `simulated` and `sent` are different states; nothing in the product can reach `sent`.
+  `deliveryConnected: false` is on every response, and the simulated adapter throws outside
+  development and test.
+- **Figures**: campaign numbers are stored as `demoMetrics`, and the screens label them as such.
+- **The sign-in screen itself** says the environment is a demonstration with fictional data.
+
+### The seed
+
+- Writes **through the guarded services, as the seeded accounts**: the representative raises the lead
+  and the reservation, the manager confirms and signs, the collection officer takes the money. Every
+  record therefore passed the same validation, permission check, scope filter, transaction and audit
+  write an HTTP request would. The two exceptions are `bootstrapRole` and `bootstrapGrant`, the
+  documented bootstrap path that `scripts/bootstrap-admin.ts` also uses.
+- **Refuses** unless `APP_ENV` is development or test, the database name carries a development marker,
+  and the host is local — three independent checks, 27 unit tests.
+- **Idempotent** through `demoSeedLedger`: a second run creates nothing.
+- Generates passwords per run into the ignored `.demo-credentials.md`. Nothing is printed or logged.
+- Enrols a **real second factor** for the administrator account rather than exempting it from
+  `SEC-017`, and records the authenticator secret in the same ignored file.
+- `seed:demo:reset` requires `--confirm`, deletes only ledgered records and their ledgered children,
+  leaves unrelated data alone (an integration run's leftovers survived a reset, as intended), and
+  **never deletes the audit trail**.
+
+### Defects this work found in already-shipped code, and the fixes
+
+| Found | Fix |
+|---|---|
+| `buildInstallmentSchedule` placed instalment #1 one period *after* `firstDueOn`, contradicting the field's own documentation and making the 15-day reminder window find nothing | Corrected to `addMonths(firstDueOn, step × index)`; `downPaymentDueOn` added so a deposit is not dated a month after it was paid; `lastDueDate` fixed; unit tests added, including one asserting the two agree |
+| `actOnReminder` treated **any** caller-supplied `reason` as a failure reason, so an explanatory note on a successful simulation silently stored the reminder as `failed` — a red row for something that worked | Only an adapter rejection produces a failure now; the caller's reason still reaches the audit record. Two integration tests cover both directions |
+| `PhoneSchema` rejected a leading parenthesis | Widened, with a digit-count refinement that still bounds it |
+| The integration tier and development shared one database, so seeded accounts made `createBootstrapAccount` conflict — and the tier's own cleanup wiped the demonstration data | The tier has its own database (`MONGODB_INTEGRATION_DB_NAME`); `dev:services:up` grants it and writes the name into `.env` |
+| A dual `stylis` instance (4.4.0 via `stylis-plugin-rtl`, 4.2.0 inside `@emotion/cache`) crashed the RTL cache at runtime | Pinned to 4.2.0 with a root `overrides` entry. Latent and pre-existing, not introduced here |
+| The E2E suite still tested the scaffolding page the demonstration screens replaced; 10 of its 14 tests had been failing since `4806fef` | Replaced with 37 tests against the real application |
+
+### Recorded as debt rather than papered over
+
+**A scope level applies to an account, not to a resource.** A unit has no assignee, so an
+`assigned`-scoped sales representative correctly resolves to "no inventory" and can never reach the
+unit they are trying to reserve. Per-representative lead privacy with readable inventory needs
+**per-resource scope**, which does not exist. The demonstration roles use branch scope instead; giving
+units a fake owner to work around it was refused.
+
+### Not done, deliberately
+
+- No Meta, WhatsApp, e-mail, SMS or payment-provider integration, and no account with any of them.
+- No `CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`, `INTEGRATION-001`–`005`.
+- No KMS adapter (`SEC-033`), so staging and production still cannot store an MFA secret.
+- No hosted CI run — there is still no remote.
+
+## Verification — actual results, 2026-09-23 (end of Macro Phase 1)
+
+| Check | Command | Result |
+|---|---|---|
+| Lint | `npm run lint` | ✅ 0 errors, 0 warnings |
+| Format | `npm run format:check` | ✅ |
+| Typecheck (strict) | `npm run typecheck` | ✅ root + 9 workspaces |
+| Unit tests | `npm run test:unit` | ✅ **430 passed**, 22 files |
+| **Integration gate** | `npm run test:integration:gate` | ✅ **337 passed, 0 failed, 0 skipped**, 13 files, exit 0 — real MongoDB and Redis, no mocks |
+| **End-to-end** | `npm run test:e2e` | ✅ **37 passed, 1 skipped** — built web application + built API + real MongoDB + real Redis, desktop and mobile Chromium. The skip is the drawer-position assertion, meaningless on a phone |
+| i18n keys | `npm run check:i18n` | ✅ Arabic and English complete |
+| Secret scan | `npm run check:secrets` | ✅ 327 files, no credential patterns |
+| Documentation links | `npm run check:links` | ✅ 50 files, 351 relative links, 0 broken |
+| Production build | `npm run build` | ✅ web, api, worker |
+| Bundle budget | `npm run check:bundle` | ✅ largest chunk **325.1 kB / 97.0 kB gzip** (budget 650 / 210) — under budget with 20 screens added, because of route and vendor splitting |
+| Dependency audit | `npm run check:deps` | ✅ 0 vulnerabilities |
+| Arabic PDF integrity | `sha256sum` | ✅ `89fade53…99f7b` — unchanged |
+| Built API smoke | `node apps/api/dist/main.js` | ✅ ready with `transactions: true`; **98 OpenAPI paths, 0 broken `$ref`s**; `GET /me` and `GET /inventory/units` without a token → 401 |
+| Seed idempotency | `npm run seed:demo` twice | ✅ second run created **0** records |
+| Seed reset | `npm run seed:demo:reset -- --confirm` | ✅ removed only ledgered records; integration-test leftovers in the same database were **not** touched; audit trail retained |
+| Hosted CI | `.github/workflows/ci.yml` | ⚠ defined, **never run** — no remote exists |
+
+What the end-to-end tests prove, beyond that the pages render: signing in with a generated password
+returns a session whose permission set actually changes what the server answers; a sales
+representative is refused the marketing API **with their own captured access token**, from outside the
+browser, while the same token still works for what they may do; the Alexandria project never leaves
+the database for a New-Cairo-scoped account; instalments that are past due really read as overdue; the
+reminder centre states that no provider is connected and never reaches the `sent` state; Arabic is
+right-to-left with Alexandria and English is left-to-right with Inter, on the same screens; Light Mode
+holds under a dark system preference; and money and dates render with Western digits in Arabic.
+
+## Verification — actual results, 2026-09-21 (Phase 1 build half)
 
 | Check | Command | Result |
 |---|---|---|
@@ -413,14 +537,25 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 ## Next exact task
 
-1. **Stopped for review of the approval group.** Do not start Phase 2, and do not begin the next group
-   until instructed.
-2. The remaining Phase 1 scope, in dependency order: `CORE-NOTIFY-001`–`005` (which also unblocks
-   invitation and reset **delivery** for `SEC-012` and `SEC-016`, and gives the approval engine's event
-   port an implementation), then `CORE-TASK-001`–`005`, `CORE-DOC-001`–`006`, `CORE-SEARCH-001`,
-   `CORE-IMPORT-001`–`002`, and `INTEGRATION-001`–`005`.
-3. Start the services before any integration work: `npm run dev:services:up`.
-4. To sign in locally, create the first account once:
+1. **Macro Phase 1 is complete and the session stopped for review.** Do not begin Macro Phase 2, and do
+   not start Phase 2 of the engineering plan, until instructed.
+2. **To run the demonstration:** `npm run dev:services:up` → `npm run seed:demo` → `npm run dev:api` and
+   `npm run dev:web`. Passwords are in the ignored `.demo-credentials.md`. The operational guide is
+   [`demo/runbook.md`](demo/runbook.md); the Arabic presentation script is
+   [`demo/walkthrough-ar.md`](demo/walkthrough-ar.md).
+3. **What the stakeholder review has to decide**, because the answers change what is built next:
+   - whether the journey matches how the client's sales floor actually works;
+   - `SD-01` and `SD-02` — the real organization structure, roles, approval thresholds and
+     segregation-of-duty rules. The demonstration's seven roles and its single 10% discount policy are
+     **illustrative** and close neither decision;
+   - `SD-20` — whether a WhatsApp Business account and an approved template set will exist, which is
+     what the reminder centre is waiting for.
+4. **The remaining Phase 1 scope**, in dependency order, unchanged: `CORE-NOTIFY-001`–`005` (which also
+   unblocks invitation and reset **delivery** for `SEC-012` and `SEC-016`, and gives the approval
+   engine's event port an implementation), then `CORE-TASK-001`–`005`, `CORE-DOC-001`–`006`,
+   `CORE-SEARCH-001`, `CORE-IMPORT-001`–`002`, and `INTEGRATION-001`–`005`.
+5. **`SEC-033` (the KMS adapter)** remains the blocker for MFA anywhere outside development.
+6. To create a first account on an empty database without the demonstration data:
    `BOOTSTRAP_ADMIN_EMAIL=… npm run bootstrap:admin`. It prints an activation token and sets no password.
 
 ## Approved decisions
@@ -465,6 +600,56 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 - Git: local commits authorized. **No remote, no push, no deploy.**
 
 ## Implementation notes a later session needs
+
+### Added by Macro Phase 1
+
+- **Domain services come from one composition root**, `apps/api/src/platform/domain-services.ts`. The
+  API and the demonstration seed both build the graph from it. Wire a new module's ports there, not in
+  `main.ts` — a second copy of the wiring drifts, and the seed would then write records the running
+  application could not have produced.
+- **The seed writes as the seeded accounts**, through the guarded services. If a seed step starts
+  failing with a permission error, the answer is usually that the role in `scripts/seed-demo/roles.ts`
+  is wrong, not that the seed needs a wider actor.
+- **Collection names in the seed come from `scripts/seed-demo/collections.ts`**, which imports them
+  from the owning modules. Never type one by hand: the ledger records a collection name, and the reset
+  deletes from whatever that name points at — a wrong name makes the reset silently delete nothing
+  while reporting success. This happened once and was caught only by checking the reset's output
+  against the database.
+- **The reset deletes only ledgered records and their ledgered children.** Anything created indirectly
+  that is not reachable from a ledgered parent will survive a reset; add it to `DEPENDENTS` in
+  `collections.ts` rather than deleting a whole collection.
+- **`npm run seed:demo` re-establishes every password on each run** through the ordinary administrative
+  reset flow, and re-enrols the administrator's second factor. That is what keeps
+  `.demo-credentials.md` truthful; it is not a shortcut around the password policy.
+- Receipts must be recorded against **`remainingAmount`**, not `amount`: the reservation deposit is
+  already credited against the down payment by the time the contract exists, so paying the nominal
+  amount over-allocates and the service correctly refuses it.
+- `refreshInstallmentStates` is the sweep a scheduled job would run. Without it every instalment stays
+  `upcoming` however long ago it fell due; the seed calls it, and so must anything that wants a
+  realistic collections screen.
+- `actOnReminder`'s `reason` is a note for the audit record. **Only an adapter rejection** marks a
+  reminder `failed`. It used to treat any supplied reason as a failure, which turned a successful
+  simulation red.
+- **The integration tier has its own database.** `vitest.integration.config.ts` reads
+  `MONGODB_INTEGRATION_DB_NAME` and falls back to `MONGODB_DB_NAME`. On a machine provisioned before
+  this change, re-run `npm run dev:services:up` once — otherwise the tier runs against the development
+  database and its cleanup deletes the demonstration data.
+- **Playwright starts the API as well as the preview server**, and the preview server proxies `/api`
+  to it (`apps/web/vite.config.ts`). One origin has to serve both: the session cookie is
+  `SameSite=Strict`, so across two origins the refresh never arrives.
+- The E2E suite reads `.demo-credentials.md` and signs in through the real form. It never injects a
+  session, and it captures a real `Authorization` header from a request the application made when it
+  needs to prove the server refuses something.
+- `getByRole('navigation')` matches **two** landmarks in the shell — the menu and the breadcrumb
+  trail. Use `#app-navigation`, and open the drawer first on a phone (`mainNav` in `e2e/demo.ts` does
+  both).
+- `UNIT_PAGE_SIZE_MAX` is 100; asking for 200 is a `400`, not a truncated page.
+- Restricted fields are **optional in the contract type**, not merely absent at runtime: `unit.basePrice`
+  and `unit.currentPrice` are `Money | undefined` because an actor without `inventory.unit.viewPricing`
+  genuinely receives a unit with no price. Handle the absence; do not assert it away.
+- `scratch/` and `sandbox/` are ignored by Git **and** by ESLint. Throwaway probe scripts go there.
+
+### From Phase 1
 
 - **Path contains `&`.** npm's Windows `.cmd` shims break on it, so every script runs tools through
   `node scripts/bin.mjs <tool>`. Don't replace those with bare tool names. Moving the repository to a
@@ -536,17 +721,28 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 ## Database state
 
-- Schema version: 1 (audit records carry `schemaVersion`) · Migrations: none · Seed data: **none**
-- Collections: `auditEvents` (append-only), `roles`, `accountGrants`, `securityAccounts`, `authSessions`,
-  `authRefreshTokens`, `accountTokens`, `approvalPolicies`, `approvalRequests`, `approvalDecisions`
-  (append-only), `approvalDelegations` — 11 collections, 49 named indexes, created explicitly by
-  `apps/api/src/platform/indexes.ts` at startup; the full list is in `architecture/security-model.md` §9.
-- No approval policy, request, or delegation is seeded either: the engine starts empty and `SD-02` fills it.
-- Session, refresh-token, and account-token rows carry a `purgeAfter` TTL index. The audit trail is
-  separate and permanent.
-- No role, permission assignment, scope value, or **account** is seeded: role content is `SD-02`/`SD-01`
-  stakeholder input, and there is deliberately no default administrator. A fresh database authenticates
-  nobody and authorizes nobody until `npm run bootstrap:admin` is run once.
+- Schema version: 1 (audit records carry `schemaVersion`) · Migrations: none
+- **Seed data: none in the product.** A fresh database still authenticates nobody and authorizes
+  nobody: there is no default administrator, no seeded role, no seeded approval policy, and no
+  self-registration. The demonstration data is written by `npm run seed:demo`, which **refuses to run
+  outside a local development database** and is not part of the application.
+- Collections, 31 in total, created explicitly by `apps/api/src/platform/indexes.ts` at startup
+  (`autoIndex` is off); the full index list is in `architecture/security-model.md` §9:
+  - security and platform (11): `auditEvents` (append-only), `roles`, `accountGrants`,
+    `securityAccounts`, `authSessions`, `authRefreshTokens`, `accountTokens`, `approvalPolicies`,
+    `approvalRequests`, `approvalDecisions` (append-only), `approvalDelegations`
+  - demonstration slice (20): `orgLegalEntities`, `orgBranches`, `orgDepartments`, `orgTeams`,
+    `orgJobTitles`, `orgPlacements`, `inventoryProjects`, `inventoryBuildings`, `inventoryUnits`,
+    `inventoryUnitEvents` (append-only), `crmCustomers`, `crmLeads`, `crmActivities`,
+    `salesReservations`, `salesContracts`, `salesInstallments`, `salesCounters`, `collectionReceipts`,
+    `collectionInstruments`, `collectionReminders`, `marketingCampaigns`
+- `demoSeedLedger` exists **only in a development database**. It is written by the seed, read by the
+  reset, and belongs to neither the application nor any module.
+- Session, refresh-token, and account-token rows carry a `purgeAfter` TTL index. Audit, approval and
+  business history carry none: operational rows expire, evidence does not.
+- The **integration tier has its own database** (`MONGODB_INTEGRATION_DB_NAME`, default
+  `real_estate_erp_dev_int`). Sharing one with development meant the suites' unscoped totals counted
+  seeded data, and their cleanup deleted it.
 - Mongoose configured `strict: 'throw'`, `strictQuery: 'throw'`, `autoIndex`/`autoCreate` off.
 
 ## Integration state
@@ -556,15 +752,19 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 | MongoDB | **Running locally** (Docker `rs0`) | ADR-0020; readiness reports transaction support; audit and authorization collections in use |
 | Redis | **Running locally** (Docker) | ADR-0020; rate limiting and BullMQ |
 | AWS S3 / KMS | Interfaces only | Unconfigured implementations fail loudly |
-| WhatsApp / Meta / email / SMS / gateway | Not started | Phase 3+ |
+| WhatsApp | **Adapter interface only.** `ReminderDeliveryAdapter` with a simulated implementation that refuses to run outside development and test, and reports `connected: false`. No account, no approved template, no provider selected (`SD-20`) |
+| Meta / advertising platforms | **Not connected, and there is nothing to connect.** Campaigns are local drafts: no publish route, no publish permission, no published state, no external reference field (ADR-0026) |
+| E-mail / SMS / payment gateway | Not started | Phase 3+ |
 | Meta Conversions API | Not started | Optional; production delivery gated (ADR-0017) |
 
 ## Blockers
 
 | ID | Blocker | Blocks |
 |---|---|---|
-| Phase 1 scope | 44 of 113 requirements not started; 10 in progress | **Phase 1 approval** (phase-gates §1) |
-| Stakeholder gate | Demonstration and written approval outstanding | **Phase 1 approval** |
+| Phase 1 scope | 24 of 113 requirements not started; 10 in progress | **Phase 1 approval** (phase-gates §1) |
+| Stakeholder gate | Written approval outstanding. The demonstration is now **buildable and runnable** — `npm run seed:demo` — but has not been given | **Phase 1 approval** |
+| `SD-01`, `SD-02` | The real organization, roles, approval thresholds and segregation-of-duty rules. The demonstration seeds illustrative ones and closes neither | **Macro Phase 2** |
+| `SEC-033` | No KMS adapter, so staging and production cannot store an MFA secret | Any environment beyond development |
 | `SD-01`–`SD-12`, `SD-17`–`SD-21` | Open stakeholder decisions (17) | Their assigned phases — none blocks Phase 1 |
 
 `D2` is **closed**: development services exist and the integration tier passes with zero skips.
@@ -573,6 +773,13 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 | Item | Mitigation / next step |
 |---|---|
+| **A scope level applies to an account, not to a resource.** A unit has no assignee, so an `assigned`-scoped representative resolves to "no inventory" and can never reach the unit they are reserving | The demonstration roles use branch scope instead. Per-resource scope is Macro Phase 2 work; giving units a fake owner to sidestep it was refused |
+| The demonstration seed and the integration tier write to the same MongoDB | They now use **separate databases**. An existing machine picks the second one up by re-running `npm run dev:services:up`. Before that separation, an integration run silently deleted the seeded demonstration data |
+| The end-to-end suite needs the demonstration data and the generated credentials file | Run `npm run seed:demo` first. The suite says exactly that in its failure message rather than failing obscurely |
+| The demonstration roles, the 10% discount threshold and the seeded approval policy are illustrative | They are **not** `SD-01`/`SD-02` and close neither. `scripts/seed-demo/roles.ts` says so at the top, and so does the runbook |
+| Campaign figures are invented | Stored as `demoMetrics`, never `metrics`; labelled on screen; no provider is connected, and there is no publish operation to connect one to |
+| `.demo-credentials.md` holds working passwords and an authenticator secret in plain text | Ignored by Git, written with restrictive permissions, never printed or logged, and deleted by the reset. It exists only on the machine that ran the seed |
+| The demonstration contract preview could be mistaken for an approved contract | Labelled as a demonstration document on screen, and stated in the walkthrough's "what not to say" list. The real template is a stakeholder input |
 | Hosted CI has never run (no remote) | Run `npm run verify` + E2E locally before each commit until a remote exists |
 | Secret scan is pattern-based, not a dedicated scanner | Add a dedicated scanner when CI exists |
 | Escalation cannot resolve a direct manager until `CORE-ORG` exists, so an overdue approval escalates to nobody | `APPROVAL-005` stays `in-progress`; the sweep reports unresolved stages rather than hiding them (Phase 2, `SD-01`) |
@@ -591,6 +798,66 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 | `C:` free space dropped from ~21 GB to ~17 GB during the session (not caused by this project's ~0.6 GB) | Re-check before large installs |
 
 ## Handoff summary
+
+**Macro Phase 1 (Client Demo MVP) is built, green, and stopped for review.** Eleven local commits on
+`main`, from the delivery rebaseline (`b61b4df`) to this documentation commit. Nothing is pushed,
+nothing is deployed, and there is still no remote.
+
+A person with Docker running can demonstrate the product in four commands:
+
+```
+npm run dev:services:up
+npm run seed:demo          # passwords land in the ignored .demo-credentials.md
+npm run dev:api
+npm run dev:web            # http://localhost:5173, Arabic RTL
+```
+
+The journey is real: dashboard → lead → opportunity → unit → reservation → contract → instalment
+schedule → collection → receipt → upcoming-instalment reminder. Every record was written through the
+product's own services, with the same permission checks, scope filters, transactions and audit writes
+an HTTP request would produce. Two contracts carry full schedules, two instalments are genuinely
+overdue, two reminders fall inside the fifteen-day window, and one 12% discount sits at pending
+approval, left undecided so the live demonstration has something to decide.
+
+**What is deliberately not connected, and says so on screen:** Meta advertising, WhatsApp delivery,
+and payment providers. Marketing campaigns are local drafts with no publish route, no publish
+permission and no published state. Reminders reach `simulated` and can never reach `sent`. Campaign
+figures are stored as `demoMetrics` and labelled as demonstration figures. The sign-in screen itself
+states that the environment is a demonstration with fictional data. All of it is fictional: e-mail
+addresses use the reserved `demo.invalid` domain, phone numbers are a synthetic series, and national
+identifiers read `DEMO-NID-…`.
+
+**Nothing about requirement status changed.** `docs/REQUIREMENTS.md` is untouched: no ID renamed,
+renumbered, merged or retired; no status raised; no requirement `verified`. Phase 1's gate is still
+open, 24 of its 113 requirements are not started, and **Phase 1 is not approved**. The demonstration
+slice lives in modules registered to Phases 2–5 and does not make them `implemented` (ADR-0025).
+
+Verification, measured on 2026-09-23: lint and format clean, strict typecheck across the root and
+nine workspaces, **430 unit tests**, **integration gate 337 passed / 0 failed / 0 skipped** against
+real MongoDB and Redis, **37 end-to-end tests** against the built web application and the built API,
+i18n complete, secret scan over 327 files, 351 documentation links with none broken, production build
+green, largest bundle chunk 325.1 kB (97.0 kB gzip) against an unchanged 650/210 budget, 0 dependency
+vulnerabilities, the Arabic PDF byte-identical, and the built API serving 98 OpenAPI paths with no
+broken references and answering 401 without a token.
+
+Three defects in already-shipped code were found and fixed along the way: the instalment schedule
+dated every instalment one period late, `actOnReminder` recorded a successful simulation as failed
+whenever the caller explained why, and the integration tier shared a database with development and
+was deleting the demonstration data through its own cleanup. Each has a test.
+
+One thing is recorded as debt rather than worked around: **a scope level applies to an account, not to
+a resource**, so per-representative lead privacy cannot coexist with readable inventory until
+per-resource scope exists.
+
+**Next:** the stakeholder review. `SD-01` and `SD-02` — the real organization, roles, approval
+thresholds and segregation-of-duty rules — are what Macro Phase 2 needs, and the demonstration's seven
+roles and single 10% discount policy close neither. `SEC-033` (the KMS adapter) still blocks MFA
+outside development. Do not begin Macro Phase 2 until instructed.
+
+Operational guide: [`demo/runbook.md`](demo/runbook.md). Arabic presentation script:
+[`demo/walkthrough-ar.md`](demo/walkthrough-ar.md).
+
+## Handoff summary — Phase 1 build half (superseded detail, kept for traceability)
 
 Local commits: documentation baseline (`7a840b3`), Phase 1 scaffolding (`4c988db`), Phase 1 review decisions
 (`4365775`), development services and the integration gate (`dfc0ac5`), the audit subsystem plus

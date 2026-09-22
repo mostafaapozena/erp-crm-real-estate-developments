@@ -44,6 +44,13 @@ code is a **demonstration slice**, and a slice never satisfies a requirement:
 - `docs/MEMORY.md` records demo-slice scope in its own section, separately from requirement status.
 - No requirement becomes `verified` because of the client demonstration.
 
+**Macro Phase 1 was completed on 2026-09-23, and this registry is unchanged by it.** The slice built
+`CORE-ORG`, inventory, CRM, sales, collections and marketing modules, a web application, a
+development-only demonstration seed, and an end-to-end suite. Not one ID below was renamed,
+renumbered, merged, retired or raised in status; nothing became `verified`; Phase 1's gate is still
+open. What was built, and what it deliberately does not do, is in `docs/MEMORY.md` §"Macro Phase 1 —
+the demonstration slice".
+
 ## Current status summary
 
 | | Count |

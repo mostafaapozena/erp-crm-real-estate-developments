@@ -475,6 +475,26 @@ by `apps/api/src/platform/indexes.ts` at startup.
 `auditEvents` is append-only. Session and token rows carry a `purgeAfter` date and are removed by MongoDB
 once they are long expired — the *evidence* of a session lives in the audit trail, which is not expired.
 
+#### Collections added by the demonstration slice
+
+Macro Phase 1 added the business modules the demonstration journey needs. They follow the same rules —
+scope fields on every record, no hard deletes, audited mutations — and their indexes are declared in the
+same place.
+
+| Module | Collections |
+|---|---|
+| `CORE-ORG` | `orgLegalEntities`, `orgBranches`, `orgDepartments`, `orgTeams`, `orgJobTitles`, `orgPlacements` |
+| Inventory | `inventoryProjects`, `inventoryBuildings`, `inventoryUnits`, `inventoryUnitEvents` (append-only) |
+| CRM | `crmCustomers`, `crmLeads`, `crmActivities` |
+| Sales | `salesReservations`, `salesContracts`, `salesInstallments`, `salesCounters` |
+| Collections | `collectionReceipts`, `collectionInstruments`, `collectionReminders` |
+| Marketing | `marketingCampaigns` |
+
+One further collection exists **only in a development database**: `demoSeedLedger`, written by
+`npm run seed:demo`. It records the identifier of every record the seed created, which is what lets
+`npm run seed:demo:reset` remove exactly those and nothing else. It is not part of the product, no
+service reads it, and no route exposes it.
+
 ### Redaction
 
 Three independent layers, none of which relies on the others:
@@ -492,9 +512,11 @@ themselves restricted fields, requiring `audit.viewContext`.
 
 ### Deliberately not implemented yet
 
-- **Escalation to a direct manager** cannot resolve anyone until `CORE-ORG` supplies the reporting line
-  (Phase 2, `SD-01`). The mechanism is built and tested; an overdue stage is reported as *unresolved*
-  rather than escalated (`APPROVAL-005`).
+- **Escalation to a direct manager** is now wired: the demonstration slice built `CORE-ORG`, and the
+  approval engine resolves the reporting line through it. `APPROVAL-005` nevertheless stays
+  `in-progress`, because that module is a **demonstration slice and not the registered `CORE-ORG`
+  requirement** (ADR-0025), and because an overdue stage with no resolvable manager is still reported
+  as *unresolved* rather than escalated to an invented one.
 - **Notification and task delivery** for approvals — `CORE-NOTIFY`, `CORE-TASK`. The engine publishes a
   domain event through a port with nothing wired to it, and is correct with nothing listening.
 - **Password-reset and invitation delivery** — `CORE-NOTIFY`. Until it exists, an administrator issues a

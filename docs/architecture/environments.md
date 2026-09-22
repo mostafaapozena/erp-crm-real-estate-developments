@@ -209,6 +209,7 @@ npm run test:integration:gate   # the same tests, but FAILS if MongoDB or Redis 
 |---|---|---|
 | `MONGODB_URI` | local replica set: host `127.0.0.1:27017`, `replicaSet=rs0`, `authSource=real_estate_erp_dev`, generated user info | MongoDB tests (`PLAT-014`) |
 | `MONGODB_DB_NAME` | `real_estate_erp_dev` — must not contain `prod` | MongoDB tests |
+| `MONGODB_INTEGRATION_DB_NAME` | `real_estate_erp_dev_int` — the integration tier's **own** database | `vitest.integration.config.ts` |
 | `REDIS_URL` | local Redis: host `127.0.0.1:6379`, generated password | Redis and BullMQ tests (`PLAT-015`, `INTEGRATION-006`) |
 | `TZ` | `UTC` | Set by the test configuration |
 
@@ -224,6 +225,30 @@ npm run test:integration:gate        # must report 3 passed, 0 skipped, for the 
 
 The integration configuration loads `.env` itself. `.env` is ignored by Git; confirm with
 `git check-ignore .env` before any commit.
+
+**The integration tier uses its own database** (`MONGODB_INTEGRATION_DB_NAME`), on the same MongoDB as
+development. The two were sharing one, and that was a real problem rather than a tidiness one: the
+suites assert against global state — "three units exist, and a scoped actor sees two" — so anything
+else in the database is data those assertions are counting. Once `npm run seed:demo` put a whole
+organization there, the tier both failed for unrelated reasons and wiped the demonstration data
+through its own cleanup. `dev:services:up` grants the development user readWrite on the second
+database and writes its name into `.env`; **an existing installation picks it up by re-running that
+command**, with no re-provisioning and no lost volumes. With the variable absent, the tier falls back
+to the development database and behaves as it did before.
+
+### Seeding the demonstration data
+
+```sh
+npm run seed:demo                     # idempotent; writes .demo-credentials.md (ignored by Git)
+npm run seed:demo:reset               # shows what would be removed, removes nothing
+npm run seed:demo:reset -- --confirm  # removes exactly what the seed created
+```
+
+The seed writes through the product's own services as the seeded accounts themselves, so every record
+passed the same validation, permission check, data scope, transaction and audit write that an HTTP
+request would. It refuses to run unless `APP_ENV` is `development` or `test`, the database name
+carries a development marker, and the connection points at the local machine. See
+[the demonstration runbook](../demo/runbook.md).
 
 Development servers: `npm run dev:api`, `npm run dev:worker`, `npm run dev:web`. The API and worker read
 the untracked repository-root `.env` (copy `.env.example`).
