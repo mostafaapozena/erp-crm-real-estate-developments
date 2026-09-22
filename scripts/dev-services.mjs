@@ -211,20 +211,43 @@ async function ensureReplicaSet(credentials) {
 }
 
 /**
- * Least privilege: the application user gets readWrite on the development database only — no
- * cluster administration, no access to other databases.
+ * The database the integration tier uses.
+ *
+ * Derived from the development database name rather than configured separately, so the two can never
+ * drift apart, and so it keeps the `dev` marker that the demonstration seed's guard looks for.
+ */
+function integrationDbName(credentials) {
+  return `${credentials.MONGO_APP_DB}_int`;
+}
+
+/**
+ * Least privilege: the application user gets readWrite on the two development databases only — no
+ * cluster administration, no access to anything else.
+ *
+ * There are two because the integration tier needs a database of its own. It shares a MongoDB with
+ * development, but not a database: the integration suites assert against global state — "three units
+ * exist, and a scoped actor sees two" — and the demonstration seed puts a whole organization into the
+ * development database. Sharing one made the gate fail for reasons that had nothing to do with the
+ * code under test.
+ *
+ * `updateUser` runs on every `dev:services:up`, so an existing installation picks the second database
+ * up by re-running that command. Nothing is re-provisioned and no volume is touched.
  */
 function ensureAppUser(credentials) {
   const script = `
     const db = db.getSiblingDB('${credentials.MONGO_APP_DB}');
     const user = '${credentials.MONGO_APP_USERNAME}';
     const pwd = process.env.APP_PASSWORD;
+    const roles = [
+      { role: 'readWrite', db: '${credentials.MONGO_APP_DB}' },
+      { role: 'readWrite', db: '${integrationDbName(credentials)}' },
+    ];
     const exists = db.getUser(user) !== null;
     if (exists) {
-      db.updateUser(user, { pwd, roles: [{ role: 'readWrite', db: '${credentials.MONGO_APP_DB}' }] });
+      db.updateUser(user, { pwd, roles });
       print('updated');
     } else {
-      db.createUser({ user, pwd, roles: [{ role: 'readWrite', db: '${credentials.MONGO_APP_DB}' }] });
+      db.createUser({ user, pwd, roles });
       print('created');
     }
   `;
@@ -271,6 +294,7 @@ function writeAppEnv(credentials) {
   updateEnvFile(appEnvFile, {
     MONGODB_URI: mongoUri,
     MONGODB_DB_NAME: credentials.MONGO_APP_DB,
+    MONGODB_INTEGRATION_DB_NAME: integrationDbName(credentials),
     REDIS_URL: redisUrl,
     TZ: 'UTC',
   });
@@ -305,12 +329,13 @@ async function up() {
 
   console.log(`Replica set: ${await ensureReplicaSet(credentials)}`);
   console.log(
-    `Application user (readWrite on ${credentials.MONGO_APP_DB} only): ${ensureAppUser(credentials)}`,
+    `Application user (readWrite on ${credentials.MONGO_APP_DB} and ${integrationDbName(credentials)} only): ${ensureAppUser(credentials)}`,
   );
 
   writeAppEnv(credentials);
   console.log(
-    'Wrote MONGODB_URI, MONGODB_DB_NAME, REDIS_URL, TZ into the ignored .env (values not shown).',
+    'Wrote MONGODB_URI, MONGODB_DB_NAME, MONGODB_INTEGRATION_DB_NAME, REDIS_URL and TZ into the',
+    'ignored .env (values not shown).',
   );
   console.log('Next: npm run test:integration:gate');
 }

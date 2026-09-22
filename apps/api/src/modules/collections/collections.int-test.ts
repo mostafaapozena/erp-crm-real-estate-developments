@@ -909,6 +909,42 @@ describe.skipIf(!gate.available)(`collections module — ${gate.reason}`, () => 
       expect(acted.body.state).not.toBe('sent');
     });
 
+    it('keeps a simulated reminder simulated when the caller explains why', async () => {
+      // A note is a note. This once turned a successful simulation into `failed`, because any
+      // supplied reason was treated as a failure reason — a red row for something that worked.
+      await contractWithSchedule();
+      await as(MANAGER)
+        .post('/api/v1/collections/reminders/generate')
+        .send({ withinDays: 15 })
+        .expect(200);
+      const page = await as(MANAGER).get('/api/v1/collections/reminders').expect(200);
+      const reminderId = (page.body.items[0] as { reminderId: string }).reminderId;
+
+      const acted = await as(MANAGER)
+        .post(`/api/v1/collections/reminders/${reminderId}/act`)
+        .send({ state: 'simulated', reason: 'rehearsing the collection run' })
+        .expect(200);
+      expect(acted.body.state).toBe('simulated');
+      expect(acted.body.failureReason).toBeUndefined();
+    });
+
+    it('records the reason on a reminder the caller marks failed', async () => {
+      await contractWithSchedule();
+      await as(MANAGER)
+        .post('/api/v1/collections/reminders/generate')
+        .send({ withinDays: 15 })
+        .expect(200);
+      const page = await as(MANAGER).get('/api/v1/collections/reminders').expect(200);
+      const reminderId = (page.body.items[0] as { reminderId: string }).reminderId;
+
+      const acted = await as(MANAGER)
+        .post(`/api/v1/collections/reminders/${reminderId}/act`)
+        .send({ state: 'failed', reason: 'the number is no longer in service' })
+        .expect(200);
+      expect(acted.body.state).toBe('failed');
+      expect(acted.body.failureReason).toBe('the number is no longer in service');
+    });
+
     it('widens the window when asked', async () => {
       await contractWithSchedule();
       const wide = await as(MANAGER)

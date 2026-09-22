@@ -14,6 +14,10 @@ export default defineConfig(
       '**/coverage/**',
       '**/playwright-report/**',
       '**/test-results/**',
+      // Untracked local scratch space (see .gitignore). Nothing here ships, and a throwaway probe
+      // script failing the repository lint helps no one.
+      'scratch/**',
+      'sandbox/**',
     ],
   },
   js.configs.recommended,

@@ -12,8 +12,18 @@ import { defineConfig } from 'vitest/config';
  * work for the rows but not for those totals, and a gate that passes or fails depending on scheduling
  * is worse than a gate that takes longer. The alternative, a database per suite, is a bigger change
  * than the problem warrants while the suite count is small.
+ *
+ * **The tier has its own database**, separate from the one development and the demonstration seed
+ * use. Those same unscoped totals mean any other data in the database is data the assertions are
+ * counting, and a seeded demonstration organization is a lot of it. `npm run dev:services:up` grants
+ * the development user readWrite on it and writes its name into `.env`; without that variable the
+ * tier falls back to the development database and behaves as it did before.
  */
 if (existsSync('.env')) process.loadEnvFile('.env');
+
+const integrationDbName =
+  process.env['MONGODB_INTEGRATION_DB_NAME'] ?? process.env['MONGODB_DB_NAME'];
+if (integrationDbName) process.env['MONGODB_DB_NAME'] = integrationDbName;
 
 const integrationProject = (name: string, root: string) => ({
   test: {
@@ -21,7 +31,7 @@ const integrationProject = (name: string, root: string) => ({
     root,
     environment: 'node' as const,
     include: ['src/**/*.int-test.ts'],
-    env: { TZ: 'UTC' },
+    env: { TZ: 'UTC', ...(integrationDbName ? { MONGODB_DB_NAME: integrationDbName } : {}) },
     testTimeout: 30_000,
     fileParallelism: false,
   },

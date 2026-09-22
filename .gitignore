@@ -56,6 +56,13 @@ known_hosts
 *.session
 
 # ---------------------------------------------------------------------------
+# Generated demonstration credentials
+# Written by `npm run seed:demo` and containing working passwords and TOTP
+# secrets for the local development database. Never commit it.
+# ---------------------------------------------------------------------------
+.demo-credentials.md
+
+# ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
 node_modules/

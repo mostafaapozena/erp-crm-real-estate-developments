@@ -967,20 +967,31 @@ export class CollectionService {
     }
 
     let simulated = current.simulated;
-    let failureReason = input.reason;
+    /**
+     * Only a real rejection produces a failure.
+     *
+     * The caller's `reason` is a note for the audit trail, not evidence that anything went wrong: a
+     * person marking a reminder as failed says why, and a person simulating one may still want to
+     * record why they did it. Treating any supplied reason as a failure meant an explanatory note on
+     * a successful simulation silently stored the reminder as `failed` — the collections screen then
+     * showed a red row for something that had worked.
+     */
+    let failureReason = input.state === 'failed' ? input.reason : undefined;
+    let rejected = false;
     if (input.state === 'simulated') {
       const adapter = this.options.delivery;
       if (!adapter) throw new CollectionConflictError('noDeliveryAdapterConfigured');
       const result = await adapter.deliver(current);
       simulated = !adapter.connected;
       if (!result.accepted) {
+        rejected = true;
         failureReason = result.reason ?? 'the adapter did not accept the message';
       }
     }
 
     const now = new Date();
     const set: Record<string, unknown> = {
-      state: !failureReason || input.state !== 'simulated' ? input.state : 'failed',
+      state: rejected ? 'failed' : input.state,
       simulated,
       lastAttemptAt: now,
       updatedAt: now,
