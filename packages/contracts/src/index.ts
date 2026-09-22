@@ -9,6 +9,7 @@ export * from './identifiers';
 export * from './identity';
 export * from './inventory';
 export * from './localized';
+export * from './marketing';
 export * from './money';
 export * from './organization';
 export * from './sales';

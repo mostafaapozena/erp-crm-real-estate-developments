@@ -29,6 +29,7 @@ import {
 } from './modules/collections';
 import { CrmService, crmRouter } from './modules/crm';
 import { InventoryService, inventoryRouter } from './modules/inventory';
+import { MarketingService, marketingRouter } from './modules/marketing';
 import { OrganizationService, organizationRouter } from './modules/organization';
 import { SalesService, salesRouter } from './modules/sales';
 import { SecurityService, securityRouter } from './modules/security';
@@ -113,6 +114,7 @@ let inventoryService: InventoryService | undefined;
 let crmService: CrmService | undefined;
 let salesService: SalesService | undefined;
 let collectionService: CollectionService | undefined;
+let marketingService: MarketingService | undefined;
 
 /**
  * Encryption for MFA secrets (`SEC-017`).
@@ -353,6 +355,20 @@ function getCollectionService(): CollectionService {
   return collectionService;
 }
 
+/**
+ * Marketing. No provider adapter is wired, because none exists and none may be invented: there is no
+ * publish operation to wire it to (ADR-0026).
+ */
+function getMarketingService(): MarketingService {
+  const connection = requireConnection();
+  marketingService ??= new MarketingService({
+    connection,
+    audit: getAuditService(),
+    resolveBranch: (branchId) => getOrganizationService().findBranch(branchId),
+  });
+  return marketingService;
+}
+
 /** Authorization denials are security events (AUDIT-005). A failure to record must not hide the denial. */
 const guard = {
   onDenied: async (denial: {
@@ -467,6 +483,7 @@ const modules: ApiModule[] = [
     basePath: '/collections',
     router: collectionRouter({ getService: getCollectionService, guard }),
   },
+  { basePath: '/marketing', router: marketingRouter({ getService: getMarketingService, guard }) },
   { basePath: '/auth', router: authRouter(identityRouterOptions) },
   { basePath: '/me', router: meRouter(identityRouterOptions) },
   { basePath: '/security', router: securityRouter({ getService: getSecurityService, guard }) },

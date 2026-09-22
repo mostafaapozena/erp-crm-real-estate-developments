@@ -16,6 +16,7 @@ import {
   sessionModel,
 } from '../modules/identity/model';
 import { buildingModel, projectModel, unitEventModel, unitModel } from '../modules/inventory/model';
+import { campaignModel } from '../modules/marketing/model';
 import {
   branchModel,
   departmentModel,
@@ -71,6 +72,7 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     receiptModel(connection),
     instrumentModel(connection),
     reminderModel(connection),
+    campaignModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {
