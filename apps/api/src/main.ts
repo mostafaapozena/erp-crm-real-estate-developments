@@ -9,6 +9,8 @@ import { approvalRouter } from './modules/approval';
 import { auditRouter } from './modules/audit';
 import { accountAdminRouter, authRouter, cookiePolicyFor, meRouter } from './modules/identity';
 import { collectionRouter } from './modules/collections';
+import { documentRouter, fileRouter, templateRouter } from './modules/documents';
+import { LocalDiskFileStore } from '@alola/security';
 import { brandingRouter, companyRouter } from './modules/company';
 import { crmRouter } from './modules/crm';
 import { inventoryRouter } from './modules/inventory';
@@ -103,6 +105,7 @@ const services = createDomainServices({
   requireConnection,
   redisClient: redis.client ?? undefined,
   onAuditRecorded: noteAuditWrite,
+  repositoryRoot,
 });
 
 const getAuditService = services.audit;
@@ -203,6 +206,26 @@ const modules: ApiModule[] = [
   { basePath: '/branding', router: brandingRouter({ getService: getCompanyService }) },
   { basePath: '/settings', router: settingsRouter({ getService: getSettingsService, guard }) },
   { basePath: '/numbering', router: numberingRouter({ getService: getNumberingService, guard }) },
+  {
+    basePath: '/documents',
+    router: documentRouter({
+      getDocuments: services.documents,
+      getTemplates: services.templates,
+      guard,
+    }),
+  },
+  {
+    basePath: '/templates',
+    router: templateRouter({
+      getDocuments: services.documents,
+      getTemplates: services.templates,
+      guard,
+    }),
+  },
+  // Signed file delivery exists only for the local store; object storage serves its own links.
+  ...(services.fileStore instanceof LocalDiskFileStore
+    ? [{ basePath: '/files' as const, router: fileRouter({ store: services.fileStore }) }]
+    : []),
   {
     basePath: '/reference-data',
     router: referenceDataRouter({ getService: getSettingsService, guard }),

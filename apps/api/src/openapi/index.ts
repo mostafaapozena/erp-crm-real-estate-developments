@@ -47,6 +47,7 @@ import { z } from 'zod';
 import { collectionComponents, collectionPaths } from './collections';
 import { companyComponents, companyPaths } from './company';
 import { crmComponents, crmPaths } from './crm';
+import { documentComponents, documentPaths } from './documents';
 import { inventoryComponents, inventoryPaths } from './inventory';
 import { marketingComponents, marketingPaths } from './marketing';
 import { numberingComponents, numberingPaths } from './numbering';
@@ -113,6 +114,7 @@ const components = {
   ...companyComponents,
   ...settingsComponents,
   ...numberingComponents,
+  ...documentComponents,
 } as const;
 
 type ComponentName = keyof typeof components;
@@ -270,6 +272,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     ...companyPaths(helpers),
     ...settingsPaths(helpers),
     ...numberingPaths(helpers),
+    ...documentPaths(helpers),
   };
   const schemas = Object.fromEntries(
     Object.entries(components).map(([name, schema]) => {

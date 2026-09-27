@@ -8,6 +8,7 @@ import {
 } from '../modules/approval/model';
 import { auditModel } from '../modules/audit/model';
 import { instrumentModel, receiptModel, reminderModel } from '../modules/collections/model';
+import { documentModel, documentVersionModel, templateModel } from '../modules/documents/model';
 import {
   brandAssetModel,
   companyProfileModel,
@@ -99,6 +100,9 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     numberSequenceModel(connection),
     numberCounterModel(connection),
     issuedNumberModel(connection),
+    documentModel(connection),
+    documentVersionModel(connection),
+    templateModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {

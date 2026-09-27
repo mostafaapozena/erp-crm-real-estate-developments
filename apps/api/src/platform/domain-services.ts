@@ -1,12 +1,18 @@
 import type { loadApiConfig } from '@alola/config';
 import {
   DevKeyEncryptor,
+  LocalDiskFileStore,
   PasswordHasher,
   TokenIssuer,
   UnconfiguredEncryptor,
+  UnconfiguredFileStore,
+  UnconfiguredMalwareScanner,
   type Encryptor,
   type Logger,
+  type PrivateFileStore,
 } from '@alola/security';
+import { DOCUMENT_MAX_BYTES } from '@alola/contracts';
+import { resolve } from 'node:path';
 import { businessDateInZone, nowInstant } from '@alola/contracts';
 import type { Connection } from 'mongoose';
 import type { Redis } from 'ioredis';
@@ -14,6 +20,7 @@ import { ApprovalService, NoApplicablePolicyError } from '../modules/approval';
 import { AuditService } from '../modules/audit';
 import { CollectionService, SimulatedReminderDelivery } from '../modules/collections';
 import { CompanyService } from '../modules/company';
+import { DocumentService, TemplateService, type OwnerResolver } from '../modules/documents';
 import { CrmService } from '../modules/crm';
 import { AuthThrottle, IdentityService } from '../modules/identity';
 import { InventoryService } from '../modules/inventory';
@@ -50,6 +57,11 @@ export interface DomainServiceOptions {
   redisClient?: Redis | undefined;
   /** Called after every audit write; the API uses it to enforce `AUDIT-003` per request. */
   onAuditRecorded?: (() => void) | undefined;
+  /**
+   * The repository root, for resolving the development file store. Supplied by the entry point, which
+   * knows where it runs from — a bundled build sits at a different depth than the source.
+   */
+  repositoryRoot?: string | undefined;
 }
 
 export interface DomainServices {
@@ -66,6 +78,10 @@ export interface DomainServices {
   company: () => CompanyService;
   settings: () => SettingsService;
   numbering: () => NumberingService;
+  documents: () => DocumentService;
+  templates: () => TemplateService;
+  /** The private file store; a `LocalDiskFileStore` only in development and test. */
+  fileStore: PrivateFileStore;
 }
 
 export function createDomainServices(options: DomainServiceOptions): DomainServices {
@@ -84,6 +100,8 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let companyService: CompanyService | undefined;
   let settingsService: SettingsService | undefined;
   let numberingService: NumberingService | undefined;
+  let documentService: DocumentService | undefined;
+  let templateService: TemplateService | undefined;
 
   /**
    * Encryption for MFA secrets (`SEC-017`).
@@ -105,6 +123,20 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     parallelism: config.ARGON2_PARALLELISM,
   });
   const authThrottle = new AuthThrottle(options.redisClient ?? undefined);
+
+  /**
+   * Private file storage (PLAT-017). Development and test keep files on the local disk behind signed,
+   * expiring links; staging and production need private object storage, whose adapter is not built
+   * yet — so there the store refuses loudly rather than writing to a server's disk (ADR-0012).
+   */
+  const repositoryRoot = options.repositoryRoot ?? process.cwd();
+  const fileStore: PrivateFileStore =
+    config.APP_ENV === 'development' || config.APP_ENV === 'test'
+      ? new LocalDiskFileStore(
+          config.APP_ENV,
+          resolve(repositoryRoot, config.FILE_STORAGE_DIR ?? '.local-storage'),
+        )
+      : new UnconfiguredFileStore();
 
   function getAuditService(): AuditService {
     const connection = requireConnection();
@@ -157,6 +189,106 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
         getSettingsService().valueOf<number>('finance.fiscalYearStartMonth'),
     });
     return numberingService;
+  }
+
+  /**
+   * A document is exactly as visible as the record it belongs to. Each owner type resolves through its
+   * module's **scoped** getter, so a record outside the actor's scope is not found and nothing is
+   * attached to it; the placement returned is what the document's own scope filter then uses.
+   */
+  const resolveOwner: OwnerResolver = async (actor, type, id) => {
+    switch (type) {
+      case 'lead': {
+        const lead = await getCrmService().getLead(actor, id);
+        return {
+          legalEntityId: lead.legalEntityId,
+          branchId: lead.branchId,
+          departmentId: lead.departmentId,
+          teamId: lead.teamId,
+          ownerAccountId: lead.assignedToAccountId,
+        };
+      }
+      case 'customer': {
+        const customer = await getCrmService().getCustomer(actor, id);
+        return {
+          legalEntityId: customer.legalEntityId,
+          branchId: customer.branchId,
+          ownerAccountId: customer.ownerAccountId,
+        };
+      }
+      case 'project': {
+        const project = await getInventoryService().getProject(actor, id);
+        return {
+          legalEntityId: project.legalEntityId,
+          branchId: project.branchId,
+          projectId: project.projectId,
+        };
+      }
+      case 'unit': {
+        const unit = await getInventoryService().getUnit(actor, id);
+        return {
+          legalEntityId: unit.legalEntityId,
+          branchId: unit.branchId,
+          projectId: unit.projectId,
+        };
+      }
+      case 'reservation': {
+        const reservation = await getSalesService().getReservation(actor, id);
+        return {
+          legalEntityId: reservation.legalEntityId,
+          branchId: reservation.branchId,
+          departmentId: reservation.departmentId,
+          teamId: reservation.teamId,
+          projectId: reservation.projectId,
+          ownerAccountId: reservation.salesOwnerAccountId,
+        };
+      }
+      case 'contract': {
+        const contract = await getSalesService().getContract(actor, id);
+        return {
+          legalEntityId: contract.legalEntityId,
+          branchId: contract.branchId,
+          departmentId: contract.departmentId,
+          teamId: contract.teamId,
+          projectId: contract.projectId,
+          ownerAccountId: contract.salesOwnerAccountId,
+        };
+      }
+      case 'receipt': {
+        const receipt = await getCollectionService().getReceipt(actor, id);
+        return {
+          legalEntityId: receipt.legalEntityId,
+          branchId: receipt.branchId,
+          teamId: receipt.teamId,
+          projectId: receipt.projectId,
+          ownerAccountId: receipt.receivedByAccountId,
+        };
+      }
+      case 'company':
+        // Deployment-wide papers — the company's own registrations — for the all scope only.
+        return actor.scope.level === 'all' ? { legalEntityId: 'deployment' } : undefined;
+    }
+  };
+
+  /** Documents (CORE-DOC-004, CORE-DOC-006). No scanner is selected yet: files are `not_scanned`. */
+  function getDocumentService(): DocumentService {
+    const connection = requireConnection();
+    documentService ??= new DocumentService({
+      connection,
+      audit: getAuditService(),
+      store: fileStore,
+      scanner: new UnconfiguredMalwareScanner(),
+      resolveOwner,
+      maxBytes: DOCUMENT_MAX_BYTES,
+    });
+    return documentService;
+  }
+
+  /** Templates (CORE-DOC-002). No wording ships with the product (`SD-10`). */
+  function getTemplateService(): TemplateService {
+    const connection = requireConnection();
+    templateService ??= new TemplateService({ connection, audit: getAuditService() });
+    return templateService;
   }
 
   function getOrganizationService(): OrganizationService {
@@ -435,5 +567,8 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     company: getCompanyService,
     settings: getSettingsService,
     numbering: getNumberingService,
+    documents: getDocumentService,
+    templates: getTemplateService,
+    fileStore,
   };
 }

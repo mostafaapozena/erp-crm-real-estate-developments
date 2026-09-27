@@ -57,6 +57,7 @@ Implemented variables (Phase 1 scaffolding, `packages/config/src/env.ts`):
 | Redis | `REDIS_URL` | staging and production; always for the worker |
 | Worker | `WORKER_CONCURRENCY` | — |
 | Files and encryption | `S3_BUCKET`, `S3_REGION`, `KMS_KEY_ID` | staging and production |
+| Development files | `FILE_STORAGE_DIR` (default `.local-storage`, ignored by Git) | development and test only; the disk store refuses to start elsewhere |
 
 Added in the phase that needs them, never before: session secrets and token lifetimes (`SEC-014`),
 provider credentials (Phase 3+), `SENTRY_DSN` (monitoring).

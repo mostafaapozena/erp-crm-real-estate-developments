@@ -39,6 +39,57 @@ export function validateUpload(
 }
 
 /**
+ * A file name safe to show and to offer on download (SEC-005).
+ *
+ * The name a person uploaded is kept as a courtesy — never as a storage key, which the server
+ * generates — and it is cleaned of everything that could deceive or break:
+ *
+ * - directory parts (`../../etc/passwd`, `C:\\x\\y.pdf`) — only the last segment survives;
+ * - control characters and **bidirectional overrides** (`U+202E`), which can make `invoice<U+202E>fdp.exe`
+ *   display as `invoiceexe.pdf`;
+ * - characters reserved on common file systems;
+ * - leading dots, so nothing becomes a hidden file.
+ *
+ * The extension is then **forced to match the verified content type**: a PDF is offered as `.pdf`
+ * whatever it was called.
+ */
+const EXTENSIONS: Record<AllowedContentType, string> = {
+  'application/pdf': 'pdf',
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+};
+
+/** Control characters, bidirectional controls and zero-width characters, by code point. */
+function isInvisibleOrControl(codePoint: number): boolean {
+  return (
+    codePoint <= 0x1f ||
+    (codePoint >= 0x7f && codePoint <= 0x9f) ||
+    (codePoint >= 0x200b && codePoint <= 0x200f) ||
+    (codePoint >= 0x202a && codePoint <= 0x202e) ||
+    (codePoint >= 0x2066 && codePoint <= 0x2069) ||
+    codePoint === 0xfeff
+  );
+}
+
+export function sanitizeFileName(input: string, contentType: AllowedContentType): string {
+  const lastSegment = input.split(/[\\/]/).pop() ?? '';
+  const visible = [...lastSegment.normalize('NFC')]
+    .filter((character) => !isInvisibleOrControl(character.codePointAt(0) ?? 0))
+    .join('');
+  const cleaned = visible
+    .replace(/[<>:"|?*]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\.+/, '');
+  const stem =
+    cleaned
+      .replace(/\.[^.]*$/, '')
+      .slice(0, 120)
+      .trim() || 'document';
+  return `${stem}.${EXTENSIONS[contentType]}`;
+}
+
+/**
  * Malware scanning hook. The scanner is a provider (ADR-0010); until one is selected, uploads are
  * marked `not_scanned`, which downstream code must treat as untrusted — never as clean.
  */

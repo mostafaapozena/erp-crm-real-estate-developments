@@ -132,6 +132,11 @@ export const apiEnvSchema = z.object({
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().min(1).default(300),
   S3_BUCKET: optionalString,
   S3_REGION: optionalString,
+  /**
+   * Directory for the **development and test** file store (CORE-DOC-004). Refused in staging and
+   * production, which use private object storage. Defaults to `.local-storage` at the repository root.
+   */
+  FILE_STORAGE_DIR: optionalString,
   KMS_KEY_ID: optionalString,
   ...authShape,
 });

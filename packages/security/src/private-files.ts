@@ -12,9 +12,19 @@ export interface PutPrivateObject {
   contentType: string;
 }
 
+/** How a signed download presents itself: the file name offered, and the verified type. */
+export interface SignedDownloadOptions {
+  fileName?: string;
+  contentType?: string;
+}
+
 export interface PrivateFileStore {
   put(object: PutPrivateObject): Promise<void>;
-  createSignedDownloadUrl(key: string, ttlSeconds: number): Promise<string>;
+  createSignedDownloadUrl(
+    key: string,
+    ttlSeconds: number,
+    options?: SignedDownloadOptions,
+  ): Promise<string>;
 }
 
 export class SignedUrlPolicyError extends Error {

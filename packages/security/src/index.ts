@@ -10,6 +10,7 @@ export * from './credentials/passwords';
 export * from './credentials/tokens';
 export * from './encryption';
 export * from './errors';
+export * from './local-files';
 export * from './logging';
 export * from './private-files';
 export * from './uploads';

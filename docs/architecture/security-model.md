@@ -351,6 +351,18 @@ secrets manager (ADR-0015).
 caller's transaction, so a document and its number commit together; there is no endpoint through which
 anyone could consume numbers.
 
+| F5 | `documents` | `_id_unique`, `_owner`, `_keyset`, `_scope`, `_scope_assigned`, `_scope_self` | Scope fields copied from the owning record at upload; archived, never deleted |
+| F5 | `documentVersions` | `_unique` (document + version), `_storageKey_unique` | **Append-only** versions; only the scan status may change |
+| F5 | `documentTemplates` | `_key_version_unique`, `_selection` | Published content frozen by a model hook as well as by the service |
+
+**A document is as visible as the record it belongs to (F5).** The upload resolves the owning record
+through that module's *scoped* getter (wired at the composition root); a record outside the actor's
+scope is `404` and nothing is stored. File names are sanitized — directories, control characters and
+bidirectional overrides removed, the extension forced to the verified type — and the bytes are stored
+under a server-generated key. `GET /api/v1/files/{token}` is public by design: the token is a
+short-lived HMAC capability for one object, signed with a key that exists only in the running process.
+It is mounted only for the development/test disk store.
+
 F2 also added `structureVersion` to every organization unit (the write that serializes a deactivation
 against a concurrent creation beneath it), `costCenterCode` on branches and teams, `projectRefs` on
 teams and `endedOn` on placements, plus child-status indexes (`orgDepartments_branch_status`,

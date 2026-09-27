@@ -4,6 +4,7 @@ export * from './authorization';
 export * from './collections';
 export * from './company';
 export * from './crm';
+export * from './documents';
 export * from './errors';
 export * from './health';
 export * from './identifiers';

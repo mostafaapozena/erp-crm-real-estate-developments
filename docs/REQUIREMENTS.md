@@ -142,6 +142,24 @@ server's UTC clock — recorded as a defect). Moving them onto this engine, with
 continues their existing series, is Business Master Prompt 1 work; the engine does not renumber any
 existing record.
 
+### Implementation evidence — F5 (2026-09-27)
+
+Tests: `apps/api/src/modules/documents/documents.int-test.ts` (17, real MongoDB and a real disk) and
+`packages/security/src/files.test.ts` (17).
+
+| ID | Evidence |
+|---|---|
+| CORE-DOC-002 | Drafts in Arabic **and** English (one language refused); publishing refuses a placeholder the kind does not support (a typo, or another kind's) and placeholders that differ between the languages; a published version cannot be edited — by the service (`TEMPLATE_NOT_DRAFT`) or directly through the model, whose hook refuses any update touching a published row's content; a key keeps one kind; selection returns the most specific version in force (project over general, never a future one); previews use obviously synthetic values (amounts in `XXX`) and never a record; no wording ships (`SD-10`) |
+| CORE-DOC-004 | Each upload is a new version and the earlier ones are kept; a stale uploader and the loser of two simultaneous uploads get `409` and store nothing; versions and documents cannot be deleted through the models; archiving withdraws a document from lists and keeps its file |
+| CORE-DOC-006 | A download or print link is issued only to an actor who can see the document, and **issuing it records who obtained which version, for download or print, with its scan status** before the link is returned; an out-of-scope request is `404` and records no download; the link is a short-lived signed token — tampered, forged, cross-process and expired tokens are refused |
+
+**Advanced but not complete:** `SEC-005` (the upload endpoint now exists and validates by magic bytes;
+a real scanner is still not selected, so files are recorded `not_scanned` and an infected verdict is
+refused and audited), `SEC-008` and `PLAT-017` (signed expiring access and a local development store
+exist; the private object-storage adapter for staging and production does not). All three stay
+`in-progress`. `CORE-DOC-003` (PDF generation with embedded Arabic fonts) and `CORE-DOC-005` (QR
+verification) are **not started** — outside this package.
+
 ## Current status summary
 
 | | Count |
@@ -447,11 +465,11 @@ adapter exists ([ADR-0023](decisions/adr-0023-password-hashing-and-session-token
 | ID | Requirement | Source | Notes |
 |---|---|---|---|
 | CORE-DOC-001 | Numbering sequences by entity, document type, project, and fiscal year; atomic generation; **no reuse** | ADR-0009 | **implemented** 2026-09-27 (F4). Engine only; official formats arrive with `SD-10` (Phase 4) |
-| CORE-DOC-002 | Template registry with bilingual templates | ADR-0003 | Registry only; templates arrive with `SD-10` |
+| CORE-DOC-002 | Template registry with bilingual templates | ADR-0003 | **implemented** 2026-09-27 (F5). Registry only; templates arrive with `SD-10` |
 | CORE-DOC-003 | PDF generation with **embedded Arabic-capable fonts**; glyph rendering asserted by test | ADR-0003 | A "file produced" assertion does not catch this |
-| CORE-DOC-004 | Document version retention | ADR-0009 | |
+| CORE-DOC-004 | Document version retention | ADR-0009 | **implemented** 2026-09-27 (F5) |
 | CORE-DOC-005 | QR verification | MM §8 | |
-| CORE-DOC-006 | Audit of **who printed or downloaded** each document | **G-03** | Arabic scope p17 |
+| CORE-DOC-006 | Audit of **who printed or downloaded** each document | **G-03** | **implemented** 2026-09-27 (F5). Arabic scope p17 |
 
 ## CORE-SEARCH / CORE-IMPORT
 

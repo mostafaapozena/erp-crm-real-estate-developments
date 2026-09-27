@@ -61,6 +61,8 @@ known_hosts
 # secrets for the local development database. Never commit it.
 # ---------------------------------------------------------------------------
 .demo-credentials.md
+# Development and test document store (FILE_STORAGE_DIR)
+.local-storage/
 
 # ---------------------------------------------------------------------------
 # Dependencies

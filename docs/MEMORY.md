@@ -92,8 +92,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 | F1 Deployment model, company profile, branding | **complete** | `1270ac7` |
 | F2 Organization foundation | **complete** | `748a8b6` |
 | F3 Settings, reference data, feature flags | **complete** | `d64ec0c` |
-| F4 Number sequences | **complete** | the commit containing this row |
-| F5–F12 | not started | — |
+| F4 Number sequences | **complete** | `85cf2ca` |
+| F5 Documents and templates | **complete** | the commit containing this row |
+| F6–F12 | not started | — |
 
 ### F0 — what changed
 
@@ -205,10 +206,31 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 - Measured at the F4 commit: typecheck, lint, format, **unit 482**, **integration 398 passed / 0
   failed / 0 skipped**, **E2E 38 passed / 0 skipped**; 30 baseline demonstration collections unchanged.
 
+### F5 — what changed
+
+- `CORE-DOC-002`, `004`, `006` implemented: module `apps/api/src/modules/documents/` (documents,
+  versions, templates), contracts `packages/contracts/src/documents.ts`, storage
+  `packages/security/src/local-files.ts`, `sanitizeFileName` in `uploads.ts`.
+- Owner resolution is a port wired in `domain-services.ts` to each module's scoped getter (lead,
+  customer, project, unit, reservation, contract, receipt; company papers for the `all` scope).
+- Development and test store files under `FILE_STORAGE_DIR` (default `.local-storage`, ignored);
+  staging/production use `UnconfiguredFileStore` and refuse, because the object-storage adapter is not
+  built. `/api/v1/files/{token}` exists only with the disk store.
+- `domain-services.ts` now takes `repositoryRoot` from the entry point: resolving it from
+  `import.meta.url` inside the composition root would have pointed outside the repository in the
+  bundled build.
+- A literal U+202E character had slipped into a doc comment (an example of the attack the sanitizer
+  prevents); replaced with a written-out code point. No other bidirectional control character exists in
+  the source.
+- No upload screen yet: the registry rows describe mechanism; screens come with the business modules.
+- Measured at the F5 commit: typecheck, lint, format, **unit 499**, **integration 415 passed / 0
+  failed / 0 skipped**, **E2E 38 passed / 0 skipped**, secrets (367 files); 30 baseline demonstration
+  collections unchanged.
+
 ### Resume point
 
-Next package: **F5 — documents and templates** (`CORE-DOC-002`, `004`, `006`; `003` PDF and `005` QR
-are outside this prompt).
+Next package: **F6 — internal notifications** (`CORE-NOTIFY-001`–`005`), then wire the reminder
+centre and the approval engine's event port to it.
 
 ## Phase status
 
@@ -654,11 +676,11 @@ untouched.
 
 ### Phase 1 registry (113 IDs)
 
-**`implemented` (81):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+**`implemented` (84):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
 **SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2) ·
-**CORE-DOC-001** (F4)
+**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5)
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -686,7 +708,7 @@ nothing while both hold; it becomes necessary only if a cookie ever needs `SameS
 `APPROVAL-005` left `in-progress` on 2026-09-27: with the organization foundation (F2) an overdue
 approval escalates through the real reporting line, and an unresolvable one is still reported as such.
 
-**Not started (23):** INTEGRATION-001–005 · CORE-NOTIFY-001–005 · CORE-TASK-001–005 · CORE-DOC-002–006 ·
+**Not started (20):** INTEGRATION-001–005 · CORE-NOTIFY-001–005 · CORE-TASK-001–005 · CORE-DOC-003, 005 ·
 CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 ### Foundation additions (registered 2026-09-27, 17 IDs)

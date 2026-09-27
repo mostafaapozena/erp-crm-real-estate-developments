@@ -76,6 +76,18 @@ export const PERMISSIONS = [
   /** Define and activate a document number format. Administrative. */
   'numbering.manage',
 
+  // Documents and templates (CORE-DOC-002, 004, 006). Breadth is the owning record's scope.
+  'document.view',
+  'document.upload',
+  /** Obtain a short-lived link to a document's file. Every issue is audited (CORE-DOC-006). */
+  'document.download',
+  'document.archive',
+  /** Set a document's retention date or legal hold. Administrative. */
+  'document.manageRetention',
+  'template.view',
+  /** Write, publish and retire templates — the wording documents are issued in. Administrative. */
+  'template.manage',
+
   // Security administration
   'security.role.view',
   'security.role.create',
@@ -181,6 +193,10 @@ export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
   'referenceData.manage',
   /** A number format is permanent in every document issued under it (ADR-0009, `SD-10`). */
   'numbering.manage',
+  /** Retention and legal hold decide what the organization keeps and for how long. */
+  'document.manageRetention',
+  /** A published template is the legal wording of every document generated from it. */
+  'template.manage',
   /**
    * Organization structure is administrative because **every data scope resolves against it**
    * (SEC-026) and the reporting line decides where an overdue approval escalates (`APPROVAL-005`).
