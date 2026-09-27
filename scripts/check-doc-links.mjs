@@ -9,6 +9,12 @@
  * own internal consistency, and a network call would make the result depend on someone else's uptime.
  * A link with a `#fragment` is resolved to its file; heading anchors are not verified.
  *
+ * It also detects **self-splicing**: a document whose own title reappears inside its body. That is
+ * the signature of a `String.prototype.replace` whose replacement *string* contained the
+ * "text before the match" substitution pattern (a dollar sign followed by a backtick). It silently
+ * duplicated half of `docs/MEMORY.md` once, and later two architecture documents. Any script that
+ * edits documentation must pass its replacement as a **function**, which is never interpreted.
+ *
  * Usage: npm run check:links
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -22,6 +28,9 @@ const SKIP_DIRECTORIES = new Set([
   'build',
   'coverage',
   'test-results',
+  // Ignored by Git and by ESLint: throwaway probes, never documentation.
+  'scratch',
+  'sandbox',
 ]);
 const LINK = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 
@@ -40,12 +49,25 @@ function markdownFiles(directory) {
   return found;
 }
 
+/** The 1-based line on which the document's own `# ` title reappears, if it does. */
+export function selfSpliceLine(text) {
+  const lines = text.split(/\r?\n/);
+  const titleIndex = lines.findIndex((line) => /^# \S/.test(line));
+  if (titleIndex < 0) return undefined;
+  const title = lines[titleIndex];
+  const elsewhere = lines.findIndex((line, index) => index !== titleIndex && line.includes(title));
+  return elsewhere < 0 ? undefined : elsewhere + 1;
+}
+
 const files = markdownFiles(root);
 let checked = 0;
 const broken = [];
+const spliced = [];
 
 for (const file of files) {
   const text = readFileSync(file, 'utf8');
+  const spliceLine = selfSpliceLine(text);
+  if (spliceLine !== undefined) spliced.push(`${relative(root, file)}:${spliceLine}`);
   // Fenced code blocks hold example paths that need not exist.
   const withoutCode = text.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
   for (const match of withoutCode.matchAll(LINK)) {
@@ -62,9 +84,16 @@ for (const file of files) {
 }
 
 console.log(`Checked ${checked} relative links across ${files.length} Markdown files.`);
+let failed = false;
 if (broken.length > 0) {
   console.error(`\n${broken.length} broken link(s):`);
   for (const entry of broken) console.error(`  ${entry}`);
-  process.exit(1);
+  failed = true;
 }
-console.log('Documentation link check passed.');
+if (spliced.length > 0) {
+  console.error(`\n${spliced.length} document(s) repeat their own title — a self-splice:`);
+  for (const entry of spliced) console.error(`  ${entry}`);
+  failed = true;
+}
+if (failed) process.exit(1);
+console.log('Documentation link and integrity check passed.');

@@ -123,17 +123,54 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return (await response.json()) as T;
 }
 
-async function tryRefresh(): Promise<boolean> {
+/**
+ * The refresh currently on the wire, shared by every caller that needs one.
+ *
+ * A refresh token is single-use: the server rotates it and treats a second presentation as theft,
+ * revoking the whole session family (SEC-015). Two refreshes started together — React StrictMode runs
+ * the session-restoring effect twice in development, and several requests can hit a 401 at the same
+ * moment — both carry the **same** cookie, so the second one is indistinguishable from a replay and
+ * signs the person out. Sharing one request is the client-side half of rotation; the server's replay
+ * detection is unchanged and still fires on a genuine reuse.
+ */
+let refreshInFlight: Promise<string | undefined> | undefined;
+
+async function performRefresh(): Promise<string | undefined> {
+  let response: Response;
   try {
-    const response = await send('/api/v1/auth/refresh', { method: 'POST', skipRefresh: true });
-    if (!response.ok) return false;
-    const body = (await response.json()) as { accessToken?: string };
-    if (!body.accessToken) return false;
-    setAccessToken(body.accessToken);
-    return true;
+    response = await send('/api/v1/auth/refresh', { method: 'POST', skipRefresh: true });
   } catch {
-    return false;
+    return undefined;
   }
+  if (!response.ok) return undefined;
+  try {
+    const body = (await response.json()) as { accessToken?: string };
+    return body.accessToken || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Exchange the refresh cookie for a new access token, at most once at a time.
+ *
+ * Resolves to the new token, or `undefined` when there is no live session. The token is stored before
+ * the promise resolves, so every waiter sees it.
+ */
+export function refreshSession(): Promise<string | undefined> {
+  refreshInFlight ??= performRefresh()
+    .then((token) => {
+      setAccessToken(token);
+      return token;
+    })
+    .finally(() => {
+      refreshInFlight = undefined;
+    });
+  return refreshInFlight;
+}
+
+async function tryRefresh(): Promise<boolean> {
+  return (await refreshSession()) !== undefined;
 }
 
 /** Build a query string, omitting empty values so a filter that is not set is simply absent. */

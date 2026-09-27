@@ -8,6 +8,8 @@ import {
 } from '@alola/contracts';
 import { describe, expect, it } from 'vitest';
 import {
+  DISPLAYED_ENUMS,
+  checkEnumLabels,
   checkResources,
   createFormatters,
   formattingLocale,
@@ -70,6 +72,39 @@ describe('translation resources (I18N-001, I18N-002)', () => {
       ['few', 'many', 'one', 'other', 'two', 'zero'].sort(),
     );
     expect(requiredPluralCategories('en').sort()).toEqual(['one', 'other']);
+  });
+});
+
+describe('displayed domain enumerations (I18N-002, I18N-008)', () => {
+  it('label every value of every displayed enumeration in both languages', () => {
+    expect(checkEnumLabels(resources)).toEqual([]);
+  });
+
+  it('cover the receipt state that once reached the screen untranslated', () => {
+    expect(DISPLAYED_ENUMS['receiptState']).toEqual(['posted', 'reversed']);
+  });
+
+  it('fail when a namespace is missing from both languages — which key parity cannot see', () => {
+    const symmetric = {
+      ar: { common: { other: 'أ' } },
+      en: { common: { other: 'A' } },
+    } satisfies Record<Locale, Record<string, ResourceTree>>;
+    // Parity is satisfied: both locales are equally incomplete.
+    expect(checkResources(symmetric)).toEqual([]);
+    expect(checkEnumLabels(symmetric, { receiptState: ['posted'] })).toEqual([
+      { locale: 'ar', key: 'receiptState.posted', problem: 'missing-enum-label' },
+      { locale: 'en', key: 'receiptState.posted', problem: 'missing-enum-label' },
+    ]);
+  });
+
+  it('fail on an empty label', () => {
+    const empty = {
+      ar: { common: { receiptState: { posted: ' ' } } },
+      en: { common: { receiptState: { posted: 'Posted' } } },
+    } satisfies Record<Locale, Record<string, ResourceTree>>;
+    expect(checkEnumLabels(empty, { receiptState: ['posted'] })).toEqual([
+      { locale: 'ar', key: 'receiptState.posted', problem: 'missing-enum-label' },
+    ]);
   });
 });
 

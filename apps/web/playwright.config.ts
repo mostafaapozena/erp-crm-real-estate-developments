@@ -17,9 +17,12 @@ import { defineConfig, devices } from '@playwright/test';
  * `.demo-credentials.md`. That is deliberate — it exercises the same sign-in every person uses, with
  * a password this repository has never seen, rather than a test-only back door into the session.
  *
- * Tests run serially. They sign in, navigate real data, and one of them approves a real pending
- * approval request; running those in parallel against one database would make the suite depend on
- * scheduling, and a flaky gate is worse than a slow one.
+ * Tests run serially. They sign in and navigate real data; running them in parallel against one
+ * database would make the suite depend on scheduling, and a flaky gate is worse than a slow one.
+ *
+ * **The suite changes no business record.** It reads, and it signs in and out — so it adds sessions
+ * and audit events, and nothing else. In particular it never decides the demonstration's pending
+ * discount approval, which is left undecided on purpose for the live walkthrough.
  */
 export default defineConfig({
   testDir: './e2e',

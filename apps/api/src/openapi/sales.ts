@@ -4,6 +4,7 @@ import {
   CancelReservationSchema,
   ContractPageSchema,
   ContractSchema,
+  ContractSummarySchema,
   CreateContractSchema,
   CreateReservationSchema,
   CustomerFinancialSummarySchema,
@@ -51,6 +52,7 @@ export const salesComponents = {
   Installment: InstallmentSchema,
   InstallmentPage: InstallmentPageSchema,
   InstallmentList: InstallmentListSchema,
+  ContractSummary: ContractSummarySchema,
   CustomerFinancialSummary: CustomerFinancialSummarySchema,
 } as const;
 
@@ -283,6 +285,21 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
               },
             },
           },
+          ...h.authorizedErrors,
+        },
+      },
+    },
+    '/api/v1/sales/contracts/summary': {
+      get: {
+        operationId: 'getContractSummary',
+        summary: 'Contract portfolio totals, per currency',
+        description:
+          'Requires sales.contract.view. Totalled by the database in Decimal128 over every contract ' +
+          "inside the actor's data scope — the scope is part of the match, so a total never includes " +
+          'a contract the actor cannot open. One row per currency; currencies are never added together.',
+        parameters: [queryParameter('state', { type: 'string', enum: [...CONTRACT_STATES] })],
+        responses: {
+          '200': h.json('ContractSummary', 'The totals'),
           ...h.authorizedErrors,
         },
       },

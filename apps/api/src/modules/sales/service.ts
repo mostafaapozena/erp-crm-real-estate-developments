@@ -18,6 +18,8 @@ import {
   type BusinessDate,
   type CancelContract,
   type Contract,
+  type ContractSummary,
+  type ContractSummaryQuery,
   type ContractPage,
   type ContractQuery,
   type CreateContract,
@@ -44,7 +46,7 @@ import {
   type ScopeFieldMap,
 } from '@alola/security';
 import { createHash } from 'node:crypto';
-import type { ClientSession, Connection } from 'mongoose';
+import type { ClientSession, Connection, Types } from 'mongoose';
 import { newId } from '../../platform/ids';
 import { fromDecimal128, toDecimal128 } from '../../platform/money-storage';
 import { withTransaction } from '../../platform/transactions';
@@ -1175,6 +1177,55 @@ export class SalesService {
       ...(documents.length > query.limit && last
         ? { nextCursor: encodeCursor(last.createdAt, last.contractId) }
         : {}),
+    };
+  }
+
+  /**
+   * The actor's whole contract portfolio, totalled by the database inside the scope.
+   *
+   * `$sum` over `Decimal128` is exact decimal arithmetic in MongoDB, so no amount passes through a
+   * JavaScript number, and the scope filter is part of the `$match` rather than applied afterwards
+   * (SEC-028). One row per currency: amounts in different currencies are never added.
+   */
+  async contractSummary(
+    actor: ActorContext,
+    query: ContractSummaryQuery,
+  ): Promise<ContractSummary> {
+    const requested: Record<string, unknown> = {};
+    if (query.state !== undefined) requested['state'] = query.state;
+    assertSafeFilter(requested);
+    const filter = withScope(buildScopeFilter(actor, SALES_SCOPE_FIELDS), requested);
+    const rows = await this.contracts
+      .aggregate<{
+        _id: string;
+        contracts: number;
+        totalContracted: Types.Decimal128;
+        totalPaid: Types.Decimal128;
+        totalOutstanding: Types.Decimal128;
+      }>([
+        { $match: filter },
+        {
+          $group: {
+            _id: '$totalPrice.currency',
+            contracts: { $sum: 1 },
+            totalContracted: { $sum: '$totalPrice.amount' },
+            totalPaid: { $sum: '$paidAmount.amount' },
+            totalOutstanding: { $sum: '$outstandingAmount.amount' },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ])
+      .exec();
+    const byCurrency = rows.map((row) => ({
+      currency: row._id,
+      contracts: row.contracts,
+      totalContracted: money(fromDecimal128(row.totalContracted), row._id),
+      totalPaid: money(fromDecimal128(row.totalPaid), row._id),
+      totalOutstanding: money(fromDecimal128(row.totalOutstanding), row._id),
+    }));
+    return {
+      contracts: byCurrency.reduce((sum, row) => sum + row.contracts, 0),
+      byCurrency,
     };
   }
 

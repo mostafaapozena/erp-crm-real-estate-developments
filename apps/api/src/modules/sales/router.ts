@@ -2,6 +2,7 @@ import {
   CancelContractSchema,
   CancelReservationSchema,
   ContractQuerySchema,
+  ContractSummaryQuerySchema,
   CreateContractSchema,
   CreateReservationSchema,
   InstallmentQuerySchema,
@@ -165,6 +166,17 @@ export function salesRouter(options: SalesRouterOptions): Router {
     async (_req, res) => {
       const query = validated<typeof ContractQuerySchema._output>(res, 'query');
       res.json(await options.getService().listContracts(actorOf(res), query));
+    },
+  );
+
+  // Declared before '/contracts/:contractId' so "summary" is never read as a contract identifier.
+  router.get(
+    '/contracts/summary',
+    requirePermission('sales.contract.view', options.guard),
+    validate({ query: ContractSummaryQuerySchema }),
+    async (_req, res) => {
+      const query = validated<typeof ContractSummaryQuerySchema._output>(res, 'query');
+      res.json(await options.getService().contractSummary(actorOf(res), query));
     },
   );
 

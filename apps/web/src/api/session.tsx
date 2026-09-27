@@ -8,7 +8,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ApiError, apiRequest, setAccessToken, setSessionEndedListener } from './client';
+import {
+  ApiError,
+  apiRequest,
+  refreshSession,
+  setAccessToken,
+  setSessionEndedListener,
+} from './client';
 
 /**
  * Who is signed in, and what they may see.
@@ -69,11 +75,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void (async () => {
       try {
-        const refreshed = await apiRequest<{ accessToken: string }>('/api/v1/auth/refresh', {
-          method: 'POST',
-          skipRefresh: true,
-        });
-        setAccessToken(refreshed.accessToken);
+        // Single-flight: StrictMode runs this effect twice in development, and both runs must share
+        // one refresh — a second request with the same cookie is a replay to the server (SEC-015).
+        const token = await refreshSession();
+        if (!token) throw new ApiError(401, 'UNAUTHENTICATED');
         if (!cancelled) await loadSession();
       } catch {
         if (!cancelled) {

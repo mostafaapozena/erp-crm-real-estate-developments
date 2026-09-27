@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { BusinessCodeSchema, NoteSchema, RecordIdSchema } from './identifiers';
 import {
+  CurrencyCodeSchema,
   MoneySchema,
   addMoney,
   allocateMoney,
@@ -446,6 +447,33 @@ export const PreviewScheduleSchema = z.strictObject({
 });
 
 export const InstallmentListSchema = z.strictObject({ items: z.array(InstallmentSchema) });
+
+/**
+ * The contract portfolio the actor can see, totalled on the server (SEC-028, ADR-0007).
+ *
+ * Totals are computed by the database over **every** contract inside the actor's scope, in
+ * `Decimal128`, and grouped by currency — never by a client adding up one page of rows, which both
+ * truncates at the page size and passes money through binary floating point. Two currencies are
+ * never added together, so each appears as its own row.
+ */
+export const ContractSummaryQuerySchema = z.strictObject({
+  state: ContractStateSchema.optional(),
+});
+export type ContractSummaryQuery = z.infer<typeof ContractSummaryQuerySchema>;
+
+export const ContractSummarySchema = z.strictObject({
+  contracts: z.number().int().nonnegative(),
+  byCurrency: z.array(
+    z.strictObject({
+      currency: CurrencyCodeSchema,
+      contracts: z.number().int().nonnegative(),
+      totalContracted: MoneySchema,
+      totalPaid: MoneySchema,
+      totalOutstanding: MoneySchema,
+    }),
+  ),
+});
+export type ContractSummary = z.infer<typeof ContractSummarySchema>;
 
 /** A customer's financial position across all their contracts, within the actor's scope. */
 export const CustomerFinancialSummarySchema = z.strictObject({

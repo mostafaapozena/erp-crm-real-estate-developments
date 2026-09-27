@@ -79,21 +79,40 @@ test.describe('the signed-in shell', () => {
     await expect(page.getByText(/\d{2}\/\d{2}\/\d{4}/).first()).toBeVisible();
   });
 
-  test('puts the navigation at the inline start in both directions', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name === 'mobile-chromium', 'the drawer is collapsed on a phone');
-    const navigation = await mainNav(page);
-    const rtl = await navigation.boundingBox();
+  test('puts the navigation at the inline start in both directions', async ({ page }) => {
+    // On a phone the drawer is temporary: `mainNav` opens it, and its backdrop covers the rest of
+    // the page, so it is closed before the language switch and reopened to be measured. The
+    // assertion is the same on both viewports — the drawer enters from the inline start.
     const viewport = page.viewportSize();
-    expect(rtl).not.toBeNull();
     expect(viewport).not.toBeNull();
+    const width = viewport?.width ?? 0;
+
+    // Probed **before** the drawer opens: once a modal drawer is open, MUI marks the rest of the page
+    // `aria-hidden`, so a role query for the toggle would find nothing and report "not temporary".
+    const temporary = await page
+      .getByRole('button', { name: LABELS.ar.openNavigation })
+      .isVisible();
+
+    const rtlNavigation = await mainNav(page);
+    const rtl = await rtlNavigation.boundingBox();
+    expect(rtl).not.toBeNull();
     // Right-hand side in Arabic.
-    expect((rtl?.x ?? 0) + (rtl?.width ?? 0)).toBeGreaterThan((viewport?.width ?? 0) / 2);
+    expect((rtl?.x ?? 0) + (rtl?.width ?? 0)).toBeGreaterThan(width / 2);
+    expect(rtl?.x ?? 0).toBeGreaterThanOrEqual(width / 2 - (rtl?.width ?? 0));
+
+    if (temporary) {
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#app-navigation')).toBeHidden();
+    }
 
     await page.getByRole('button', { name: LABELS.ar.switchTo }).click();
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
-    const ltr = await navigation.boundingBox();
+    const ltrNavigation = await mainNav(page);
+    const ltr = await ltrNavigation.boundingBox();
+    expect(ltr).not.toBeNull();
     // Left-hand side in English — the same component, mirrored by logical CSS rather than by a
     // second stylesheet.
-    expect(ltr?.x ?? Number.MAX_SAFE_INTEGER).toBeLessThan((viewport?.width ?? 0) / 2);
+    expect(ltr?.x ?? Number.MAX_SAFE_INTEGER).toBeLessThan(width / 2);
+    expect((ltr?.x ?? 0) + (ltr?.width ?? 0)).toBeLessThanOrEqual(width / 2 + (ltr?.width ?? 0));
   });
 });

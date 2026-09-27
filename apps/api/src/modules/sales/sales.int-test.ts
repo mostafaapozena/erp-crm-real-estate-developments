@@ -1054,6 +1054,66 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       expect(Object.keys(hidden.body.error)).toEqual(Object.keys(absent.body.error));
     });
 
+    it('totals the contract portfolio in the database, exactly and inside the scope', async () => {
+      async function contractAs(owner: string, price: string) {
+        const { unit } = await makeUnit(price);
+        const customer = await makeCustomer(owner);
+        const reservation = await reserve(owner, {
+          unitId: unit.unitId,
+          customerId: customer.customerId,
+          agreedPrice: egp(price),
+          reservationAmount: egp('0'),
+        });
+        await as(owner)
+          .post(`/api/v1/sales/reservations/${reservation.reservationId}/confirm`)
+          .expect(200);
+        await as(owner)
+          .post('/api/v1/sales/contracts')
+          .send({
+            reservationId: reservation.reservationId,
+            contractedOn: '2026-09-22',
+            idempotencyKey: nextKey('idem-ctr-'),
+          })
+          .expect(201);
+      }
+      // Amounts whose float sum is not exact: 0.1 + 0.2 style values at contract scale.
+      await contractAs(REP_ONE, '1000000.10');
+      await contractAs(REP_ONE, '2000000.20');
+      await contractAs(REP_TWO, '3000000.30');
+
+      const all = await as(MANAGER).get('/api/v1/sales/contracts/summary?state=active').expect(200);
+      expect(all.body.contracts).toBe(3);
+      expect(all.body.byCurrency).toHaveLength(1);
+      const [row] = all.body.byCurrency as {
+        currency: string;
+        contracts: number;
+        totalContracted: Money;
+        totalPaid: Money;
+        totalOutstanding: Money;
+      }[];
+      expect(row?.currency).toBe('EGP');
+      expect(row?.contracts).toBe(3);
+      // Decimal128 keeps the stored scale ("6000000.60"); the value is what must be exact.
+      expect(compareMoney(row!.totalContracted, egp('6000000.6'))).toBe(0);
+      expect(compareMoney(row!.totalPaid, egp('0'))).toBe(0);
+      expect(compareMoney(row!.totalOutstanding, egp('6000000.6'))).toBe(0);
+
+      // The representative's total is their own contracts only — the scope is in the $match.
+      const mine = await as(REP_ONE).get('/api/v1/sales/contracts/summary').expect(200);
+      expect(mine.body.contracts).toBe(2);
+      expect(compareMoney(mine.body.byCurrency[0].totalContracted, egp('3000000.3'))).toBe(0);
+
+      // No contracts in scope is an empty portfolio, not an error and not someone else's figures.
+      const none = await as(MANAGER).get('/api/v1/sales/contracts/summary?state=cancelled');
+      expect(none.status).toBe(200);
+      expect(none.body).toEqual({ contracts: 0, byCurrency: [] });
+
+      await as().get('/api/v1/sales/contracts/summary').expect(401);
+      await as(NO_GRANT).get('/api/v1/sales/contracts/summary').expect(403);
+      await as(MANAGER).get('/api/v1/sales/contracts/summary?state=bogus').expect(400);
+      await as(MANAGER).get('/api/v1/sales/contracts/summary?extra=1').expect(400);
+    });
+
     it('agrees between the reservation list total and its rows, per scope', async () => {
       for (const owner of [REP_ONE, REP_ONE, REP_TWO]) {
         const { unit } = await makeUnit();

@@ -1,9 +1,10 @@
 import type {
+  ContractSummary,
   CrmDashboard,
   InstallmentPage,
   InventorySummary,
   MarketingOverview,
-  ContractPage,
+  Money,
 } from '@alola/contracts';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -37,8 +38,8 @@ export default function DashboardPage() {
   const inventory = useApi<InventorySummary>(
     can('inventory.unit.view') ? '/api/v1/inventory/units/summary' : undefined,
   );
-  const contracts = useApi<ContractPage>(
-    can('sales.contract.view') ? '/api/v1/sales/contracts?limit=100&state=active' : undefined,
+  const contracts = useApi<ContractSummary>(
+    can('sales.contract.view') ? '/api/v1/sales/contracts/summary?state=active' : undefined,
   );
   const overdue = useApi<InstallmentPage>(
     can('collection.installment.view')
@@ -62,27 +63,15 @@ export default function DashboardPage() {
   const marketingData = marketing.state.kind === 'ready' ? marketing.state.data : undefined;
 
   /**
-   * Totals are summed from the rows the server returned, which are already scope-filtered. Summing
-   * here rather than asking for a total keeps one source of truth: the figure can never disagree with
-   * the list a person opens next.
+   * Portfolio totals come from the server, which sums `Decimal128` over **every** contract inside the
+   * actor's scope (SEC-028, ADR-0007). Adding up a page of rows here would both stop at the page size
+   * and pass money through binary floating point. Each currency is shown separately: two currencies
+   * are never added into one figure.
    */
-  const contractedValue = contractData?.items.reduce(
-    (sum, contract) => sum + Number(contract.totalPrice.amount),
-    0,
-  );
-  const collected = contractData?.items.reduce(
-    (sum, contract) => sum + Number(contract.paidAmount.amount),
-    0,
-  );
-  const outstanding = contractData?.items.reduce(
-    (sum, contract) => sum + Number(contract.outstandingAmount.amount),
-    0,
-  );
-  const currency = contractData?.items[0]?.totalPrice.currency ?? 'EGP';
-  const asMoney = (value: number | undefined) =>
-    value === undefined
-      ? undefined
-      : format.money({ amount: String(value.toFixed(2)) as never, currency });
+  const perCurrency = (pick: (row: ContractSummary['byCurrency'][number]) => Money) =>
+    contractData && contractData.byCurrency.length > 0
+      ? contractData.byCurrency.map((row) => format.money(pick(row))).join(' · ')
+      : undefined;
 
   const showsNothing =
     !can('crm.lead.view') &&
@@ -173,22 +162,22 @@ export default function DashboardPage() {
               <>
                 <MetricCard
                   label={t('dashboard.activeContracts')}
-                  value={format.number(contractData?.total)}
+                  value={format.number(contractData?.contracts)}
                   loading={contracts.state.kind === 'loading'}
                 />
                 <MetricCard
                   label={t('dashboard.contractedValue')}
-                  value={asMoney(contractedValue)}
+                  value={perCurrency((row) => row.totalContracted)}
                   loading={contracts.state.kind === 'loading'}
                 />
                 <MetricCard
                   label={t('dashboard.collected')}
-                  value={asMoney(collected)}
+                  value={perCurrency((row) => row.totalPaid)}
                   loading={contracts.state.kind === 'loading'}
                 />
                 <MetricCard
                   label={t('dashboard.outstanding')}
-                  value={asMoney(outstanding)}
+                  value={perCurrency((row) => row.totalOutstanding)}
                   loading={contracts.state.kind === 'loading'}
                 />
               </>

@@ -372,6 +372,10 @@
     "rescheduled": "معاد جدولته",
     "cancelled": "ملغي"
   },
+  "receiptState": {
+    "posted": "مُرحَّل",
+    "reversed": "معكوس"
+  },
   "collections": {
     "installmentsTitle": "الأقساط",
     "installmentsSubtitle": "المستحق والمتأخر والقادم",

@@ -372,6 +372,10 @@
     "rescheduled": "Rescheduled",
     "cancelled": "Cancelled"
   },
+  "receiptState": {
+    "posted": "Posted",
+    "reversed": "Reversed"
+  },
   "collections": {
     "installmentsTitle": "Installments",
     "installmentsSubtitle": "Due, overdue and upcoming",

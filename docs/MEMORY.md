@@ -2,7 +2,8 @@
 
 Last updated: 2026-09-23
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
-Repository: local Git · Branch: `main` · **No remote, nothing pushed, nothing deployed**
+Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
+`9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
 
 Commits: `7a840b3` documentation baseline → `4c988db` Phase 1 scaffolding → `4365775` Phase 1 review
 decisions → `dfc0ac5` development services + integration gate → `3d6bdf1` audit and authorization core →
@@ -58,6 +59,65 @@ implemented or verified requirement.
   stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
 - Requirements `implemented` (code + passing tests): **79 of 113** · `in-progress`: 10 · not started: 24
+
+## Foundation completion (post-demo master prompt) — IN PROGRESS
+
+Started 2026-09-27. Scope: Part A forensic audit, then work packages F0–F12 (stabilization, deployment
+model and company profile, organization, settings, number sequences, documents and templates,
+notifications, tasks, search, import/export, integrations, client initialization, observability). One
+local commit per green package. **Business Master Prompts 1–5 are not started and must not be.**
+
+### Part A — audit verdict: PASS (2026-09-27, at `9cc3189`)
+
+- Tree clean; secret files ignored, untracked, never in history. Remote `origin` exists and equals HEAD —
+  pushed by the owner on 2026-09-24. Documentation said "no remote"; corrected.
+- Baseline measured: lint, format, typecheck, i18n, secrets (327 files), links, **430 unit**,
+  **integration 337 passed / 0 failed / 0 skipped** (own database; development counts unchanged
+  afterwards), **E2E 37 passed / 1 skipped**, build, bundle 325.1 kB, 0 vulnerabilities, PDF checksum
+  intact. Demonstration collection counts recorded before any change (`scratch/demo-counts-before.json`,
+  ignored).
+- Structural defects found: `docs/architecture/security-model.md` (since `3d6bdf1`) and
+  `docs/architecture/dependencies.md` were **spliced into themselves** by the same
+  `String.replace` "text-before-match" substitution that once damaged this file; the dashboard summed
+  contract money with `Number()` over only the first 100 contracts and fell back to a hard-coded
+  `'EGP'`; the four demo issues below were all still open; organization writes check a permission
+  but apply **no data scope**; sales numbering takes its year from the server's UTC clock; the
+  authenticator issuer defaults to a client name; sweeps are HTTP-triggered only.
+
+### Work-package status
+
+| Package | State | Commit |
+|---|---|---|
+| F0 Stabilization | **complete** | the commit containing this row |
+| F1–F12 | not started | — |
+
+### F0 — what changed
+
+- `receiptState` labelled in Arabic and English. New `DISPLAYED_ENUMS` registry
+  (`packages/i18n/src/enums.ts`) maps every enumeration the interface displays to the contract's own
+  value list; `npm run check:i18n` now fails on any value without a label in **both** languages —
+  the case key parity cannot see, because a namespace missing from both locales is symmetrical.
+- Refresh is **single-flight** in the web client (`refreshSession`): StrictMode's double effect and
+  concurrent 401s share one request, so the client never presents one single-use cookie twice. Server
+  rotation and replay detection are untouched.
+- Dashboard portfolio totals come from a new scoped, database-side aggregate,
+  `GET /api/v1/sales/contracts/summary` — `$sum` over `Decimal128`, scope inside `$match`, one row
+  per currency. This is demonstration-slice scope (`SALE-*`), not a requirement status change.
+- `<div>` inside `<p>` on the dashboard: **not reproducible at `9cc3189`** in the ready, loading, or
+  forbidden states. A StrictMode render test now fails on any nesting warning or block element inside a
+  paragraph.
+- The mobile drawer E2E test is re-enabled: on a phone the temporary drawer is opened, measured,
+  closed for the language switch, and reopened.
+- Both corrupted architecture documents repaired; `check:links` now also fails on a document that
+  repeats its own title (the splice signature) and skips the ignored `scratch/` and `sandbox/`.
+- A stale Playwright comment claimed a test approves the demo's pending approval; none does. Corrected.
+- Measured at the F0 commit: typecheck, lint, **444 unit**, **integration 338 passed / 0 failed / 0
+  skipped**, **E2E 38 passed / 0 failed / 0 skipped**, i18n (enum check included), links and
+  integrity; demonstration business counts identical to the pre-change snapshot.
+
+### Resume point
+
+Next package: **F1 — deployment model (ADR) and company profile/branding.**
 
 ## Phase status
 
@@ -408,7 +468,8 @@ units a fake owner to work around it was refused.
 - No Meta, WhatsApp, e-mail, SMS or payment-provider integration, and no account with any of them.
 - No `CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`, `INTEGRATION-001`–`005`.
 - No KMS adapter (`SEC-033`), so staging and production still cannot store an MFA secret.
-- No hosted CI run — there is still no remote.
+- No hosted CI run verified — a remote now exists (owner push, 2026-09-24), but no workflow result has
+  been observed from this machine.
 
 ## Verification — actual results, 2026-09-23 (end of Macro Phase 1)
 
@@ -500,7 +561,7 @@ untouched.
 
 ## Requirement status (Phase 1, 113 IDs)
 
-**`implemented` (59):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+**`implemented` (79):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
 **SEC-002, 010, 011–022 (14)** · **APPROVAL-001, 002, 003, 004, 006, 007 (6)**
@@ -597,7 +658,8 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
   settled by a unique index; the decision and its audit records commit in one transaction; escalation
   resolves the direct manager through a port and reports *unresolved* rather than inventing one.
 - Web bundle budget: ≤ 650 kB minified / ≤ 210 kB gzip per chunk; route splitting before feature-heavy phases.
-- Git: local commits authorized. **No remote, no push, no deploy.**
+- Git: local commits authorized. The owner added `origin` and pushes; **this workstream never pushes,
+  never adds a remote, and never deploys.**
 
 ## Implementation notes a later session needs
 
@@ -780,9 +842,9 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 | Campaign figures are invented | Stored as `demoMetrics`, never `metrics`; labelled on screen; no provider is connected, and there is no publish operation to connect one to |
 | `.demo-credentials.md` holds working passwords and an authenticator secret in plain text | Ignored by Git, written with restrictive permissions, never printed or logged, and deleted by the reset. It exists only on the machine that ran the seed |
 | The demonstration contract preview could be mistaken for an approved contract | Labelled as a demonstration document on screen, and stated in the walkthrough's "what not to say" list. The real template is a stakeholder input |
-| Hosted CI has never run (no remote) | Run `npm run verify` + E2E locally before each commit until a remote exists |
+| Hosted CI result never observed (remote exists since the owner's 2026-09-24 push) | Run `npm run verify`, the integration gate and E2E locally before each commit; confirm the workflow on GitHub when the owner next pushes |
 | Secret scan is pattern-based, not a dedicated scanner | Add a dedicated scanner when CI exists |
-| Escalation cannot resolve a direct manager until `CORE-ORG` exists, so an overdue approval escalates to nobody | `APPROVAL-005` stays `in-progress`; the sweep reports unresolved stages rather than hiding them (Phase 2, `SD-01`) |
+| Escalation resolves the direct manager through the `CORE-ORG` demonstration slice only | `APPROVAL-005` stays `in-progress` until the organization foundation is completed (Foundation F2); a stage with no resolvable manager is reported as unresolved |
 | A module that forgets to act on an approved request leaves an approval that achieves nothing | Deliberate (ADR-0024 §2): the engine never executes the operation. Each consuming module needs its own test that it acts on the outcome |
 | A permission-based approver queue is bounded at 200 candidates | Logged when it truncates; a permission held by thousands of accounts is not a work queue. Narrow the stage rule instead |
 | **`SEC-033` (KMS) is not implemented**, so staging and production cannot store an MFA secret | Development and test use a configured local key, refused outside development. The KMS adapter is the blocker for enabling MFA anywhere real (ADR-0023 §6) |
@@ -792,7 +854,7 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 | Audit retention and archival are not implemented; the collection grows without bound | Retention policy is `SD-18`/Phase 9. The existing indexes already support time-range scans |
 | An operator with direct database access can still alter audit records | ADR-0021 §2 records this as an operational control — restricted database roles, append-only backups — not an application one |
 | The test actor resolver could be mistaken for authentication | It exists only inside integration tests; the production default resolver returns no actor, and both are commented to say so |
-| Web bundle 585 kB in one chunk (above Vite's 500 kB advisory) | Budget enforced by `check:bundle`; route-level splitting before feature-heavy phases (latest: first Phase 2 feature screens) |
+| Bundle growth as screens are added | **Resolved for now**: route and vendor splitting since `4806fef`; largest chunk 325.1 kB / 97.0 kB gzip against the unchanged 650/210 budget, enforced by `check:bundle` |
 | Local topology is a single-node replica set, so failover is not exercised | Accepted for development; staging on Atlas is multi-node (ADR-0020) |
 | Docker Desktop + WSL 2 are now prerequisites for the integration tier | Documented in environments.md §5; unit tests, lint, typecheck and build still need no services |
 | `C:` free space dropped from ~21 GB to ~17 GB during the session (not caused by this project's ~0.6 GB) | Re-check before large installs |
