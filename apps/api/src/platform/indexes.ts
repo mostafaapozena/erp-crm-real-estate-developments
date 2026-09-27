@@ -38,6 +38,11 @@ import {
   reservationModel,
 } from '../modules/sales/model';
 import { accountGrantModel, roleModel } from '../modules/security/model';
+import {
+  referenceItemModel,
+  settingRevisionModel,
+  settingValueModel,
+} from '../modules/settings/model';
 
 /**
  * Index creation (ADR-0002: "every new collection declares its indexes in the same change").
@@ -83,6 +88,9 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     companyProfileModel(connection),
     companyProfileRevisionModel(connection),
     brandAssetModel(connection),
+    settingValueModel(connection),
+    settingRevisionModel(connection),
+    referenceItemModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {

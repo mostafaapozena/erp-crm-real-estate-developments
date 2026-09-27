@@ -21,6 +21,7 @@ import { MarketingService } from '../modules/marketing';
 import { OrganizationService } from '../modules/organization';
 import { SalesService } from '../modules/sales';
 import { SecurityService } from '../modules/security';
+import { SettingsService } from '../modules/settings';
 import { AppError } from '../errors';
 
 /**
@@ -62,6 +63,7 @@ export interface DomainServices {
   collections: () => CollectionService;
   marketing: () => MarketingService;
   company: () => CompanyService;
+  settings: () => SettingsService;
 }
 
 export function createDomainServices(options: DomainServiceOptions): DomainServices {
@@ -78,6 +80,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let collectionService: CollectionService | undefined;
   let marketingService: MarketingService | undefined;
   let companyService: CompanyService | undefined;
+  let settingsService: SettingsService | undefined;
 
   /**
    * Encryption for MFA secrets (`SEC-017`).
@@ -129,6 +132,13 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
       demonstration: config.APP_ENV === 'development' || config.APP_ENV === 'test',
     });
     return companyService;
+  }
+
+  /** Settings, reference data and feature flags (PLAT-024 … PLAT-026). */
+  function getSettingsService(): SettingsService {
+    const connection = requireConnection();
+    settingsService ??= new SettingsService({ connection, audit: getAuditService() });
+    return settingsService;
   }
 
   function getOrganizationService(): OrganizationService {
@@ -405,5 +415,6 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     collections: getCollectionService,
     marketing: getMarketingService,
     company: getCompanyService,
+    settings: getSettingsService,
   };
 }

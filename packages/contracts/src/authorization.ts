@@ -64,6 +64,13 @@ export const PERMISSIONS = [
   /** Change the company's identity, contact details, colour or images. Administrative. */
   'company.profile.manage',
 
+  // Settings, reference data and feature flags (PLAT-024 … PLAT-026)
+  'settings.view',
+  /** Change a business setting or a feature flag. Administrative. */
+  'settings.manage',
+  /** Add, relabel, reorder, deactivate reference items; add tax rates. Administrative. */
+  'referenceData.manage',
+
   // Security administration
   'security.role.view',
   'security.role.create',
@@ -164,6 +171,9 @@ export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
    * changing it is an administrative act with a second factor (SEC-017).
    */
   'company.profile.manage',
+  /** Settings and reference data decide defaults every record is created with (PLAT-024, PLAT-025). */
+  'settings.manage',
+  'referenceData.manage',
   /**
    * Organization structure is administrative because **every data scope resolves against it**
    * (SEC-026) and the reporting line decides where an overdue approval escalates (`APPROVAL-005`).

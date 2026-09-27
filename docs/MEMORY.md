@@ -90,8 +90,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 |---|---|---|
 | F0 Stabilization | **complete** | `24fe608` |
 | F1 Deployment model, company profile, branding | **complete** | `1270ac7` |
-| F2 Organization foundation | **complete** | the commit containing this row |
-| F3–F12 | not started | — |
+| F2 Organization foundation | **complete** | `748a8b6` |
+| F3 Settings, reference data, feature flags | **complete** | the commit containing this row |
+| F4–F12 | not started | — |
 
 ### F0 — what changed
 
@@ -168,9 +169,27 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 - Measured at the F2 commit: typecheck, lint, format, **unit 462**, **integration 373 passed / 0
   failed / 0 skipped**, **E2E 38 passed / 0 skipped**; 30 baseline demonstration collections unchanged.
 
+### F3 — what changed
+
+- `PLAT-024`–`026` implemented: module `apps/api/src/modules/settings/`, contracts
+  `packages/contracts/src/settings.ts`. Routes `/api/v1/settings` (`settings.view`, administrative
+  `settings.manage`) and `/api/v1/reference-data` (read by anyone signed in, active items only;
+  administrative `referenceData.manage` for changes and retired items).
+- **Nothing is invented:** fiscal-year start (`SD-21`), reservation validity (`SD-03`) and quiet
+  hours (`SD-21`) default to `null` — *not configured* — and name their decision; the 15-day reminder
+  is the one default both source documents mandate; no tax rate is seeded (`SD-08`).
+- Bound lists (unit, usage and finishing types, lead sources, pipeline stages, payment methods) mirror
+  the contract enumerations and take their default labels from `@alola/i18n`; a deployment relabels
+  and reorders them. **The business modules still read their own enumerations**; switching their
+  screens and validation to the reference lists is Business Master Prompt 1 work.
+- `ReferenceCodeSchema` exists because `BusinessCodeSchema` (upper case only) rejects the product's own
+  enumeration codes.
+- Measured at the F3 commit: typecheck, lint, format, **unit 479**, **integration 387 passed / 0
+  failed / 0 skipped**, **E2E 38 passed / 0 skipped**; 30 baseline demonstration collections unchanged.
+
 ### Resume point
 
-Next package: **F3 — settings, reference data and feature flags** (`PLAT-024`–`026`).
+Next package: **F4 — central number sequences** (`CORE-DOC-001`).
 
 ## Phase status
 
@@ -652,9 +671,9 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 ### Foundation additions (registered 2026-09-27, 17 IDs)
 
-**`implemented` (9):** PLAT-022, PLAT-023, THEME-013 (F1) · CORE-ORG-001–006 (F2)
+**`implemented` (12):** PLAT-022, PLAT-023, THEME-013 (F1) · CORE-ORG-001–006 (F2) · PLAT-024–026 (F3)
 
-**`approved`, not started (8):** PLAT-024–026 (F3) · CORE-IMPORT-003 (F9) · OPS-004–007 (F11, F12)
+**`approved`, not started (5):** CORE-IMPORT-003 (F9) · OPS-004–007 (F11, F12)
 
 ## Next exact task
 

@@ -14,4 +14,5 @@ export * from './marketing';
 export * from './money';
 export * from './organization';
 export * from './sales';
+export * from './settings';
 export * from './time';

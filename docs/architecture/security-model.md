@@ -334,6 +334,15 @@ One deployment is one company (ADR-0027), so none of these carries a tenant iden
 
 | F2 | `orgPlacementHistory` | `_id_unique`, `_placement` | **Append-only** placement history: every change with its effective date, reason and organization references — never a name |
 
+| F3 | `settingValues` | `_key_unique` | One row per catalogued key ever set; a key absent is at its default |
+| F3 | `settingRevisions` | `_id_unique`, `_key_version_unique` | **Append-only** history of every value, with its reason |
+| F3 | `referenceItems` | `_list_code_unique`, `_list_active_order` | Codes immutable; items deactivated, never deleted; tax rates as `Decimal128`, appended forward only |
+
+**Settings hold no secrets by construction (PLAT-024).** Only keys declared in
+`packages/contracts/src/settings.ts` can be written, each validated against its own schema; there is no
+free-form key and no free-form value. Provider credentials stay in the deployment environment or its
+secrets manager (ADR-0015).
+
 F2 also added `structureVersion` to every organization unit (the write that serializes a deactivation
 against a concurrent creation beneath it), `costCenterCode` on branches and teams, `projectRefs` on
 teams and `endedOn` on placements, plus child-status indexes (`orgDepartments_branch_status`,

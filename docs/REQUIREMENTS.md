@@ -73,9 +73,9 @@ real **values** (`SD-01`) remain a Phase 2 input, and no business policy is deci
 | CORE-ORG-004 | Organization reads **and writes** constrained by the actor's data scope | F2 | implemented |
 | CORE-ORG-005 | Direct-manager resolution for escalation, skipping nothing and inventing nothing | F2 | implemented |
 | CORE-ORG-006 | Cost-centre and project-scope references on organization units | F2 | implemented |
-| PLAT-024 | Centralized validated business settings, permissioned and audited, with history | F3 | approved |
-| PLAT-025 | Reference data with stable codes, bilingual labels, ordering and deactivation; a code in use is never removed or recoded | F3 | approved |
-| PLAT-026 | Feature flags limited to an approved catalog, audited | F3 | approved |
+| PLAT-024 | Centralized validated business settings, permissioned and audited, with history | F3 | implemented |
+| PLAT-025 | Reference data with stable codes, bilingual labels, ordering and deactivation; a code in use is never removed or recoded | F3 | implemented |
+| PLAT-026 | Feature flags limited to an approved catalog, audited | F3 | implemented |
 | CORE-IMPORT-003 | Export: permission-checked, scope- and field-restricted, bounded, formula-safe, audited, expiring | F9 | approved |
 | OPS-004 | Explicit, versioned schema migrations with a recorded database version | F11 | approved |
 | OPS-005 | Repeatable client-deployment initialization, idempotent, refusing destructive resets | F11 | approved |
@@ -115,6 +115,17 @@ request through a real `ApprovalService` wired exactly as `domain-services.ts` w
 `resolveManager` backed by `OrganizationService.resolveManagerAccount` — lets the stage go overdue,
 sweeps, and finds the requester's manager among the pending approvers. The unresolved case (no manager,
 an ended or future manager) is proven by the CORE-ORG-005 tests and by `approval.int-test.ts`.
+
+### Implementation evidence — F3 (2026-09-27)
+
+Tests: `apps/api/src/modules/settings/settings.int-test.ts` (14, real MongoDB) and
+`packages/contracts/src/settings.test.ts` (17).
+
+| ID | Evidence |
+|---|---|
+| PLAT-024 | Only catalogued keys can be written (`smtp.password`, `meta.accessToken`, `__proto__` refused, nothing stored); each value is validated against its own setting's schema (nine invalid shapes and an operator object refused); undecided values (`finance.fiscalYearStartMonth`, `sales.reservationValidityDays`, quiet hours) are `null` — *not configured* — and name their open decision; every non-null default satisfies its own schema; a change and a reset to default each create a version, an append-only revision with its reason, and an audit record; three simultaneous first edits yield one success and two conflicts, a stale version is refused; revisions and values cannot be deleted or rewritten through the models; `settings.view` / administrative `settings.manage` enforced |
+| PLAT-025 | A bound list (`leadSources`, `unitTypes`, …) always serves every product code with its bilingual product label; it can be relabelled (the code unchanged) but not extended or recoded; the pipeline-stage list is locked because its state machine needs every stage; open lists are extended, duplicate codes refused, items withdrawn from new use but kept in storage, and retired items visible only with `referenceData.manage`; single-language labels refused; optimistic concurrency on items; tax rates are added forward only (`RATE_NOT_FORWARD`), bounded 0–100 on the digits, never through floating point, and `effectiveTaxRate` answers the rate in force on a date — no rate is seeded (`SD-08`) |
+| PLAT-026 | Feature flags are exactly the catalogued `feature.*` settings; a flag gated by an ADR (`feature.meta.conversionsApiDelivery`, ADR-0017) cannot be switched on by configuration (`FEATURE_LOCKED`); an ordinary flag switches with a reason and an audit record; `isEnabled` accepts only catalogued feature keys by type |
 
 ## Current status summary
 
