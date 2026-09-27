@@ -67,12 +67,12 @@ real **values** (`SD-01`) remain a Phase 2 input, and no business policy is deci
 | PLAT-022 | Exactly one company profile per deployment: bilingual legal, trade and short names, registrations, address, contact, languages, timezone, base currency, country, footer; versioned with an append-only revision history; no secrets; no tenant identifier | F1 | implemented |
 | PLAT-023 | Runtime branding — names, logo, compact logo, favicon, languages and the demonstration flag — served publicly without secrets and consumed by the sign-in screen, the shell and the browser tab, with a neutral fallback on any failure | F1 | implemented |
 | THEME-013 | A deployment brand colour is validated against every contrast pair in use when saved and again before rendering; only the brand states are derived from it | F1 | implemented |
-| CORE-ORG-001 | Legal entity, branch, department, team and job title with an active/inactive lifecycle; nothing referenced is ever deleted | F2 | approved |
-| CORE-ORG-002 | Hierarchy validation: a child belongs to an active parent in the same legal entity; reporting lines are cycle-free | F2 | approved |
-| CORE-ORG-003 | Employee placement with effective dates, direct manager and an append-only history; one active placement per security account | F2 | approved |
-| CORE-ORG-004 | Organization reads **and writes** constrained by the actor's data scope | F2 | approved |
-| CORE-ORG-005 | Direct-manager resolution for escalation, skipping nothing and inventing nothing | F2 | approved |
-| CORE-ORG-006 | Cost-centre and project-scope references on organization units | F2 | approved |
+| CORE-ORG-001 | Legal entity, branch, department, team and job title with an active/inactive lifecycle; nothing referenced is ever deleted | F2 | implemented |
+| CORE-ORG-002 | Hierarchy validation: a child belongs to an active parent in the same legal entity; reporting lines are cycle-free | F2 | implemented |
+| CORE-ORG-003 | Employee placement with effective dates, direct manager and an append-only history; one active placement per security account | F2 | implemented |
+| CORE-ORG-004 | Organization reads **and writes** constrained by the actor's data scope | F2 | implemented |
+| CORE-ORG-005 | Direct-manager resolution for escalation, skipping nothing and inventing nothing | F2 | implemented |
+| CORE-ORG-006 | Cost-centre and project-scope references on organization units | F2 | implemented |
 | PLAT-024 | Centralized validated business settings, permissioned and audited, with history | F3 | approved |
 | PLAT-025 | Reference data with stable codes, bilingual labels, ordering and deactivation; a code in use is never removed or recoded | F3 | approved |
 | PLAT-026 | Feature flags limited to an approved catalog, audited | F3 | approved |
@@ -94,6 +94,27 @@ Existing IDs the foundation packages implement or advance keep their original ro
 | PLAT-022 | `apps/api/src/modules/company/company.int-test.ts` — five simultaneous creations yield one profile (201, 409 ×4); secret-shaped and unknown fields (`smtpPassword`, `whatsappAccessToken`, `tenantId`, `version`, forged `assets`) refused with nothing stored; a stale `expectedVersion` is a conflict that changes nothing and two simultaneous edits yield exactly one; every change writes a revision and an audit record in one transaction; profiles, revisions and images cannot be deleted through the models |
 | PLAT-023 | `company.int-test.ts` — the public endpoint answers the neutral identity before a profile exists and, after, only names, languages, colour and image URLs (no registration, contact or footer); PNG and JPEG verified by magic bytes, a mismatched, GIF or SVG body refused, 600 KiB refused with 413, path traversal refused; images served with their verified type, `nosniff` and an immutable cache for the current hash; a replaced image is superseded, not deleted. `apps/web/src/branding.test.tsx` — tab title, logo with the company name as its text alternative, favicon, starting language, a single-language deployment with no switch, no demonstration notice on a live deployment, and the neutral fallback on a malformed or refused answer |
 | THEME-013 | `packages/ui/src/brand.test.ts` — no configuration returns the approved token object itself; the approved blue validates; a derived palette changes only the brand states; a dark colour passes every pair in use; `#FACC15` is refused naming `onPrimary` on `primary`; non-hex input refused; the module imports only tokens and contrast, so the server validates with the browser's rule. `packages/ui/src/ThemeRoot.test.tsx` — the theme renders a valid colour and ignores an invalid one. `company.int-test.ts` — `#FACC15` refused by the API with `BRAND_COLOR_CONTRAST` and nothing stored |
+
+### Implementation evidence — F2 (2026-09-27)
+
+Tests: `apps/api/src/modules/organization/foundation.int-test.ts` (13, new) and
+`organization.int-test.ts` (20, unchanged and still passing), against real MongoDB.
+
+| ID | Evidence |
+|---|---|
+| CORE-ORG-001 | Editable fields change, code/parent/currency are refused by the schema, an empty update is refused; a branch with an active department, a department with an active placement and a held job title cannot be deactivated (`ACTIVE_CHILDREN`); an empty department retires with its reason audited; a second deactivation is a conflict; nothing is deletable (existing suite) |
+| CORE-ORG-002 | Nothing is created beneath an inactive parent (`PARENT_INACTIVE`, nothing stored); a unit reactivates only under an active parent; **six rounds of a deactivation racing a team creation and a placement** never leave an inactive department with anything active beneath it, and every request gets 200/201/409 — the parent "touch" and the deactivation write the same document inside their transactions, so MongoDB serializes them; cycles refused (existing suite and here) |
+| CORE-ORG-003 | A transfer from a date takes branch and legal entity from the new department, refuses a team from another department (also on update — a defect in the slice) and a date before the start; history lists `transferred`, `created` with effective dates, reasons and before/after references and no names; deactivation sets `endedOn`; one active placement per account enforced on creation and on reactivation (`ACCOUNT_ALREADY_PLACED`); the history model refuses every update and delete |
+| CORE-ORG-004 | A branch administrator changes their branch and gets `404` — identical to an absent record — for another branch, its departments and its placements, cannot transfer a placement out of scope, and gets `403` for deployment-wide legal entities and job titles; nothing outside the scope changed; a legal-entity administrator opens branches in their entity only |
+| CORE-ORG-005 | The manager resolves only while effective: not before `startedOn`, not after an ended placement, never a skipped level; the reporting line walks to the top for an `all` actor and stops, `interrupted`, where a branch-scoped actor may not see |
+| CORE-ORG-006 | Branch cost-centre set and returned; departments and teams carry cost centres, teams carry project references (contract and model; indexed) |
+
+**`APPROVAL-005` moves from `in-progress` to `implemented`.** The one thing it lacked was a
+reporting line that exists outside a demonstration slice. `foundation.int-test.ts` now submits a
+request through a real `ApprovalService` wired exactly as `domain-services.ts` wires it —
+`resolveManager` backed by `OrganizationService.resolveManagerAccount` — lets the stage go overdue,
+sweeps, and finds the requester's manager among the pending approvers. The unresolved case (no manager,
+an ended or future manager) is proven by the CORE-ORG-005 tests and by `approval.int-test.ts`.
 
 ## Current status summary
 
@@ -304,7 +325,7 @@ type is seeded, because that content is `SD-02` ([ADR-0024](decisions/adr-0024-a
 | APPROVAL-002 | Rules configurable by amount, percentage, role, project, department, risk, exception | implemented | `rules.test.ts` — all seven axes accepted, decimal-safe amount comparison, mismatched currencies not comparable, and every ambiguous configuration refused with a code; `approval.int-test.ts` — draft, edit, publish, version selection by specificity, and a permission-based stage resolved to accounts within scope |
 | APPROVAL-003 | Maker-checker: self-approval rejected unless an explicit audited policy permits it | implemented | `rules.test.ts` — refusal by default, permitted only with a reason, a delegate acting for the requester still caught, one person refused across two stages; `approval.int-test.ts` — refused over HTTP with nothing stored, permitted case marked `selfApproved` in the response and in the audit record, and **not** bypassed by an administrative permission |
 | APPROVAL-004 | Delegation, time-bounded and audited | implemented | `rules.test.ts` — window, revocation, self-delegation, over-long window, and cycle detection; `approval.int-test.ts` — a delegate acts and both hands are recorded, revocation takes effect immediately, a future window does not work, a delegation applies only to the policies it names, and it never widens what the delegate may otherwise do |
-| APPROVAL-005 | Escalation of an overdue task **or approval** to the direct manager | **in-progress** | Mechanism complete and tested: `approval.int-test.ts` adds the manager to the pending approvers once a stage is overdue, idempotently, audited, and refuses the sweep without the permission. **The direct manager cannot be resolved in the running system**: the reporting line is `CORE-ORG` (Phase 2, `SD-01`), so an overdue stage is reported as *unresolved* rather than escalated. The task half is `CORE-TASK-003` |
+| APPROVAL-005 | Escalation of an overdue task **or approval** to the direct manager | **implemented** (2026-09-27, F2) | `approval.int-test.ts` — the manager is added to the pending approvers once a stage is overdue, idempotently, audited, and the sweep needs its permission; an overdue stage with no resolvable manager is reported *unresolved*. `organization/foundation.int-test.ts` — the same sweep, wired to the real `CORE-ORG` reporting line, escalates to the requester's effective manager. The task half is `CORE-TASK-003` |
 | APPROVAL-006 | Immutable approval history | implemented | `approval.int-test.ts` — a published policy version cannot be edited through the API or the model, a request keeps the version it was submitted under even after a newer one is published, and decisions survive a return, a resubmission, and a reassignment |
 | APPROVAL-007 | Reassign an offboarded user's pending approvals to an authorized approver, audited | implemented | `approval.int-test.ts` — one request and a whole account's pending approvals moved, each audited; decisions already recorded are untouched; the old approver can no longer act and the new one can; refused without the administrative permission |
 

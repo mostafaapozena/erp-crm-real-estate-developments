@@ -27,6 +27,7 @@ import {
   departmentModel,
   jobTitleModel,
   legalEntityModel,
+  placementHistoryModel,
   placementModel,
   teamModel,
 } from '../modules/organization/model';
@@ -63,6 +64,7 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     teamModel(connection),
     jobTitleModel(connection),
     placementModel(connection),
+    placementHistoryModel(connection),
     projectModel(connection),
     buildingModel(connection),
     unitModel(connection),

@@ -332,6 +332,18 @@ One deployment is one company (ADR-0027), so none of these carries a tenant iden
 | F1 | `companyProfileRevisions` | `_id_unique`, `_version_unique` | **Append-only**: every update, delete and rewrite operation refused by the model. One revision per version, so concurrent edits cannot both record version N |
 | F1 | `brandAssets` | `_id_unique`, `_slot_active_unique` (partial), `_slot_history` | PNG/JPEG only, verified by magic bytes, ≤ 512 KiB; a replaced image is `superseded`, never deleted; `scanStatus: not_scanned` until a scanner exists (SEC-005) |
 
+| F2 | `orgPlacementHistory` | `_id_unique`, `_placement` | **Append-only** placement history: every change with its effective date, reason and organization references — never a name |
+
+F2 also added `structureVersion` to every organization unit (the write that serializes a deactivation
+against a concurrent creation beneath it), `costCenterCode` on branches and teams, `projectRefs` on
+teams and `endedOn` on placements, plus child-status indexes (`orgDepartments_branch_status`,
+`orgTeams_department_status`, `orgPlacements_department_status`, `_team_status`, `_jobTitle_status`).
+
+**Organization writes are scoped (CORE-ORG-004).** Before F2 the organization routes checked the
+permission and then wrote without a scope — a branch-scoped administrator could edit another branch's
+placements. Every write now finds its target (or its parent) through the actor's scope filter and
+answers `404` outside it; legal entities and job titles need the `all` scope.
+
 **Public endpoints.** `GET /api/v1/branding` and `GET /api/v1/branding/assets/{slot}` require no
 authentication by design: the sign-in screen needs them before anyone has signed in. They return only
 names, languages, the validated colour and the images — never a registration number, contact detail,
@@ -364,11 +376,9 @@ themselves restricted fields, requiring `audit.viewContext`.
 
 ### Deliberately not implemented yet
 
-- **Escalation to a direct manager** is now wired: the demonstration slice built `CORE-ORG`, and the
-  approval engine resolves the reporting line through it. `APPROVAL-005` nevertheless stays
-  `in-progress`, because that module is a **demonstration slice and not the registered `CORE-ORG`
-  requirement** (ADR-0025), and because an overdue stage with no resolvable manager is still reported
-  as *unresolved* rather than escalated to an invented one.
+- **Escalation to a direct manager** — done (F2, 2026-09-27): `CORE-ORG` is now a foundation
+  (`CORE-ORG-001`–`006`), `APPROVAL-005` is `implemented`, and an overdue stage whose requester has
+  no effective manager is still reported as *unresolved* rather than escalated to an invented one.
 - **Notification and task delivery** for approvals — `CORE-NOTIFY`, `CORE-TASK`. The engine publishes a
   domain event through a port with nothing wired to it, and is correct with nothing listening.
 - **Password-reset and invitation delivery** — `CORE-NOTIFY`. Until it exists, an administrator issues a

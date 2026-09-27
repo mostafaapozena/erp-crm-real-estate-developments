@@ -133,7 +133,12 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
 
   function getOrganizationService(): OrganizationService {
     const connection = requireConnection();
-    organizationService ??= new OrganizationService({ connection, audit: getAuditService() });
+    organizationService ??= new OrganizationService({
+      connection,
+      audit: getAuditService(),
+      // Placements are effective-dated in the organization's calendar, not the server's (ADR-0008).
+      today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
+    });
     return organizationService;
   }
 

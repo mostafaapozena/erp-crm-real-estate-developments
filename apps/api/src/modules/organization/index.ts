@@ -16,12 +16,14 @@ export {
   JOB_TITLES_COLLECTION,
   LEGAL_ENTITIES_COLLECTION,
   PLACEMENTS_COLLECTION,
+  PLACEMENT_HISTORY_COLLECTION,
   TEAMS_COLLECTION,
   OrgRecordUndeletableError,
   branchModel,
   departmentModel,
   jobTitleModel,
   legalEntityModel,
+  placementHistoryModel,
   placementModel,
   teamModel,
 } from './model';
@@ -32,6 +34,6 @@ export {
   OrganizationService,
   ReportingCycleError,
 } from './service';
-export type { AuditRecorder, RequestContext } from './service';
+export type { AuditRecorder, OrganizationServiceOptions, RequestContext } from './service';
 export { organizationRouter } from './router';
 export type { OrgRouterOptions } from './router';

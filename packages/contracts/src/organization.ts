@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BusinessCodeSchema, EnteredNameSchema, RecordIdSchema } from './identifiers';
 import { LocalizedLabelSchema } from './localized';
-import { InstantSchema } from './time';
+import { BusinessDateSchema, InstantSchema, isValidTimeZone } from './time';
 
 /**
  * Organization structure — `CORE-ORG` (ADR-0019).
@@ -27,6 +27,35 @@ export const ORG_STATUSES = ['active', 'inactive'] as const;
 export const OrgStatusSchema = z.enum(ORG_STATUSES);
 export type OrgStatus = z.infer<typeof OrgStatusSchema>;
 
+/** The organization units with a lifecycle (CORE-ORG-001). Placements have their own. */
+export const ORG_UNIT_KINDS = ['legalEntity', 'branch', 'department', 'team', 'jobTitle'] as const;
+export const OrgUnitKindSchema = z.enum(ORG_UNIT_KINDS);
+export type OrgUnitKind = z.infer<typeof OrgUnitKindSchema>;
+
+/**
+ * Why a unit is being deactivated or reactivated. Required: an organization change moves data scopes
+ * and escalation paths (SEC-026, APPROVAL-005), so it must be explainable afterwards.
+ */
+export const OrgLifecycleChangeSchema = z.strictObject({
+  reason: z.string().trim().min(3).max(500),
+});
+export type OrgLifecycleChange = z.infer<typeof OrgLifecycleChangeSchema>;
+
+/** Project references carried by a team (CORE-ORG-006). Opaque inventory identifiers. */
+export const ProjectRefsSchema = z.array(RecordIdSchema).max(100);
+
+const TimeZoneFieldSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .refine(isValidTimeZone, { message: 'TIME_ZONE_INVALID' });
+
+/** A partial update must change something; an empty body is a client mistake, not a no-op. */
+const notEmpty = (value: Record<string, unknown>) =>
+  Object.values(value).some((field) => field !== undefined);
+const NOT_EMPTY_ISSUE = { message: 'NOTHING_TO_UPDATE' };
+
 /* ------------------------------------------------------------------ legal entity */
 
 export const LegalEntitySchema = z.strictObject({
@@ -36,7 +65,7 @@ export const LegalEntitySchema = z.strictObject({
   /** ISO 4217. Every money value inside this entity is denominated in it. */
   currency: z.string().regex(/^[A-Z]{3}$/),
   /** IANA zone used to display instants for this entity (ADR-0008). */
-  timeZone: z.string().min(1).max(64),
+  timeZone: TimeZoneFieldSchema,
   /** Shown on documents. Not validated against any registry — that is a Phase 6 concern. */
   taxNumber: z.string().trim().max(40).optional(),
   status: OrgStatusSchema,
@@ -54,6 +83,20 @@ export const CreateLegalEntitySchema = z.strictObject({
 });
 export type CreateLegalEntity = z.infer<typeof CreateLegalEntitySchema>;
 
+/**
+ * The currency is not editable: every money value inside the entity is denominated in it, and changing
+ * it would silently reinterpret them. The code is not editable either — it is the stable identifier
+ * documents and imports refer to.
+ */
+export const UpdateLegalEntitySchema = z
+  .strictObject({
+    name: LocalizedLabelSchema.optional(),
+    timeZone: TimeZoneFieldSchema.optional(),
+    taxNumber: z.string().trim().max(40).optional(),
+  })
+  .refine(notEmpty, NOT_EMPTY_ISSUE);
+export type UpdateLegalEntity = z.infer<typeof UpdateLegalEntitySchema>;
+
 /* ----------------------------------------------------------------------- branch */
 
 export const BranchSchema = z.strictObject({
@@ -62,6 +105,8 @@ export const BranchSchema = z.strictObject({
   code: BusinessCodeSchema,
   name: LocalizedLabelSchema,
   city: LocalizedLabelSchema,
+  /** Cost-centre reference for Phase 6 accounting (CORE-ORG-006). Carried, never interpreted here. */
+  costCenterCode: BusinessCodeSchema.optional(),
   status: OrgStatusSchema,
   createdAt: InstantSchema,
   updatedAt: InstantSchema,
@@ -73,8 +118,18 @@ export const CreateBranchSchema = z.strictObject({
   code: BusinessCodeSchema,
   name: LocalizedLabelSchema,
   city: LocalizedLabelSchema,
+  costCenterCode: BusinessCodeSchema.optional(),
 });
 export type CreateBranch = z.infer<typeof CreateBranchSchema>;
+
+export const UpdateBranchSchema = z
+  .strictObject({
+    name: LocalizedLabelSchema.optional(),
+    city: LocalizedLabelSchema.optional(),
+    costCenterCode: BusinessCodeSchema.optional(),
+  })
+  .refine(notEmpty, NOT_EMPTY_ISSUE);
+export type UpdateBranch = z.infer<typeof UpdateBranchSchema>;
 
 /* ------------------------------------------------------------------- department */
 
@@ -103,6 +158,14 @@ export const CreateDepartmentSchema = z.strictObject({
 });
 export type CreateDepartment = z.infer<typeof CreateDepartmentSchema>;
 
+export const UpdateDepartmentSchema = z
+  .strictObject({
+    name: LocalizedLabelSchema.optional(),
+    costCenterCode: BusinessCodeSchema.optional(),
+  })
+  .refine(notEmpty, NOT_EMPTY_ISSUE);
+export type UpdateDepartment = z.infer<typeof UpdateDepartmentSchema>;
+
 /* ------------------------------------------------------------------------- team */
 
 export const TeamSchema = z.strictObject({
@@ -112,6 +175,12 @@ export const TeamSchema = z.strictObject({
   legalEntityId: RecordIdSchema,
   code: BusinessCodeSchema,
   name: LocalizedLabelSchema,
+  costCenterCode: BusinessCodeSchema.optional(),
+  /**
+   * The projects this team works on (CORE-ORG-006): the organization side of the `project` data scope.
+   * Opaque inventory identifiers — `CORE-ORG` depends on no business module (overview §4 rule 4).
+   */
+  projectRefs: ProjectRefsSchema,
   status: OrgStatusSchema,
   createdAt: InstantSchema,
   updatedAt: InstantSchema,
@@ -122,8 +191,21 @@ export const CreateTeamSchema = z.strictObject({
   departmentId: RecordIdSchema,
   code: BusinessCodeSchema,
   name: LocalizedLabelSchema,
+  costCenterCode: BusinessCodeSchema.optional(),
+  projectRefs: ProjectRefsSchema.default([]),
 });
 export type CreateTeam = z.infer<typeof CreateTeamSchema>;
+/** What a caller may pass: `projectRefs` defaults to none. */
+export type CreateTeamInput = z.input<typeof CreateTeamSchema>;
+
+export const UpdateTeamSchema = z
+  .strictObject({
+    name: LocalizedLabelSchema.optional(),
+    costCenterCode: BusinessCodeSchema.optional(),
+    projectRefs: ProjectRefsSchema.optional(),
+  })
+  .refine(notEmpty, NOT_EMPTY_ISSUE);
+export type UpdateTeam = z.infer<typeof UpdateTeamSchema>;
 
 /* -------------------------------------------------------------------- job title */
 
@@ -143,6 +225,9 @@ export const CreateJobTitleSchema = z.strictObject({
 });
 export type CreateJobTitle = z.infer<typeof CreateJobTitleSchema>;
 
+export const UpdateJobTitleSchema = z.strictObject({ name: LocalizedLabelSchema });
+export type UpdateJobTitle = z.infer<typeof UpdateJobTitleSchema>;
+
 /* -------------------------------------------------------------------- placement */
 
 export const PlacementSchema = z.strictObject({
@@ -161,7 +246,10 @@ export const PlacementSchema = z.strictObject({
   /** Direct reporting line. Self-reference and cycles are refused when the placement is written. */
   managerPlacementId: RecordIdSchema.optional(),
   status: OrgStatusSchema,
-  startedOn: z.string(),
+  /** First day the placement is effective, in the organization's calendar (ADR-0008). */
+  startedOn: BusinessDateSchema,
+  /** Last day it was effective. Present once the placement has ended. */
+  endedOn: BusinessDateSchema.optional(),
   createdAt: InstantSchema,
   updatedAt: InstantSchema,
 });
@@ -175,7 +263,7 @@ export const CreatePlacementSchema = z.strictObject({
   teamId: RecordIdSchema.optional(),
   jobTitleId: RecordIdSchema,
   managerPlacementId: RecordIdSchema.optional(),
-  startedOn: z.string(),
+  startedOn: BusinessDateSchema,
 });
 export type CreatePlacement = z.infer<typeof CreatePlacementSchema>;
 
@@ -187,6 +275,67 @@ export const UpdatePlacementSchema = z.strictObject({
   status: OrgStatusSchema.optional(),
 });
 export type UpdatePlacement = z.infer<typeof UpdatePlacementSchema>;
+
+/**
+ * Move a placement to another department (and optionally team, title and manager) from a date. The
+ * legal entity and branch follow the new department; they are never taken from the request.
+ */
+export const TransferPlacementSchema = z.strictObject({
+  departmentId: RecordIdSchema,
+  teamId: RecordIdSchema.optional(),
+  jobTitleId: RecordIdSchema.optional(),
+  managerPlacementId: RecordIdSchema.optional(),
+  effectiveOn: BusinessDateSchema,
+  reason: z.string().trim().min(3).max(500),
+});
+export type TransferPlacement = z.infer<typeof TransferPlacementSchema>;
+
+/** End or resume a placement from a date, with the reason (CORE-ORG-003). */
+export const PlacementLifecycleSchema = z.strictObject({
+  effectiveOn: BusinessDateSchema.optional(),
+  reason: z.string().trim().min(3).max(500),
+});
+export type PlacementLifecycle = z.infer<typeof PlacementLifecycleSchema>;
+
+export const PLACEMENT_CHANGES = [
+  'created',
+  'updated',
+  'transferred',
+  'deactivated',
+  'reactivated',
+] as const;
+
+/**
+ * One entry of a placement's append-only history (CORE-ORG-003). `before` and `after` hold the
+ * placement's organization references — department, team, title, manager, status — never personal data.
+ */
+export const PlacementHistoryEntrySchema = z.strictObject({
+  entryId: RecordIdSchema,
+  placementId: RecordIdSchema,
+  change: z.enum(PLACEMENT_CHANGES),
+  effectiveOn: BusinessDateSchema,
+  reason: z.string().max(500).optional(),
+  before: z.record(z.string(), z.string()).optional(),
+  after: z.record(z.string(), z.string()),
+  changedBy: z.string().min(1),
+  changedAt: InstantSchema,
+});
+export type PlacementHistoryEntry = z.infer<typeof PlacementHistoryEntrySchema>;
+
+export const PlacementHistoryListSchema = z.strictObject({
+  items: z.array(PlacementHistoryEntrySchema),
+});
+
+/**
+ * A placement and every manager above it, nearest first (CORE-ORG-005). Bounded: a line deeper than
+ * the limit is malformed, not tall.
+ */
+export const ReportingLineSchema = z.strictObject({
+  items: z.array(PlacementSchema),
+  /** True when the walk stopped at an inactive or not-yet-effective manager. */
+  interrupted: z.boolean(),
+});
+export type ReportingLine = z.infer<typeof ReportingLineSchema>;
 
 /* ------------------------------------------------------- shared scope reference */
 
@@ -235,4 +384,14 @@ export const ORG_AUDIT_ACTIONS = {
   placementCreated: 'org.placement.created',
   placementUpdated: 'org.placement.updated',
   placementDeactivated: 'org.placement.deactivated',
+  placementReactivated: 'org.placement.reactivated',
+  placementTransferred: 'org.placement.transferred',
 } as const;
+
+/** `org.<kind>.updated`, `org.<kind>.deactivated`, `org.<kind>.reactivated` for every unit kind. */
+export function orgUnitAuditAction(
+  kind: OrgUnitKind,
+  change: 'updated' | 'deactivated' | 'reactivated',
+): string {
+  return `org.${kind}.${change}`;
+}

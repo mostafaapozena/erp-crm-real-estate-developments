@@ -18,6 +18,7 @@ export const DEPARTMENTS_COLLECTION = 'orgDepartments';
 export const TEAMS_COLLECTION = 'orgTeams';
 export const JOB_TITLES_COLLECTION = 'orgJobTitles';
 export const PLACEMENTS_COLLECTION = 'orgPlacements';
+export const PLACEMENT_HISTORY_COLLECTION = 'orgPlacementHistory';
 
 export class OrgRecordUndeletableError extends Error {
   readonly code = 'CONFLICT';
@@ -41,6 +42,7 @@ export interface LegalEntityDocument {
   currency: string;
   timeZone: string;
   taxNumber?: string;
+  structureVersion?: number;
   status: (typeof ORG_STATUSES)[number];
   createdAt: Date;
   updatedAt: Date;
@@ -52,6 +54,8 @@ export interface BranchDocument {
   code: string;
   name: StoredLocalizedLabel;
   city: StoredLocalizedLabel;
+  costCenterCode?: string;
+  structureVersion?: number;
   status: (typeof ORG_STATUSES)[number];
   createdAt: Date;
   updatedAt: Date;
@@ -64,6 +68,7 @@ export interface DepartmentDocument {
   code: string;
   name: StoredLocalizedLabel;
   costCenterCode?: string;
+  structureVersion?: number;
   status: (typeof ORG_STATUSES)[number];
   createdAt: Date;
   updatedAt: Date;
@@ -76,6 +81,10 @@ export interface TeamDocument {
   legalEntityId: string;
   code: string;
   name: StoredLocalizedLabel;
+  costCenterCode?: string;
+  /** Absent on teams created before CORE-ORG-006; read as an empty list. */
+  projectRefs?: string[];
+  structureVersion?: number;
   status: (typeof ORG_STATUSES)[number];
   createdAt: Date;
   updatedAt: Date;
@@ -85,6 +94,7 @@ export interface JobTitleDocument {
   jobTitleId: string;
   code: string;
   name: StoredLocalizedLabel;
+  structureVersion?: number;
   status: (typeof ORG_STATUSES)[number];
   createdAt: Date;
   updatedAt: Date;
@@ -103,11 +113,32 @@ export interface PlacementDocument {
   managerPlacementId?: string;
   status: (typeof ORG_STATUSES)[number];
   startedOn: string;
+  endedOn?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
+/** One change to a placement, as it happened (CORE-ORG-003). Append-only. */
+export interface PlacementHistoryDocument {
+  entryId: string;
+  placementId: string;
+  change: 'created' | 'updated' | 'transferred' | 'deactivated' | 'reactivated';
+  effectiveOn: string;
+  reason?: string;
+  before?: Record<string, string>;
+  after: Record<string, string>;
+  changedBy: string;
+  changedAt: Date;
+}
+
 const DELETE_OPS = ['deleteOne', 'deleteMany', 'findOneAndDelete'] as const;
+const REWRITE_OPS = [
+  'updateOne',
+  'updateMany',
+  'findOneAndUpdate',
+  'findOneAndReplace',
+  'replaceOne',
+] as const;
 
 const localizedLabel = new Schema(
   { ar: { type: String, required: true }, en: { type: String, required: true } },
@@ -133,6 +164,8 @@ function legalEntitySchema(): Schema<LegalEntityDocument> {
       timeZone: { type: String, required: true },
       taxNumber: { type: String },
       status: { type: String, required: true, enum: [...ORG_STATUSES] },
+      /** Incremented by every structural change beneath or to the unit — the write that serializes them. */
+      structureVersion: { type: Number },
       createdAt: { type: Date, required: true, immutable: true },
       updatedAt: { type: Date, required: true },
     },
@@ -157,7 +190,10 @@ function branchSchema(): Schema<BranchDocument> {
       code: { type: String, required: true, immutable: true },
       name: { type: localizedLabel, required: true },
       city: { type: localizedLabel, required: true },
+      costCenterCode: { type: String },
       status: { type: String, required: true, enum: [...ORG_STATUSES] },
+      /** Incremented by every structural change beneath or to the unit — the write that serializes them. */
+      structureVersion: { type: Number },
       createdAt: { type: Date, required: true, immutable: true },
       updatedAt: { type: Date, required: true },
     },
@@ -183,6 +219,8 @@ function departmentSchema(): Schema<DepartmentDocument> {
       name: { type: localizedLabel, required: true },
       costCenterCode: { type: String },
       status: { type: String, required: true, enum: [...ORG_STATUSES] },
+      /** Incremented by every structural change beneath or to the unit — the write that serializes them. */
+      structureVersion: { type: Number },
       createdAt: { type: Date, required: true, immutable: true },
       updatedAt: { type: Date, required: true },
     },
@@ -194,6 +232,8 @@ function departmentSchema(): Schema<DepartmentDocument> {
     { unique: true, name: 'orgDepartments_branch_code_unique' },
   );
   schema.index({ legalEntityId: 1, branchId: 1, status: 1 }, { name: 'orgDepartments_scope' });
+  // "Does this branch still have active departments?" — asked before a branch is deactivated.
+  schema.index({ branchId: 1, status: 1 }, { name: 'orgDepartments_branch_status' });
   return refuseDeletion(schema);
 }
 
@@ -206,7 +246,11 @@ function teamSchema(): Schema<TeamDocument> {
       legalEntityId: { type: String, required: true, immutable: true },
       code: { type: String, required: true, immutable: true },
       name: { type: localizedLabel, required: true },
+      costCenterCode: { type: String },
+      projectRefs: { type: [String], default: undefined },
       status: { type: String, required: true, enum: [...ORG_STATUSES] },
+      /** Incremented by every structural change beneath or to the unit — the write that serializes them. */
+      structureVersion: { type: Number },
       createdAt: { type: Date, required: true, immutable: true },
       updatedAt: { type: Date, required: true },
     },
@@ -215,6 +259,8 @@ function teamSchema(): Schema<TeamDocument> {
   schema.index({ teamId: 1 }, { unique: true, name: 'orgTeams_id_unique' });
   schema.index({ departmentId: 1, code: 1 }, { unique: true, name: 'orgTeams_dept_code_unique' });
   schema.index({ legalEntityId: 1, branchId: 1, departmentId: 1 }, { name: 'orgTeams_scope' });
+  schema.index({ departmentId: 1, status: 1 }, { name: 'orgTeams_department_status' });
+  schema.index({ projectRefs: 1 }, { name: 'orgTeams_projects' });
   return refuseDeletion(schema);
 }
 
@@ -225,6 +271,8 @@ function jobTitleSchema(): Schema<JobTitleDocument> {
       code: { type: String, required: true, immutable: true },
       name: { type: localizedLabel, required: true },
       status: { type: String, required: true, enum: [...ORG_STATUSES] },
+      /** Incremented by every structural change beneath or to the unit — the write that serializes them. */
+      structureVersion: { type: Number },
       createdAt: { type: Date, required: true, immutable: true },
       updatedAt: { type: Date, required: true },
     },
@@ -250,6 +298,7 @@ function placementSchema(): Schema<PlacementDocument> {
       managerPlacementId: { type: String },
       status: { type: String, required: true, enum: [...ORG_STATUSES] },
       startedOn: { type: String, required: true },
+      endedOn: { type: String },
       createdAt: { type: Date, required: true, immutable: true },
       updatedAt: { type: Date, required: true },
     },
@@ -277,7 +326,54 @@ function placementSchema(): Schema<PlacementDocument> {
     { name: 'orgPlacements_scope' },
   );
   schema.index({ status: 1, displayName: 1 }, { name: 'orgPlacements_status_name' });
+  // Asked before a department, team or job title is deactivated.
+  schema.index({ departmentId: 1, status: 1 }, { name: 'orgPlacements_department_status' });
+  schema.index({ teamId: 1, status: 1 }, { name: 'orgPlacements_team_status' });
+  schema.index({ jobTitleId: 1, status: 1 }, { name: 'orgPlacements_jobTitle_status' });
   return refuseDeletion(schema);
+}
+
+/**
+ * Placement history — append-only (CORE-ORG-003). Every update and deletion path is refused by the
+ * model: an organization's past is evidence for the approvals, scopes and escalations it governed.
+ */
+function placementHistorySchema(): Schema<PlacementHistoryDocument> {
+  const schema = new Schema<PlacementHistoryDocument>(
+    {
+      entryId: { type: String, required: true, immutable: true },
+      placementId: { type: String, required: true, immutable: true },
+      change: {
+        type: String,
+        required: true,
+        immutable: true,
+        enum: ['created', 'updated', 'transferred', 'deactivated', 'reactivated'],
+      },
+      effectiveOn: { type: String, required: true, immutable: true },
+      reason: { type: String, immutable: true },
+      before: { type: Schema.Types.Mixed, immutable: true },
+      after: { type: Schema.Types.Mixed, required: true, immutable: true },
+      changedBy: { type: String, required: true, immutable: true },
+      changedAt: { type: Date, required: true, immutable: true },
+    },
+    {
+      collection: PLACEMENT_HISTORY_COLLECTION,
+      strict: 'throw',
+      versionKey: false,
+      timestamps: false,
+      minimize: false,
+    },
+  );
+  schema.index({ entryId: 1 }, { unique: true, name: 'orgPlacementHistory_id_unique' });
+  schema.index(
+    { placementId: 1, changedAt: -1, entryId: -1 },
+    { name: 'orgPlacementHistory_placement' },
+  );
+  for (const operation of [...DELETE_OPS, ...REWRITE_OPS]) {
+    schema.pre(operation as 'deleteOne', function rejectRewrite() {
+      throw new OrgRecordUndeletableError(operation);
+    });
+  }
+  return schema;
 }
 
 function model<T>(connection: Connection, name: string, build: () => Schema<T>): Model<T> {
@@ -306,4 +402,8 @@ export function jobTitleModel(connection: Connection): Model<JobTitleDocument> {
 
 export function placementModel(connection: Connection): Model<PlacementDocument> {
   return model(connection, PLACEMENTS_COLLECTION, placementSchema);
+}
+
+export function placementHistoryModel(connection: Connection): Model<PlacementHistoryDocument> {
+  return model(connection, PLACEMENT_HISTORY_COLLECTION, placementHistorySchema);
 }

@@ -89,8 +89,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 | Package | State | Commit |
 |---|---|---|
 | F0 Stabilization | **complete** | `24fe608` |
-| F1 Deployment model, company profile, branding | **complete** | the commit containing this row |
-| F2–F12 | not started | — |
+| F1 Deployment model, company profile, branding | **complete** | `1270ac7` |
+| F2 Organization foundation | **complete** | the commit containing this row |
+| F3–F12 | not started | — |
 
 ### F0 — what changed
 
@@ -140,14 +141,36 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
   snapshots — caught by the revision test; revisions now store snapshots exactly.
 - Lint boundary: server code may import `@alola/ui/brand` and nothing else from `@alola/ui` (a
   regular expression, because glob negation cannot re-include a path under an excluded one); tested.
-- Measured at the F1 commit: typecheck, full lint, format, **unit 463**, **integration 360 passed /
+- Measured at the F1 commit: typecheck, full lint, format, **unit 462** (the F1 commit message says
+  463 — a transcription error; 462 is what ran), **integration 360 passed /
   0 failed / 0 skipped**, **E2E 38 passed / 0 skipped**, i18n, secrets (346 files), links, bundle
   325.1 kB; all 30 baseline demonstration collections unchanged (three new, empty F1 collections).
 
+### F2 — what changed
+
+- `CORE-ORG-001`–`006` implemented; **`APPROVAL-005` moved to `implemented`** — an overdue
+  approval now escalates through the real reporting line (`organization/foundation.int-test.ts`).
+- **Defects in the demonstration slice fixed:** organization writes applied **no data scope** (a
+  branch-scoped administrator could edit another branch's placements); a placement's `teamId` could
+  be changed to a team of another department; a manager could be inactive; duplicate codes and a
+  second active placement per account surfaced as `500` (duplicate-key error) instead of `409`;
+  `startedOn` was an unchecked string.
+- Units gain update and deactivate/reactivate routes with child/parent guards; the parent is
+  "touched" (`structureVersion`) inside the creating transaction so a concurrent deactivation and
+  creation serialize — proven by a six-round race test.
+- Placements: effective-dated (`startedOn`/`endedOn`), transfer from a date, deactivate/reactivate,
+  append-only `orgPlacementHistory`, reporting line that stops where the actor may not see; manager
+  resolution only for an **effective** manager, in the organization's timezone.
+- Cost-centre on branches and teams, `projectRefs` on teams (opaque; `CORE-ORG` imports no business
+  module).
+- New shared helpers: `apps/api/src/platform/audit-port.ts` (audit port with transaction session,
+  `DomainError`, duplicate-key detection) and `apps/api/src/http/request-context.ts`.
+- Measured at the F2 commit: typecheck, lint, format, **unit 462**, **integration 373 passed / 0
+  failed / 0 skipped**, **E2E 38 passed / 0 skipped**; 30 baseline demonstration collections unchanged.
+
 ### Resume point
 
-Next package: **F2 — organization foundation** (scoped writes, lifecycle, effective-dated placements,
-history, cost centre and project references, completing `APPROVAL-005`).
+Next package: **F3 — settings, reference data and feature flags** (`PLAT-024`–`026`).
 
 ## Phase status
 
@@ -589,12 +612,14 @@ when not; reassignment moves who is awaiting a decision and never alters one alr
 cross-scope request is absent rather than forbidden; and every refused action leaves the stored state
 untouched.
 
-## Requirement status (Phase 1, 113 IDs)
+## Requirement status
 
-**`implemented` (79):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+### Phase 1 registry (113 IDs)
+
+**`implemented` (80):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
-**SEC-002, 010, 011–022 (14)** · **APPROVAL-001, 002, 003, 004, 006, 007 (6)**
+**SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2)
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -619,12 +644,17 @@ proven against real Redis, adapter registry not built) · THEME-009 (series orde
 `SameSite=Strict` `HttpOnly` path-scoped cookie plus the origin guard. A double-submit token would add
 nothing while both hold; it becomes necessary only if a cookie ever needs `SameSite=Lax`.
 
-`APPROVAL-005` is the tenth `in-progress` item: the escalation mechanism is complete and tested, but the
-**direct manager cannot be resolved** until `CORE-ORG` provides the reporting line (Phase 2, `SD-01`), so
-an overdue stage is reported as unresolved rather than escalated.
+`APPROVAL-005` left `in-progress` on 2026-09-27: with the organization foundation (F2) an overdue
+approval escalates through the real reporting line, and an unresolvable one is still reported as such.
 
 **Not started (24):** INTEGRATION-001–005 · CORE-NOTIFY-001–005 · CORE-TASK-001–005 · CORE-DOC-001–006 ·
 CORE-SEARCH-001 · CORE-IMPORT-001–002
+
+### Foundation additions (registered 2026-09-27, 17 IDs)
+
+**`implemented` (9):** PLAT-022, PLAT-023, THEME-013 (F1) · CORE-ORG-001–006 (F2)
+
+**`approved`, not started (8):** PLAT-024–026 (F3) · CORE-IMPORT-003 (F9) · OPS-004–007 (F11, F12)
 
 ## Next exact task
 
@@ -874,7 +904,7 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 | The demonstration contract preview could be mistaken for an approved contract | Labelled as a demonstration document on screen, and stated in the walkthrough's "what not to say" list. The real template is a stakeholder input |
 | Hosted CI result never observed (remote exists since the owner's 2026-09-24 push) | Run `npm run verify`, the integration gate and E2E locally before each commit; confirm the workflow on GitHub when the owner next pushes |
 | Secret scan is pattern-based, not a dedicated scanner | Add a dedicated scanner when CI exists |
-| Escalation resolves the direct manager through the `CORE-ORG` demonstration slice only | `APPROVAL-005` stays `in-progress` until the organization foundation is completed (Foundation F2); a stage with no resolvable manager is reported as unresolved |
+| An ended manager leaves their direct reports without an escalation path until they are re-parented | Reported as *unresolved* by the sweep rather than skipped to the next level (CORE-ORG-005). A report of placements whose manager has ended is a small addition for Business Master Prompt 1 or HR |
 | A module that forgets to act on an approved request leaves an approval that achieves nothing | Deliberate (ADR-0024 §2): the engine never executes the operation. Each consuming module needs its own test that it acts on the outcome |
 | A permission-based approver queue is bounded at 200 candidates | Logged when it truncates; a permission held by thousands of accounts is not a work queue. Narrow the stage rule instead |
 | **`SEC-033` (KMS) is not implemented**, so staging and production cannot store an MFA secret | Development and test use a configured local key, refused outside development. The KMS adapter is the blocker for enabling MFA anywhere real (ADR-0023 §6) |
