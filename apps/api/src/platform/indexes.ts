@@ -37,6 +37,11 @@ import {
   installmentModel,
   reservationModel,
 } from '../modules/sales/model';
+import {
+  counterModel as numberCounterModel,
+  issuedNumberModel,
+  sequenceModel as numberSequenceModel,
+} from '../modules/numbering/model';
 import { accountGrantModel, roleModel } from '../modules/security/model';
 import {
   referenceItemModel,
@@ -91,6 +96,9 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     settingValueModel(connection),
     settingRevisionModel(connection),
     referenceItemModel(connection),
+    numberSequenceModel(connection),
+    numberCounterModel(connection),
+    issuedNumberModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {

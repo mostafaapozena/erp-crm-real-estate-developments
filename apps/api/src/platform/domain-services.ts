@@ -18,6 +18,7 @@ import { CrmService } from '../modules/crm';
 import { AuthThrottle, IdentityService } from '../modules/identity';
 import { InventoryService } from '../modules/inventory';
 import { MarketingService } from '../modules/marketing';
+import { NumberingService } from '../modules/numbering';
 import { OrganizationService } from '../modules/organization';
 import { SalesService } from '../modules/sales';
 import { SecurityService } from '../modules/security';
@@ -64,6 +65,7 @@ export interface DomainServices {
   marketing: () => MarketingService;
   company: () => CompanyService;
   settings: () => SettingsService;
+  numbering: () => NumberingService;
 }
 
 export function createDomainServices(options: DomainServiceOptions): DomainServices {
@@ -81,6 +83,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let marketingService: MarketingService | undefined;
   let companyService: CompanyService | undefined;
   let settingsService: SettingsService | undefined;
+  let numberingService: NumberingService | undefined;
 
   /**
    * Encryption for MFA secrets (`SEC-017`).
@@ -139,6 +142,21 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     const connection = requireConnection();
     settingsService ??= new SettingsService({ connection, audit: getAuditService() });
     return settingsService;
+  }
+
+  /**
+   * Number sequences (CORE-DOC-001). The fiscal year comes from the deployment's settings; a
+   * fiscal-year format refuses to issue until it is configured (`SD-21`) rather than guessing January.
+   */
+  function getNumberingService(): NumberingService {
+    const connection = requireConnection();
+    numberingService ??= new NumberingService({
+      connection,
+      audit: getAuditService(),
+      fiscalYearStartMonth: () =>
+        getSettingsService().valueOf<number>('finance.fiscalYearStartMonth'),
+    });
+    return numberingService;
   }
 
   function getOrganizationService(): OrganizationService {
@@ -416,5 +434,6 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     marketing: getMarketingService,
     company: getCompanyService,
     settings: getSettingsService,
+    numbering: getNumberingService,
   };
 }

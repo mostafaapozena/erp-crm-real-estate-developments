@@ -127,6 +127,21 @@ Tests: `apps/api/src/modules/settings/settings.int-test.ts` (14, real MongoDB) a
 | PLAT-025 | A bound list (`leadSources`, `unitTypes`, …) always serves every product code with its bilingual product label; it can be relabelled (the code unchanged) but not extended or recoded; the pipeline-stage list is locked because its state machine needs every stage; open lists are extended, duplicate codes refused, items withdrawn from new use but kept in storage, and retired items visible only with `referenceData.manage`; single-language labels refused; optimistic concurrency on items; tax rates are added forward only (`RATE_NOT_FORWARD`), bounded 0–100 on the digits, never through floating point, and `effectiveTaxRate` answers the rate in force on a date — no rate is seeded (`SD-08`) |
 | PLAT-026 | Feature flags are exactly the catalogued `feature.*` settings; a flag gated by an ADR (`feature.meta.conversionsApiDelivery`, ADR-0017) cannot be switched on by configuration (`FEATURE_LOCKED`); an ordinary flag switches with a reason and an audit record; `isEnabled` accepts only catalogued feature keys by type |
 
+### Implementation evidence — F4 (2026-09-27)
+
+Tests: `apps/api/src/modules/numbering/numbering.int-test.ts` (11, real MongoDB) and
+`apps/api/src/http/validate.test.ts` (3).
+
+| ID | Evidence |
+|---|---|
+| CORE-DOC-001 | A draft format numbers nothing until activated; the preview reserves nothing; 25 concurrent issues yield exactly 1–25, no duplicate, no gap; a replayed idempotency key returns the same number — also when two replays race — and a replay with a different source is a conflict; a voided number is never reissued and cannot be deleted; each **legal entity**, branch and year is numbered separately; a number issued inside a transaction that then fails leaves no gap; a fiscal-year format refuses to issue until the fiscal year is configured (`SD-21`) and then follows it across its start month; the series continues across a format change, and a format that would reproduce an existing number is refused (`NUMBER_COLLISION`) with nothing consumed; a reset the number cannot show is refused at definition; only drafts are editable; two simultaneous activations leave exactly one active format; there is **no route that issues a number** |
+
+**Not adopted yet by the demonstration modules.** Reservation, contract and receipt numbers in the
+demonstration slice still come from the slice's own `salesCounters` (whose year comes from the
+server's UTC clock — recorded as a defect). Moving them onto this engine, with a migration that
+continues their existing series, is Business Master Prompt 1 work; the engine does not renumber any
+existing record.
+
 ## Current status summary
 
 | | Count |
@@ -431,7 +446,7 @@ adapter exists ([ADR-0023](decisions/adr-0023-password-hashing-and-session-token
 
 | ID | Requirement | Source | Notes |
 |---|---|---|---|
-| CORE-DOC-001 | Numbering sequences by entity, document type, project, and fiscal year; atomic generation; **no reuse** | ADR-0009 | Engine only; official formats arrive with `SD-10` (Phase 4) |
+| CORE-DOC-001 | Numbering sequences by entity, document type, project, and fiscal year; atomic generation; **no reuse** | ADR-0009 | **implemented** 2026-09-27 (F4). Engine only; official formats arrive with `SD-10` (Phase 4) |
 | CORE-DOC-002 | Template registry with bilingual templates | ADR-0003 | Registry only; templates arrive with `SD-10` |
 | CORE-DOC-003 | PDF generation with **embedded Arabic-capable fonts**; glyph rendering asserted by test | ADR-0003 | A "file produced" assertion does not catch this |
 | CORE-DOC-004 | Document version retention | ADR-0009 | |

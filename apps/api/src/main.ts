@@ -13,6 +13,7 @@ import { brandingRouter, companyRouter } from './modules/company';
 import { crmRouter } from './modules/crm';
 import { inventoryRouter } from './modules/inventory';
 import { marketingRouter } from './modules/marketing';
+import { numberingRouter } from './modules/numbering';
 import { organizationRouter } from './modules/organization';
 import { salesRouter } from './modules/sales';
 import { securityRouter } from './modules/security';
@@ -116,6 +117,7 @@ const getCollectionService = services.collections;
 const getMarketingService = services.marketing;
 const getCompanyService = services.company;
 const getSettingsService = services.settings;
+const getNumberingService = services.numbering;
 
 /** Authorization denials are security events (AUDIT-005). A failure to record must not hide the denial. */
 const guard = {
@@ -200,6 +202,7 @@ const modules: ApiModule[] = [
   // Public and read-only: what the sign-in screen needs before anyone has signed in (PLAT-023).
   { basePath: '/branding', router: brandingRouter({ getService: getCompanyService }) },
   { basePath: '/settings', router: settingsRouter({ getService: getSettingsService, guard }) },
+  { basePath: '/numbering', router: numberingRouter({ getService: getNumberingService, guard }) },
   {
     basePath: '/reference-data',
     router: referenceDataRouter({ getService: getSettingsService, guard }),

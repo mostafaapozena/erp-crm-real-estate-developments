@@ -91,8 +91,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 | F0 Stabilization | **complete** | `24fe608` |
 | F1 Deployment model, company profile, branding | **complete** | `1270ac7` |
 | F2 Organization foundation | **complete** | `748a8b6` |
-| F3 Settings, reference data, feature flags | **complete** | the commit containing this row |
-| F4–F12 | not started | — |
+| F3 Settings, reference data, feature flags | **complete** | `d64ec0c` |
+| F4 Number sequences | **complete** | the commit containing this row |
+| F5–F12 | not started | — |
 
 ### F0 — what changed
 
@@ -187,9 +188,27 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 - Measured at the F3 commit: typecheck, lint, format, **unit 479**, **integration 387 passed / 0
   failed / 0 skipped**, **E2E 38 passed / 0 skipped**; 30 baseline demonstration collections unchanged.
 
+### F4 — what changed
+
+- `CORE-DOC-001` implemented: module `apps/api/src/modules/numbering/`, contracts
+  `packages/contracts/src/numbering.ts`. Seventeen document types; formats with prefix, suffix,
+  separator, date part (`yyyy`, `yy`, `yyyyMM`, `fiscalYear`), entity/branch/project parts and
+  reset policy; administrative `numbering.manage`.
+- Issuing is `NumberingService.issue(issuer, request, session?)` — joining the caller's
+  transaction — and deliberately has **no route**. Voiding keeps the number forever.
+- The fiscal year comes from the F3 setting; a fiscal-year format refuses to issue while it is not
+  configured rather than assuming January.
+- Platform change: `validate` now reports a refinement's stable code (an `UPPER_SNAKE` message)
+  instead of Zod's generic `custom` (`apps/api/src/http/validate.test.ts`).
+- The demonstration modules still number through `salesCounters`; adoption with a series-continuing
+  migration is Business Master Prompt 1 work.
+- Measured at the F4 commit: typecheck, lint, format, **unit 482**, **integration 398 passed / 0
+  failed / 0 skipped**, **E2E 38 passed / 0 skipped**; 30 baseline demonstration collections unchanged.
+
 ### Resume point
 
-Next package: **F4 — central number sequences** (`CORE-DOC-001`).
+Next package: **F5 — documents and templates** (`CORE-DOC-002`, `004`, `006`; `003` PDF and `005` QR
+are outside this prompt).
 
 ## Phase status
 
@@ -635,10 +654,11 @@ untouched.
 
 ### Phase 1 registry (113 IDs)
 
-**`implemented` (80):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+**`implemented` (81):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
-**SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2)
+**SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2) ·
+**CORE-DOC-001** (F4)
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -666,7 +686,7 @@ nothing while both hold; it becomes necessary only if a cookie ever needs `SameS
 `APPROVAL-005` left `in-progress` on 2026-09-27: with the organization foundation (F2) an overdue
 approval escalates through the real reporting line, and an unresolvable one is still reported as such.
 
-**Not started (24):** INTEGRATION-001–005 · CORE-NOTIFY-001–005 · CORE-TASK-001–005 · CORE-DOC-001–006 ·
+**Not started (23):** INTEGRATION-001–005 · CORE-NOTIFY-001–005 · CORE-TASK-001–005 · CORE-DOC-002–006 ·
 CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 ### Foundation additions (registered 2026-09-27, 17 IDs)

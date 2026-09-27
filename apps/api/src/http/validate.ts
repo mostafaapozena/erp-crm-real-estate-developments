@@ -40,7 +40,12 @@ export function validate(schemas: RequestSchemas): RequestHandler {
         for (const issue of result.error.issues) {
           issues.push({
             path: [part, ...issue.path.map((p) => (typeof p === 'symbol' ? String(p) : p))],
-            code: issue.code,
+            // A refinement states its stable code as its message (`RESET_WITHOUT_DATE_COMPONENT`); every
+            // other issue keeps Zod's own code. Either way the client receives a code, never prose.
+            code:
+              issue.code === 'custom' && /^[A-Z][A-Z0-9_]*$/.test(issue.message)
+                ? issue.message
+                : issue.code,
           });
         }
       }

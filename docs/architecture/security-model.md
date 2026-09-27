@@ -343,6 +343,14 @@ One deployment is one company (ADR-0027), so none of these carries a tenant iden
 free-form key and no free-form value. Provider credentials stay in the deployment environment or its
 secrets manager (ADR-0015).
 
+| F4 | `numberSequences` | `_type_version_unique`, `_type_active_unique` (partial) | Versioned formats; exactly one active per document type |
+| F4 | `numberCounters` | `_key_unique` | One counter per type, period and entity/branch/project scope; never decremented |
+| F4 | `issuedNumbers` | `_type_number_unique`, `_idempotency_unique`, `_type_keyset`, `_source` | The ledger: every number ever issued, immutable, voided rather than deleted |
+
+**Numbers are issued by modules, never by a route (CORE-DOC-001).** `NumberingService.issue` joins the
+caller's transaction, so a document and its number commit together; there is no endpoint through which
+anyone could consume numbers.
+
 F2 also added `structureVersion` to every organization unit (the write that serializes a deactivation
 against a concurrent creation beneath it), `costCenterCode` on branches and teams, `projectRefs` on
 teams and `endedOn` on placements, plus child-status indexes (`orgDepartments_branch_status`,

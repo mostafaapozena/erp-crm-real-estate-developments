@@ -71,6 +71,11 @@ export const PERMISSIONS = [
   /** Add, relabel, reorder, deactivate reference items; add tax rates. Administrative. */
   'referenceData.manage',
 
+  // Number sequences (CORE-DOC-001). Issuing is a module operation, never a route.
+  'numbering.view',
+  /** Define and activate a document number format. Administrative. */
+  'numbering.manage',
+
   // Security administration
   'security.role.view',
   'security.role.create',
@@ -174,6 +179,8 @@ export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
   /** Settings and reference data decide defaults every record is created with (PLAT-024, PLAT-025). */
   'settings.manage',
   'referenceData.manage',
+  /** A number format is permanent in every document issued under it (ADR-0009, `SD-10`). */
+  'numbering.manage',
   /**
    * Organization structure is administrative because **every data scope resolves against it**
    * (SEC-026) and the reporting line decides where an overdue approval escalates (`APPROVAL-005`).
