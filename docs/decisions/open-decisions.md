@@ -164,6 +164,11 @@ PDFs; production launch (Phase 9)
 **Phase 1 impact:** **Non-blocking** (stakeholder decision, 2026-09-19). Development uses a clearly
 labelled temporary **text** placeholder only. No logo is invented, redrawn, or permanently embedded; the
 placeholder must never reach a customer-facing document.
+**Update 2026-09-27:** the mechanism now exists — each deployment uploads its own logo, compact logo
+and favicon to its company profile, and names and colour are configured there
+([ADR-0027](adr-0027-single-tenant-per-deployment.md), `PLAT-022`, `PLAT-023`). What remains open is
+the **content**: the approved files and name forms for each client deployment. The client data-intake
+checklist asks for them.
 **Status:** Open
 
 ### SD-18 — Hosting region, environments, backup, and recovery policy

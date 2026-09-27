@@ -1,77 +1,83 @@
 import { createTheme, type Theme } from '@mui/material/styles';
 import { localeSettings, type Locale } from '@alola/i18n';
+import type { Palette } from './brand';
 import { focusRingWidthPx, tokens } from './tokens';
-
-const focusOutline = {
-  outline: `${focusRingWidthPx}px solid ${tokens.focusRing}`,
-  outlineOffset: 2,
-} as const;
 
 /**
  * The single centralized Light Mode theme (THEME-001, THEME-002). There is no `colorSchemes`, no dark
- * palette, and no mode switch. The only input is the locale, which fixes direction and typography.
+ * palette, and no mode switch. The inputs are the locale, which fixes direction and typography, and
+ * the deployment's palette.
+ *
+ * `palette` defaults to the approved tokens. A deployment with a configured brand colour passes the
+ * palette `derivePalette` built from it — already validated against every contrast pair in use
+ * (THEME-013, ADR-0027) — and only the brand states differ; text, surfaces, borders and status colours
+ * are the approved values in every deployment.
  *
  * Interaction states (THEME-004) are defined here once so that every component inherits default,
- * hover, pressed, selected, focus, and disabled treatment from approved tokens.
+ * hover, pressed, selected, focus, and disabled treatment from the palette.
  */
-export function createAppTheme(locale: Locale): Theme {
+export function createAppTheme(locale: Locale, palette: Palette = tokens): Theme {
   const settings = localeSettings(locale);
+  const focusOutline = {
+    outline: `${focusRingWidthPx}px solid ${palette.focusRing}`,
+    outlineOffset: 2,
+  } as const;
 
   return createTheme({
     direction: settings.direction,
     palette: {
       mode: 'light',
       primary: {
-        main: tokens.primary,
-        dark: tokens.primaryHover,
-        light: tokens.primarySoftStrong,
-        contrastText: tokens.onPrimary,
+        main: palette.primary,
+        dark: palette.primaryHover,
+        light: palette.primarySoftStrong,
+        contrastText: palette.onPrimary,
       },
       secondary: {
-        main: tokens.secondaryText,
-        dark: tokens.mainText,
-        light: tokens.borderSubtle,
-        contrastText: tokens.surface,
+        main: palette.secondaryText,
+        dark: palette.mainText,
+        light: palette.borderSubtle,
+        contrastText: palette.surface,
       },
       success: {
-        main: tokens.success,
-        light: tokens.successSoft,
-        dark: tokens.success,
-        contrastText: tokens.surface,
+        main: palette.success,
+        light: palette.successSoft,
+        dark: palette.success,
+        contrastText: palette.surface,
       },
       warning: {
-        main: tokens.warning,
-        light: tokens.warningSoft,
-        dark: tokens.warning,
-        contrastText: tokens.surface,
+        main: palette.warning,
+        light: palette.warningSoft,
+        dark: palette.warning,
+        contrastText: palette.surface,
       },
       error: {
-        main: tokens.error,
-        light: tokens.errorSoft,
-        dark: tokens.error,
-        contrastText: tokens.surface,
+        main: palette.error,
+        light: palette.errorSoft,
+        dark: palette.error,
+        contrastText: palette.surface,
       },
       info: {
-        main: tokens.info,
-        light: tokens.infoSoft,
-        dark: tokens.info,
-        contrastText: tokens.surface,
+        main: palette.info,
+        light: palette.infoSoft,
+        dark: palette.info,
+        contrastText: palette.surface,
       },
       text: {
-        primary: tokens.mainText,
-        secondary: tokens.secondaryText,
-        disabled: tokens.disabled,
+        primary: palette.mainText,
+        secondary: palette.secondaryText,
+        disabled: palette.disabled,
       },
-      background: { default: tokens.pageBackground, paper: tokens.surface },
-      divider: tokens.borderSubtle,
-      common: { black: tokens.mainText, white: tokens.surface },
+      background: { default: palette.pageBackground, paper: palette.surface },
+      divider: palette.borderSubtle,
+      common: { black: palette.mainText, white: palette.surface },
       action: {
-        active: tokens.secondaryText,
-        hover: tokens.primarySoft,
-        selected: tokens.primarySoft,
-        focus: tokens.primarySoft,
-        disabled: tokens.disabled,
-        disabledBackground: tokens.borderSubtle,
+        active: palette.secondaryText,
+        hover: palette.primarySoft,
+        selected: palette.primarySoft,
+        focus: palette.primarySoft,
+        disabled: palette.disabled,
+        disabledBackground: palette.borderSubtle,
       },
     },
     // Only the self-hosted weights 400, 600, and 700 exist (I18N-007); every variant maps onto them.
@@ -98,8 +104,8 @@ export function createAppTheme(locale: Locale): Theme {
       MuiCssBaseline: {
         styleOverrides: {
           body: {
-            backgroundColor: tokens.pageBackground,
-            color: tokens.mainText,
+            backgroundColor: palette.pageBackground,
+            color: palette.mainText,
           },
           ':focus-visible': focusOutline,
         },
@@ -118,26 +124,29 @@ export function createAppTheme(locale: Locale): Theme {
               {
                 props: { variant: 'contained', color: 'primary' },
                 style: {
-                  '&:hover': { backgroundColor: tokens.primaryHover },
-                  '&:active': { backgroundColor: tokens.primaryPressed },
+                  '&:hover': { backgroundColor: palette.primaryHover },
+                  '&:active': { backgroundColor: palette.primaryPressed },
                 },
               },
               {
                 props: { variant: 'outlined', color: 'primary' },
                 style: {
-                  borderColor: tokens.primary,
+                  borderColor: palette.primary,
                   '&:hover': {
-                    backgroundColor: tokens.primarySoft,
-                    borderColor: tokens.primaryHover,
+                    backgroundColor: palette.primarySoft,
+                    borderColor: palette.primaryHover,
                   },
-                  '&:active': { backgroundColor: tokens.primarySoftStrong },
+                  '&:active': { backgroundColor: palette.primarySoftStrong },
                 },
               },
               {
                 props: { variant: 'text', color: 'primary' },
                 style: {
-                  '&:hover': { backgroundColor: tokens.primarySoft },
-                  '&:active': { backgroundColor: tokens.primarySoftStrong, color: tokens.mainText },
+                  '&:hover': { backgroundColor: palette.primarySoft },
+                  '&:active': {
+                    backgroundColor: palette.primarySoftStrong,
+                    color: palette.mainText,
+                  },
                 },
               },
             ],
@@ -147,67 +156,67 @@ export function createAppTheme(locale: Locale): Theme {
       MuiIconButton: {
         styleOverrides: {
           root: {
-            color: tokens.mainText,
-            '&:hover': { backgroundColor: tokens.primarySoft },
-            '&:active': { backgroundColor: tokens.primarySoftStrong },
+            color: palette.mainText,
+            '&:hover': { backgroundColor: palette.primarySoft },
+            '&:active': { backgroundColor: palette.primarySoftStrong },
           },
         },
       },
       MuiLink: {
         defaultProps: { underline: 'always' },
         styleOverrides: {
-          root: { color: tokens.primary, '&:hover': { color: tokens.primaryHover } },
+          root: { color: palette.primary, '&:hover': { color: palette.primaryHover } },
         },
       },
       MuiListItemButton: {
         styleOverrides: {
           root: {
-            '&:hover': { backgroundColor: tokens.primarySoft },
+            '&:hover': { backgroundColor: palette.primarySoft },
             // THEME-006: selected content uses mainText, never primary text, on the soft blues.
             '&.Mui-selected': {
-              backgroundColor: tokens.primarySoft,
-              color: tokens.mainText,
-              boxShadow: `inset ${focusRingWidthPx}px 0 0 ${tokens.primary}`,
+              backgroundColor: palette.primarySoft,
+              color: palette.mainText,
+              boxShadow: `inset ${focusRingWidthPx}px 0 0 ${palette.primary}`,
             },
-            '&.Mui-selected:hover': { backgroundColor: tokens.primarySoftStrong },
+            '&.Mui-selected:hover': { backgroundColor: palette.primarySoftStrong },
           },
         },
       },
       MuiOutlinedInput: {
         styleOverrides: {
           // THEME-007: a control boundary uses borderStrong, never borderSubtle.
-          notchedOutline: { borderColor: tokens.borderStrong },
+          notchedOutline: { borderColor: palette.borderStrong },
           root: {
-            backgroundColor: tokens.surface,
-            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: tokens.mainText },
+            backgroundColor: palette.surface,
+            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: palette.mainText },
           },
         },
       },
       MuiInputBase: {
         styleOverrides: {
           // THEME-008: placeholders use secondaryText at full opacity, never the disabled token.
-          input: { '&::placeholder': { color: tokens.secondaryText, opacity: 1 } },
+          input: { '&::placeholder': { color: palette.secondaryText, opacity: 1 } },
         },
       },
       MuiTableCell: {
-        styleOverrides: { root: { borderBottomColor: tokens.borderSubtle } },
+        styleOverrides: { root: { borderBottomColor: palette.borderSubtle } },
       },
       MuiTableRow: {
         styleOverrides: {
           root: {
-            '&.Mui-selected': { backgroundColor: tokens.primarySoft },
-            '&.Mui-selected:hover': { backgroundColor: tokens.primarySoftStrong },
+            '&.Mui-selected': { backgroundColor: palette.primarySoft },
+            '&.Mui-selected:hover': { backgroundColor: palette.primarySoftStrong },
           },
         },
       },
       MuiTooltip: {
-        styleOverrides: { tooltip: { backgroundColor: tokens.mainText, color: tokens.surface } },
+        styleOverrides: { tooltip: { backgroundColor: palette.mainText, color: palette.surface } },
       },
       MuiBackdrop: {
-        styleOverrides: { root: { backgroundColor: tokens.overlay } },
+        styleOverrides: { root: { backgroundColor: palette.overlay } },
       },
       MuiPaper: {
-        styleOverrides: { root: { backgroundColor: tokens.surface, color: tokens.mainText } },
+        styleOverrides: { root: { backgroundColor: palette.surface, color: palette.mainText } },
       },
     },
   });

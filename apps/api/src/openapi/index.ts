@@ -45,6 +45,7 @@ import {
 } from '@alola/contracts';
 import { z } from 'zod';
 import { collectionComponents, collectionPaths } from './collections';
+import { companyComponents, companyPaths } from './company';
 import { crmComponents, crmPaths } from './crm';
 import { inventoryComponents, inventoryPaths } from './inventory';
 import { marketingComponents, marketingPaths } from './marketing';
@@ -107,6 +108,7 @@ const components = {
   ...salesComponents,
   ...collectionComponents,
   ...marketingComponents,
+  ...companyComponents,
 } as const;
 
 type ComponentName = keyof typeof components;
@@ -261,6 +263,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     ...salesPaths(helpers),
     ...collectionPaths(helpers),
     ...marketingPaths(helpers),
+    ...companyPaths(helpers),
   };
   const schemas = Object.fromEntries(
     Object.entries(components).map(([name, schema]) => {
@@ -272,7 +275,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
   return {
     openapi: '3.1.0',
     info: {
-      title: 'ALOLA ERP API',
+      title: 'Real Estate ERP API',
       version: '0.1.0',
       description:
         'Errors return stable machine codes; clients localize them. Every response carries an ' +

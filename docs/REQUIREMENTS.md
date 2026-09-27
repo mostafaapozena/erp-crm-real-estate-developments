@@ -51,6 +51,50 @@ renumbered, merged, retired or raised in status; nothing became `verified`; Phas
 open. What was built, and what it deliberately does not do, is in `docs/MEMORY.md` §"Macro Phase 1 —
 the demonstration slice".
 
+## Foundation completion — additions registered 2026-09-27
+
+Source: the post-demonstration foundation master prompt and the stakeholder decision recorded in
+[ADR-0027](decisions/adr-0027-single-tenant-per-deployment.md) (single tenant per deployment,
+multi-client product). **These IDs are new; no existing ID is renamed, renumbered, merged or retired.**
+They are claimed here before any code uses them (maintenance rule 1). Nothing is `verified`.
+
+`CORE-ORG` is registered for Phase 2 at module level. The stakeholder has directed that its reusable
+foundation be completed now, so its foundation requirements are enumerated here; the organization's
+real **values** (`SD-01`) remain a Phase 2 input, and no business policy is decided by these IDs.
+
+| ID | Requirement | Package | Status |
+|---|---|---|---|
+| PLAT-022 | Exactly one company profile per deployment: bilingual legal, trade and short names, registrations, address, contact, languages, timezone, base currency, country, footer; versioned with an append-only revision history; no secrets; no tenant identifier | F1 | implemented |
+| PLAT-023 | Runtime branding — names, logo, compact logo, favicon, languages and the demonstration flag — served publicly without secrets and consumed by the sign-in screen, the shell and the browser tab, with a neutral fallback on any failure | F1 | implemented |
+| THEME-013 | A deployment brand colour is validated against every contrast pair in use when saved and again before rendering; only the brand states are derived from it | F1 | implemented |
+| CORE-ORG-001 | Legal entity, branch, department, team and job title with an active/inactive lifecycle; nothing referenced is ever deleted | F2 | approved |
+| CORE-ORG-002 | Hierarchy validation: a child belongs to an active parent in the same legal entity; reporting lines are cycle-free | F2 | approved |
+| CORE-ORG-003 | Employee placement with effective dates, direct manager and an append-only history; one active placement per security account | F2 | approved |
+| CORE-ORG-004 | Organization reads **and writes** constrained by the actor's data scope | F2 | approved |
+| CORE-ORG-005 | Direct-manager resolution for escalation, skipping nothing and inventing nothing | F2 | approved |
+| CORE-ORG-006 | Cost-centre and project-scope references on organization units | F2 | approved |
+| PLAT-024 | Centralized validated business settings, permissioned and audited, with history | F3 | approved |
+| PLAT-025 | Reference data with stable codes, bilingual labels, ordering and deactivation; a code in use is never removed or recoded | F3 | approved |
+| PLAT-026 | Feature flags limited to an approved catalog, audited | F3 | approved |
+| CORE-IMPORT-003 | Export: permission-checked, scope- and field-restricted, bounded, formula-safe, audited, expiring | F9 | approved |
+| OPS-004 | Explicit, versioned schema migrations with a recorded database version | F11 | approved |
+| OPS-005 | Repeatable client-deployment initialization, idempotent, refusing destructive resets | F11 | approved |
+| OPS-006 | Operational readiness: worker, queue, integration and migration health; build metadata; redacted diagnostics | F12 | approved |
+| OPS-007 | Scheduled maintenance sweeps run by the system, single-runner, idempotent | F12 | approved |
+
+Existing IDs the foundation packages implement or advance keep their original rows below:
+`CORE-DOC-001`–`006` (F4, F5), `CORE-NOTIFY-001`–`005` (F6), `CORE-TASK-001`–`005` (F7),
+`CORE-SEARCH-001` (F8), `CORE-IMPORT-001`–`002` (F9), `INTEGRATION-001`–`005` (F10),
+`APPROVAL-005` (F2), `SEC-033` (F11/F12).
+
+### Implementation evidence — F1 (2026-09-27)
+
+| ID | Evidence |
+|---|---|
+| PLAT-022 | `apps/api/src/modules/company/company.int-test.ts` — five simultaneous creations yield one profile (201, 409 ×4); secret-shaped and unknown fields (`smtpPassword`, `whatsappAccessToken`, `tenantId`, `version`, forged `assets`) refused with nothing stored; a stale `expectedVersion` is a conflict that changes nothing and two simultaneous edits yield exactly one; every change writes a revision and an audit record in one transaction; profiles, revisions and images cannot be deleted through the models |
+| PLAT-023 | `company.int-test.ts` — the public endpoint answers the neutral identity before a profile exists and, after, only names, languages, colour and image URLs (no registration, contact or footer); PNG and JPEG verified by magic bytes, a mismatched, GIF or SVG body refused, 600 KiB refused with 413, path traversal refused; images served with their verified type, `nosniff` and an immutable cache for the current hash; a replaced image is superseded, not deleted. `apps/web/src/branding.test.tsx` — tab title, logo with the company name as its text alternative, favicon, starting language, a single-language deployment with no switch, no demonstration notice on a live deployment, and the neutral fallback on a malformed or refused answer |
+| THEME-013 | `packages/ui/src/brand.test.ts` — no configuration returns the approved token object itself; the approved blue validates; a derived palette changes only the brand states; a dark colour passes every pair in use; `#FACC15` is refused naming `onPrimary` on `primary`; non-hex input refused; the module imports only tokens and contrast, so the server validates with the browser's rule. `packages/ui/src/ThemeRoot.test.tsx` — the theme renders a valid colour and ignores an invalid one. `company.int-test.ts` — `#FACC15` refused by the API with `BRAND_COLOR_CONTRAST` and nothing stored |
+
 ## Current status summary
 
 | | Count |

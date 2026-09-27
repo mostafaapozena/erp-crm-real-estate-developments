@@ -127,7 +127,8 @@ beforeEach(() => {
         '/api/v1/marketing/overview': marketing,
       };
       const body = routes[path];
-      const isData = path !== '/api/v1/auth/refresh' && path !== '/api/v1/me';
+      // Branding answers 404 here, so the application renders its neutral identity at once.
+      const isData = !['/api/v1/auth/refresh', '/api/v1/me', '/api/v1/branding'].includes(path);
       if (isData && dataMode === 'pending') return new Promise<Response>(() => undefined);
       if (isData && dataMode === 'forbidden') return Promise.resolve(json({ error: {} }, 403));
       return Promise.resolve(body === undefined ? json({ error: {} }, 404) : json(body));

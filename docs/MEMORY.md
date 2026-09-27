@@ -88,8 +88,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 
 | Package | State | Commit |
 |---|---|---|
-| F0 Stabilization | **complete** | the commit containing this row |
-| F1–F12 | not started | — |
+| F0 Stabilization | **complete** | `24fe608` |
+| F1 Deployment model, company profile, branding | **complete** | the commit containing this row |
+| F2–F12 | not started | — |
 
 ### F0 — what changed
 
@@ -115,9 +116,38 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
   skipped**, **E2E 38 passed / 0 failed / 0 skipped**, i18n (enum check included), links and
   integrity; demonstration business counts identical to the pre-change snapshot.
 
+### F1 — what changed
+
+- [ADR-0027](decisions/adr-0027-single-tenant-per-deployment.md): single tenant per deployment,
+  multi-client product. No `tenantId`, no shared database, no source fork; client differences are
+  configuration. Internal code namespaces (`@alola/*`, cookie and queue names) are documented as
+  code identity, not client identity.
+- New registry IDs `PLAT-022`–`026`, `THEME-013`, `CORE-ORG-001`–`006`, `CORE-IMPORT-003`,
+  `OPS-004`–`007` (all claimed before use; F1's three are `implemented`, the rest `approved`).
+- Company module (`apps/api/src/modules/company/`): one profile under a unique key, optimistic
+  concurrency, append-only revisions, audited in one transaction; brand images (PNG/JPEG, magic bytes,
+  512 KiB) superseded never deleted; public `/api/v1/branding` exposing no registration or contact.
+  Permissions `company.profile.view` and administrative `company.profile.manage`.
+- `packages/ui/src/brand.ts` (React-free `@alola/ui/brand`): the brand states derived from one
+  colour and validated against every contrast pair in use — by the API on save, by `ThemeRoot`
+  before render. `createAppTheme(locale, palette)`.
+- Web: `BrandingProvider` loads branding at runtime with a neutral fallback; title, favicon, logo
+  (with the name as alt text), starting language, a hidden switch for single-language deployments,
+  and the demonstration notice only on development/test deployments.
+- Neutralized client identity in source: authenticator issuer default `Real Estate ERP` (the
+  profile's short name wins at enrolment), OpenAPI title, `.env.example`, API package description.
+- Mongoose `minimize` would have silently dropped an empty `assets: {}` from stored revision
+  snapshots — caught by the revision test; revisions now store snapshots exactly.
+- Lint boundary: server code may import `@alola/ui/brand` and nothing else from `@alola/ui` (a
+  regular expression, because glob negation cannot re-include a path under an excluded one); tested.
+- Measured at the F1 commit: typecheck, full lint, format, **unit 463**, **integration 360 passed /
+  0 failed / 0 skipped**, **E2E 38 passed / 0 skipped**, i18n, secrets (346 files), links, bundle
+  325.1 kB; all 30 baseline demonstration collections unchanged (three new, empty F1 collections).
+
 ### Resume point
 
-Next package: **F1 — deployment model (ADR) and company profile/branding.**
+Next package: **F2 — organization foundation** (scoped writes, lifecycle, effective-dated placements,
+history, cost centre and project references, completing `APPROVAL-005`).
 
 ## Phase status
 

@@ -13,6 +13,7 @@ import type { Redis } from 'ioredis';
 import { ApprovalService, NoApplicablePolicyError } from '../modules/approval';
 import { AuditService } from '../modules/audit';
 import { CollectionService, SimulatedReminderDelivery } from '../modules/collections';
+import { CompanyService } from '../modules/company';
 import { CrmService } from '../modules/crm';
 import { AuthThrottle, IdentityService } from '../modules/identity';
 import { InventoryService } from '../modules/inventory';
@@ -60,6 +61,7 @@ export interface DomainServices {
   sales: () => SalesService;
   collections: () => CollectionService;
   marketing: () => MarketingService;
+  company: () => CompanyService;
 }
 
 export function createDomainServices(options: DomainServiceOptions): DomainServices {
@@ -75,6 +77,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let salesService: SalesService | undefined;
   let collectionService: CollectionService | undefined;
   let marketingService: MarketingService | undefined;
+  let companyService: CompanyService | undefined;
 
   /**
    * Encryption for MFA secrets (`SEC-017`).
@@ -111,6 +114,21 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     const connection = requireConnection();
     securityService ??= new SecurityService({ connection, audit: getAuditService() });
     return securityService;
+  }
+
+  /**
+   * The deployment's company profile (PLAT-022, ADR-0027). Every other module reads the company
+   * through this service — the authenticator issuer, a document's letterhead — never its collections.
+   */
+  function getCompanyService(): CompanyService {
+    const connection = requireConnection();
+    companyService ??= new CompanyService({
+      connection,
+      audit: getAuditService(),
+      defaultLocale: config.DEFAULT_LOCALE,
+      demonstration: config.APP_ENV === 'development' || config.APP_ENV === 'test',
+    });
+    return companyService;
   }
 
   function getOrganizationService(): OrganizationService {
@@ -365,6 +383,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
         passwordResetSeconds: config.AUTH_PASSWORD_RESET_TTL_SECONDS,
       },
       totpIssuer: config.AUTH_TOTP_ISSUER,
+      resolveTotpIssuer: () => getCompanyService().authenticatorIssuer(),
     });
     return identityService;
   }
@@ -380,5 +399,6 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     sales: getSalesService,
     collections: getCollectionService,
     marketing: getMarketingService,
+    company: getCompanyService,
   };
 }

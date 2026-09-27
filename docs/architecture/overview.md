@@ -2,12 +2,22 @@
 
 ## 1. System context
 
-ALOLA ERP is a single internal business system used by ALOLA staff across sales, marketing, collections,
-finance, procurement, construction, HR, and customer service. It is not a public product.
+A real-estate CRM and ERP used internally by one company's staff across sales, marketing,
+collections, finance, procurement, construction, HR, and customer service. It is not a public product.
+
+**Deployment model — single tenant per deployment, multi-client product**
+([ADR-0027](../decisions/adr-0027-single-tenant-per-deployment.md)). The same codebase is sold to
+several real-estate companies, and **each company runs its own deployment**: its own database, Redis,
+file storage, secrets, keys, backups, domain and provider accounts. There is no shared client
+database, no tenant identifier on any record, no cross-company administrator and no tenant switcher.
+Everything that differs between companies is configuration held by the deployment — the company
+profile and branding, organization, settings and reference data, numbering, templates, approval
+policies — never a source fork. The product was commissioned by ALOLA Developments, whose deployment
+is the first.
 
 | Actor | Interaction |
 |---|---|
-| ALOLA employees | Authenticated web application, permission-scoped |
+| The company's employees | Authenticated web application, permission-scoped |
 | Customers | Receive WhatsApp reminders, documents, and PDFs. Optionally, a customer portal (PORTAL-CUSTOMER) if separately approved. |
 | Meta | Full campaign management from the ERP, lead webhooks, insights, spend, attribution (`SD-14` approved); Conversions API optional with production delivery gated (ADR-0017) |
 | WhatsApp Business Platform | Template messages, delivery status webhooks, inbound messages |

@@ -72,7 +72,7 @@ export function BarChart({ data, caption, emptyLabel, maxBars = 10 }: BarChartPr
                 marginBlockStart: 0.5,
                 height: 8,
                 borderRadius: 1,
-                backgroundColor: tokens.primarySoft,
+                backgroundColor: 'action.hover',
                 overflow: 'hidden',
               }}
             >

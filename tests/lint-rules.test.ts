@@ -125,6 +125,20 @@ describe('PLAT-003: module boundaries', () => {
     );
   });
 
+  it('allows the server only the React-free brand rule from the design system', async () => {
+    for (const file of ['apps/api/src/a.ts', 'apps/api/src/modules/company/service.ts']) {
+      expect(await messages("import { validateBrandColor } from '@alola/ui/brand';", file)).toEqual(
+        [],
+      );
+      expect((await messages("import { ThemeRoot } from '@alola/ui';", file)).join()).toContain(
+        'Browser-only',
+      );
+      expect((await messages("import { x } from '@alola/ui/theme';", file)).join()).toContain(
+        'Browser-only',
+      );
+    }
+  });
+
   it("blocks a domain module from reaching into another module's internals", async () => {
     const file = 'apps/api/src/modules/sales/service.ts';
     expect((await messages("import { x } from '../inventory/repository';", file)).join()).toContain(

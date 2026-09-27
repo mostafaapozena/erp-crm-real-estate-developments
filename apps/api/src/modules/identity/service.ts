@@ -108,7 +108,13 @@ export interface IdentityServiceOptions {
   /** Supplied by the composition root, so identity does not depend on the authorization module. */
   resolveGrants: (accountId: string) => Promise<ActorContext | undefined>;
   ttl: IdentityTtl;
+  /** Fallback issuer shown in authenticator applications when no company profile names one. */
   totpIssuer: string;
+  /**
+   * The deployment's issuer name, read at enrolment (ADR-0027). The issuer is a label only: a TOTP code
+   * depends on the secret alone, so a later change of company name never invalidates an enrolment.
+   */
+  resolveTotpIssuer?: () => Promise<string | undefined>;
   now?: () => Date;
 }
 
@@ -1271,7 +1277,9 @@ export class IdentityService {
     const account = await this.findByAccountId(accountId);
     if (account.mfa.enabled) throw new MfaStateError('already-enabled');
 
-    const enrolment = createTotpEnrolment(this.options.totpIssuer, account.loginIdentifier);
+    const issuer =
+      (await this.options.resolveTotpIssuer?.().catch(() => undefined)) ?? this.options.totpIssuer;
+    const enrolment = createTotpEnrolment(issuer, account.loginIdentifier);
     const recoveryCodes = generateRecoveryCodes();
     const hashes = await Promise.all(
       recoveryCodes.map((code) => this.options.hasher.hash(normalizeRecoveryCode(code))),

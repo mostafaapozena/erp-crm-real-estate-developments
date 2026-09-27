@@ -6,6 +6,7 @@ import { directionOf, type Direction, type Locale } from '@alola/i18n';
 import { useMemo, type ReactNode } from 'react';
 import { prefixer } from 'stylis';
 import rtlPlugin from 'stylis-plugin-rtl';
+import { safePalette } from './brand';
 import { createAppTheme } from './theme';
 
 /**
@@ -27,9 +28,24 @@ function cacheFor(direction: Direction): EmotionCache {
 /**
  * Theme, direction-aware style cache, and baseline — all derived from one `locale` value so theme
  * direction, style mirroring, and font can never disagree (I18N-003).
+ *
+ * `brandPrimary` is the deployment's configured brand colour (THEME-013). It is validated again here:
+ * a colour that fails any contrast pair is ignored and the approved palette is used, so a browser never
+ * renders an unvalidated colour whatever the server sent.
  */
-export function ThemeRoot({ locale, children }: { locale: Locale; children: ReactNode }) {
-  const theme = useMemo(() => createAppTheme(locale), [locale]);
+export function ThemeRoot({
+  locale,
+  brandPrimary,
+  children,
+}: {
+  locale: Locale;
+  brandPrimary?: string | undefined;
+  children: ReactNode;
+}) {
+  const theme = useMemo(
+    () => createAppTheme(locale, safePalette(brandPrimary)),
+    [locale, brandPrimary],
+  );
   return (
     <CacheProvider value={cacheFor(directionOf(locale))}>
       <ThemeProvider theme={theme}>

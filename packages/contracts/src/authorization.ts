@@ -59,6 +59,11 @@ export const PERMISSIONS = [
   'security.session.viewAny',
   'security.session.revokeAny',
 
+  // Deployment company profile and branding (PLAT-022, PLAT-023, ADR-0027)
+  'company.profile.view',
+  /** Change the company's identity, contact details, colour or images. Administrative. */
+  'company.profile.manage',
+
   // Security administration
   'security.role.view',
   'security.role.create',
@@ -154,6 +159,11 @@ export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
   'security.role.edit',
   'security.grant.assign',
   'security.grant.assignAny',
+  /**
+   * The company profile is what every document, screen and authenticator label is issued under, so
+   * changing it is an administrative act with a second factor (SEC-017).
+   */
+  'company.profile.manage',
   /**
    * Organization structure is administrative because **every data scope resolves against it**
    * (SEC-026) and the reporting line decides where an overdue approval escalates (`APPROVAL-005`).

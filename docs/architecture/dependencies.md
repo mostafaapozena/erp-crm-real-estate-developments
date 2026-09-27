@@ -75,6 +75,16 @@ Runtime: **Node.js 24** (`engines: >=24`, `.nvmrc`). Verified on Node 24.14.1 / 
 | TanStack Query, React Hook Form | Listed in MASTER-MAPPING §4.3; added with the first screen that fetches data or has a form. |
 | Sentry | Listed in MASTER-MAPPING §4.3; needs a DSN and an approved data-scrubbing configuration. |
 
+## Company profile and branding (2026-09-27)
+
+**No dependency was added.** The API now depends on the internal `@alola/ui` workspace, but only
+through its React-free `@alola/ui/brand` entry (`brand.ts`, `contrast.ts`, `tokens.ts`), so the
+server validates a deployment's brand colour with exactly the rule the browser applies. A unit test
+asserts that `brand.ts` imports nothing but the token and contrast modules; the root `@alola/ui`
+entry, which pulls in React and MUI, stays forbidden in server code by the lint boundary. Brand
+images are validated with the existing magic-byte check in `@alola/security`, and hashed with
+`node:crypto`.
+
 ## Approvals (2026-09-21)
 
 **No dependency was added** for `APPROVAL-001`–`007`. Two capabilities that might have pulled one in were

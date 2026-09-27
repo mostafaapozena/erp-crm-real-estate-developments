@@ -53,10 +53,11 @@ afterEach(() => {
 describe('web shell (I18N-003, TEST-003 unit tier)', () => {
   it('starts in Arabic, right-to-left, with no missing keys', async () => {
     const { missing } = renderApp();
+    // Branding is read at runtime first (PLAT-023); with no server it falls back to the neutral identity.
+    await screen.findByRole('heading', { level: 1, name: 'تسجيل الدخول' });
     expect(document.documentElement.lang).toBe('ar');
     expect(document.documentElement.dir).toBe('rtl');
     expect(document.title).toBe('نظام إدارة التطوير العقاري');
-    await screen.findByRole('heading', { level: 1, name: 'تسجيل الدخول' });
     expect(missing).toEqual([]);
   });
 

@@ -276,7 +276,7 @@ except the signing secret, which has none: a default signing key is a shared key
 | `AUTH_ACTIVATION_TOKEN_TTL_SECONDS` | 259200 | Invitation links |
 | `AUTH_PASSWORD_RESET_TTL_SECONDS` | 1800 | Reset links |
 | `AUTH_MFA_CHALLENGE_TTL_SECONDS` | 300 | How long a second-factor challenge stays valid |
-| `AUTH_TOTP_ISSUER` | `ALOLA ERP` | Shown in the authenticator application |
+| `AUTH_TOTP_ISSUER` | `Real Estate ERP` | Shown in the authenticator application **only until a company profile exists**; the profile's short English name is used after that (ADR-0027) |
 | `ARGON2_MEMORY_COST` | 19456 | KiB. The schema refuses anything **below** the default, so configuration can only harden it |
 | `ARGON2_TIME_COST` | 2 | Iterations |
 | `ARGON2_PARALLELISM` | 1 | Lanes |

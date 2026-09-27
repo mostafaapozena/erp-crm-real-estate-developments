@@ -1,4 +1,5 @@
 export * from './BarChart';
+export * from './brand';
 export * from './contrast';
 export * from './DataTable';
 export * from './LtrIsolate';

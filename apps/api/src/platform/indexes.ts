@@ -8,6 +8,11 @@ import {
 } from '../modules/approval/model';
 import { auditModel } from '../modules/audit/model';
 import { instrumentModel, receiptModel, reminderModel } from '../modules/collections/model';
+import {
+  brandAssetModel,
+  companyProfileModel,
+  companyProfileRevisionModel,
+} from '../modules/company/model';
 import { activityModel, customerModel, leadModel } from '../modules/crm/model';
 import {
   accountModel,
@@ -73,6 +78,9 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     instrumentModel(connection),
     reminderModel(connection),
     campaignModel(connection),
+    companyProfileModel(connection),
+    companyProfileRevisionModel(connection),
+    brandAssetModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {

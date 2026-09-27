@@ -106,14 +106,20 @@ const SERVER_ONLY = [
   '@alola/security',
 ];
 
-const BROWSER_ONLY = [
-  'react',
-  'react-dom',
-  'react-dom/*',
-  '@mui/*',
-  '@emotion/*',
-  '@alola/ui',
-  'i18next',
+const BROWSER_ONLY = ['react', 'react-dom', 'react-dom/*', '@mui/*', '@emotion/*', 'i18next'];
+
+/**
+ * Browser-only imports refused in server code. `@alola/ui` is matched by a regular expression rather
+ * than a glob because of its one exception: `@alola/ui/brand`, the React-free brand rule, which lets the
+ * API validate a deployment's colour with exactly the code the browser uses (THEME-013, ADR-0027).
+ * `packages/ui/src/brand.test.ts` proves that entry imports nothing but tokens and contrast.
+ */
+const BROWSER_ONLY_PATTERNS = [
+  { group: BROWSER_ONLY, message: 'Browser-only module imported into a server application.' },
+  {
+    regex: '^@alola/ui(?!/brand$)(/.*)?$',
+    message: 'Browser-only module imported into a server application.',
+  },
 ];
 
 const publicEntryOnly = {
@@ -189,10 +195,7 @@ export const restrictions = [
         {
           patterns: [
             publicEntryOnly,
-            {
-              group: BROWSER_ONLY,
-              message: 'Browser-only module imported into a server application.',
-            },
+            ...BROWSER_ONLY_PATTERNS,
             {
               group: ['@alola/web', '**/apps/web/**'],
               message: 'Applications must not import each other.',
@@ -211,10 +214,7 @@ export const restrictions = [
         {
           patterns: [
             publicEntryOnly,
-            {
-              group: BROWSER_ONLY,
-              message: 'Browser-only module imported into a server application.',
-            },
+            ...BROWSER_ONLY_PATTERNS,
             {
               regex: '^\\.\\./[^./][^/]*/(?!index(\\.ts)?$).+',
               message:
@@ -233,10 +233,7 @@ export const restrictions = [
         {
           patterns: [
             publicEntryOnly,
-            {
-              group: BROWSER_ONLY,
-              message: 'Browser-only module imported into a server application.',
-            },
+            ...BROWSER_ONLY_PATTERNS,
             {
               regex: '^\\.\\./\\.\\./[^./][^/]*/(?!index(\\.ts)?$).+',
               message:

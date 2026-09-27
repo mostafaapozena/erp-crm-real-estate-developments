@@ -136,9 +136,35 @@ Therefore **hue must never be the only differentiator**:
 - avoid placing `chart3` next to `chart4`
 - a chart that is unreadable in grayscale is a defect
 
-### Logo placeholder
+### Deployment brand colour (THEME-013, ADR-0027)
 
-Approved logo assets are outstanding (`SD-17`, open and non-blocking for Phase 1). Until they arrive:
+Each client deployment may configure one brand colour in its company profile. It is a **validated
+configuration value**, not a constant:
+
+- Only the brand states are derived from it — `primary`, `primaryHover`, `primaryPressed`,
+  `primarySoft`, `primarySoftStrong`, `focusRing`, `chart1` — by mixing toward the existing
+  `mainText` and `surface` tokens (`packages/ui/src/brand.ts`). No new colour value exists outside
+  `tokens.ts`. Text, surfaces, borders and the success/warning/error/information colours are the
+  approved values in every deployment.
+- The derived palette must pass **every** pair in `TOKEN_PAIRS_IN_USE`. The API refuses a failing
+  colour when it is saved (`BRAND_COLOR_CONTRAST`); `ThemeRoot` validates again and renders the
+  approved palette instead of any colour that fails.
+- With no colour configured, the theme uses the approved token object itself: the approved blue,
+  value for value.
+
+The server and the browser share one implementation through the React-free `@alola/ui/brand` entry,
+so the two can never disagree about what passes.
+
+### Logo and runtime branding
+
+Each deployment uploads its own logo, compact logo and favicon to its company profile (PNG or JPEG,
+verified by magic bytes, at most 512 KiB); they are served by the public branding endpoint and shown
+on the sign-in screen, in the shell and in the browser tab, with the company's name as the text
+alternative (`PLAT-023`). The company name in the tab and the authenticator label come from the
+profile too. Nothing about a client's identity is compiled into the build.
+
+Approved logo assets for the first deployment are still outstanding (`SD-17`). Until a deployment
+uploads its own:
 
 - Development builds show a clearly labelled **temporary text placeholder**, localized in both languages,
   that says it is temporary.

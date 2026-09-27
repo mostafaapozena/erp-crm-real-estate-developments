@@ -21,7 +21,7 @@ import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useSession } from '../api/session';
 import { useLocale } from '../locale';
-import { DevLogoPlaceholder } from './DevLogoPlaceholder';
+import { BrandMark } from './BrandMark';
 import { breadcrumbFor, visibleGroups } from './navigation';
 
 const DRAWER_WIDTH = 268;
@@ -37,14 +37,13 @@ const DRAWER_WIDTH = 268;
  * permission again (ADR-0006), and the E2E suite proves it by calling a hidden route directly.
  */
 export function AppShell({ children }: { children: ReactNode }) {
-  const { locale, setLocale, t, td } = useLocale();
+  const { otherLocale, setLocale, t, td } = useLocale();
   const { session, canAny, signOut } = useSession();
   const theme = useTheme();
   const location = useLocation();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuAnchor, setUserMenuAnchor] = useState<HTMLElement | null>(null);
-  const otherLocale = locale === 'ar' ? 'en' : 'ar';
 
   const groups = visibleGroups(canAny);
   const trail = breadcrumbFor(location.pathname);
@@ -136,10 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </SvgIcon>
             </IconButton>
           )}
-          <Typography component="p" variant="h6" noWrap sx={{ fontWeight: 700 }}>
-            {t('app.title')}
-          </Typography>
-          {import.meta.env.PROD ? null : <DevLogoPlaceholder />}
+          <BrandMark variant="shell" />
           <Box sx={{ flexGrow: 1 }} />
 
           {/*
@@ -154,9 +150,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Badge>
           </IconButton>
 
-          <Button variant="outlined" lang={otherLocale} onClick={() => setLocale(otherLocale)}>
-            {t('shell.switchLanguage')}
-          </Button>
+          {/* A deployment offering one language shows no switch at all (ADR-0027). */}
+          {otherLocale ? (
+            <Button variant="outlined" lang={otherLocale} onClick={() => setLocale(otherLocale)}>
+              {t('shell.switchLanguage')}
+            </Button>
+          ) : null}
 
           <Button
             aria-label={t('shell.userMenu')}

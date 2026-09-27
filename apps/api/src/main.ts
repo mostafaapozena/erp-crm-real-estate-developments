@@ -9,6 +9,7 @@ import { approvalRouter } from './modules/approval';
 import { auditRouter } from './modules/audit';
 import { accountAdminRouter, authRouter, cookiePolicyFor, meRouter } from './modules/identity';
 import { collectionRouter } from './modules/collections';
+import { brandingRouter, companyRouter } from './modules/company';
 import { crmRouter } from './modules/crm';
 import { inventoryRouter } from './modules/inventory';
 import { marketingRouter } from './modules/marketing';
@@ -112,6 +113,7 @@ const getCrmService = services.crm;
 const getSalesService = services.sales;
 const getCollectionService = services.collections;
 const getMarketingService = services.marketing;
+const getCompanyService = services.company;
 
 /** Authorization denials are security events (AUDIT-005). A failure to record must not hide the denial. */
 const guard = {
@@ -192,6 +194,9 @@ const modules: ApiModule[] = [
     router: collectionRouter({ getService: getCollectionService, guard }),
   },
   { basePath: '/marketing', router: marketingRouter({ getService: getMarketingService, guard }) },
+  { basePath: '/company', router: companyRouter({ getService: getCompanyService, guard }) },
+  // Public and read-only: what the sign-in screen needs before anyone has signed in (PLAT-023).
+  { basePath: '/branding', router: brandingRouter({ getService: getCompanyService }) },
   { basePath: '/auth', router: authRouter(identityRouterOptions) },
   { basePath: '/me', router: meRouter(identityRouterOptions) },
   { basePath: '/security', router: securityRouter({ getService: getSecurityService, guard }) },

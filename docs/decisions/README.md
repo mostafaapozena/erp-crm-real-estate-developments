@@ -49,6 +49,7 @@ silently violate a constraint whose reason was never written down.
 | [ADR-0024](adr-0024-approval-engine.md) | Approval engine: generic, versioned, and append-only | Accepted | Architecture, Security |
 | [ADR-0025](adr-0025-macro-delivery-phases.md) | Four macro delivery phases over the unchanged requirement registry | Accepted | Governance |
 | [ADR-0026](adr-0026-demonstration-mode-boundary.md) | Demonstration mode: what is real, what is simulated, and how the difference is shown | Accepted | Integration, Governance |
+| [ADR-0027](adr-0027-single-tenant-per-deployment.md) | Single-tenant per deployment, multi-client product; configuration over forks; runtime branding | Accepted | Architecture, Deployment, Governance |
 
 ## Open items
 

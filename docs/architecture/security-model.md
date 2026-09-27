@@ -322,6 +322,26 @@ same place.
 | Collections | `collectionReceipts`, `collectionInstruments`, `collectionReminders` |
 | Marketing | `marketingCampaigns` |
 
+#### Collections added by the foundation completion (2026-09-27)
+
+One deployment is one company (ADR-0027), so none of these carries a tenant identifier.
+
+| Package | Collection | Indexes | Notes |
+|---|---|---|---|
+| F1 | `companyProfiles` | `companyProfiles_key_unique` | Exactly one document, key `primary`: the database refuses a second profile. No secret fields (strict schema). Not deletable |
+| F1 | `companyProfileRevisions` | `_id_unique`, `_version_unique` | **Append-only**: every update, delete and rewrite operation refused by the model. One revision per version, so concurrent edits cannot both record version N |
+| F1 | `brandAssets` | `_id_unique`, `_slot_active_unique` (partial), `_slot_history` | PNG/JPEG only, verified by magic bytes, ≤ 512 KiB; a replaced image is `superseded`, never deleted; `scanStatus: not_scanned` until a scanner exists (SEC-005) |
+
+**Public endpoints.** `GET /api/v1/branding` and `GET /api/v1/branding/assets/{slot}` require no
+authentication by design: the sign-in screen needs them before anyone has signed in. They return only
+names, languages, the validated colour and the images — never a registration number, contact detail,
+footer or history — and sit behind the global rate limiter. Images are served with their verified
+content type, `X-Content-Type-Options: nosniff` and the API's `default-src 'none'` policy; SVG is
+not accepted at all, because an SVG can carry script.
+
+**Company profile changes** need the administrative `company.profile.manage`, which carries a
+mandatory second factor (SEC-017).
+
 One further collection exists **only in a development database**: `demoSeedLedger`, written by
 `npm run seed:demo`. It records the identifier of every record the seed created, which is what lets
 `npm run seed:demo:reset` remove exactly those and nothing else. It is not part of the product, no

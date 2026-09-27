@@ -8,7 +8,9 @@ import Typography from '@mui/material/Typography';
 import { useState, type FormEvent } from 'react';
 import { ApiError } from '../api/client';
 import { useSession } from '../api/session';
+import { useBranding } from '../branding';
 import { useLocale } from '../locale';
+import { BrandMark } from '../shell/BrandMark';
 import { useErrorMessage } from '../errors';
 
 /**
@@ -22,7 +24,8 @@ import { useErrorMessage } from '../errors';
  * an English sentence can never land on an Arabic screen (I18N-008).
  */
 export function SignInPage() {
-  const { locale, setLocale, t } = useLocale();
+  const { otherLocale, setLocale, t } = useLocale();
+  const branding = useBranding();
   const { status, signIn, verifyMfa } = useSession();
   const errorMessage = useErrorMessage();
   const [loginIdentifier, setLoginIdentifier] = useState('');
@@ -32,7 +35,6 @@ export function SignInPage() {
   const [error, setError] = useState<ApiError | undefined>();
 
   const mfa = status === 'mfaRequired';
-  const otherLocale = locale === 'ar' ? 'en' : 'ar';
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -65,15 +67,26 @@ export function SignInPage() {
             The language switch belongs here, not only inside the shell: a person who cannot read the
             sign-in screen cannot reach the switch that would fix it.
           */}
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              size="small"
-              variant="outlined"
-              lang={otherLocale}
-              onClick={() => setLocale(otherLocale)}
-            >
-              {t('shell.switchLanguage')}
-            </Button>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 2,
+            }}
+          >
+            <BrandMark variant="signIn" />
+            {otherLocale ? (
+              <Button
+                size="small"
+                variant="outlined"
+                lang={otherLocale}
+                onClick={() => setLocale(otherLocale)}
+                sx={{ flexShrink: 0 }}
+              >
+                {t('shell.switchLanguage')}
+              </Button>
+            ) : null}
           </Box>
 
           <Box>
@@ -85,10 +98,16 @@ export function SignInPage() {
             </Typography>
           </Box>
 
-          {/* Stated on the sign-in screen itself, so nobody mistakes this for a live system. */}
-          <Alert severity="info" variant="outlined">
-            {t('auth.demoNotice')}
-          </Alert>
+          {/*
+            Stated on the sign-in screen itself, so nobody mistakes a demonstration for a live system
+            — and shown only on a demonstration deployment, so a client's live system never claims
+            to be one (ADR-0026, ADR-0027).
+          */}
+          {branding.demonstration ? (
+            <Alert severity="info" variant="outlined">
+              {t('auth.demoNotice')}
+            </Alert>
+          ) : null}
 
           {error ? (
             <Alert severity="error" variant="outlined" role="alert">

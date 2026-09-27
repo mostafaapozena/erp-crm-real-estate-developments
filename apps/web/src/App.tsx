@@ -3,6 +3,7 @@ import { StateView } from '@alola/ui';
 import type { i18n } from 'i18next';
 import { BrowserRouter } from 'react-router';
 import { SessionProvider, useSession } from './api/session';
+import { BrandingProvider } from './branding';
 import { LocaleProvider, useLocale } from './locale';
 import { SignInPage } from './pages/SignInPage';
 import { AppRoutes } from './routes';
@@ -43,14 +44,20 @@ function Authenticated() {
   );
 }
 
+/**
+ * `BrandingProvider` is outermost because the deployment's branding decides the starting language
+ * and the brand colour the locale provider builds its theme from (PLAT-023, ADR-0027).
+ */
 export function App({ i18n }: { i18n: i18n }) {
   return (
-    <LocaleProvider i18n={i18n}>
-      <BrowserRouter>
-        <SessionProvider>
-          <Authenticated />
-        </SessionProvider>
-      </BrowserRouter>
-    </LocaleProvider>
+    <BrandingProvider>
+      <LocaleProvider i18n={i18n}>
+        <BrowserRouter>
+          <SessionProvider>
+            <Authenticated />
+          </SessionProvider>
+        </BrowserRouter>
+      </LocaleProvider>
+    </BrandingProvider>
   );
 }

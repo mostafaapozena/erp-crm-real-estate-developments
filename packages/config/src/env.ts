@@ -105,8 +105,12 @@ const authShape = {
     .default(259_200),
   AUTH_PASSWORD_RESET_TTL_SECONDS: z.coerce.number().int().min(300).max(86_400).default(1800),
   AUTH_MFA_CHALLENGE_TTL_SECONDS: z.coerce.number().int().min(60).max(1800).default(300),
-  /** Shown in the authenticator app next to the account name. */
-  AUTH_TOTP_ISSUER: z.string().trim().min(1).max(64).default('ALOLA ERP'),
+  /**
+   * Shown in the authenticator app next to the account name **only when no company profile exists**;
+   * a configured deployment uses its profile's short name (ADR-0027). Neutral by default: no client's
+   * name is written into reusable product source.
+   */
+  AUTH_TOTP_ISSUER: z.string().trim().min(1).max(64).default('Real Estate ERP'),
   /** Argon2id cost. Raise as hardware improves; a successful login rehashes transparently. */
   ARGON2_MEMORY_COST: z.coerce.number().int().min(19_456).max(1_048_576).default(19_456),
   ARGON2_TIME_COST: z.coerce.number().int().min(2).max(10).default(2),
