@@ -3,9 +3,11 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { MetricCard, PageHeader, StateView } from '@alola/ui';
+import { Icon, MetricCard, PageHeader, StateView } from '@alola/ui';
+import { ArrowRight, Building2, CalendarCheck, FileSignature, House } from '@alola/ui/icons';
 import { Link } from 'react-router';
 import { useApi } from '../api/useApi';
+import { RatioMeter } from '../charts/RatioMeter';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
 import {
@@ -89,9 +91,16 @@ function ProjectCard({ project, buildings }: { project: Project; buildings: Buil
 
   return (
     <Panel
+      icon={Building2}
       title={locale === 'ar' ? project.name.ar : project.name.en}
       actions={
-        <Button component={Link} to={`/units?projectId=${project.projectId}`} variant="outlined">
+        <Button
+          component={Link}
+          to={`/units?projectId=${project.projectId}`}
+          variant="outlined"
+          size="small"
+          endIcon={<Icon icon={ArrowRight} size={16} mirrorInRtl />}
+        >
           {t('nav.units')}
         </Button>
       }
@@ -127,28 +136,42 @@ function ProjectCard({ project, buildings }: { project: Project; buildings: Buil
           </Typography>
         ) : null}
 
-        <CardGrid min={160}>
+        <CardGrid min={170}>
           <MetricCard
+            icon={House}
             label={t('dashboard.totalUnits')}
             value={format.number(data?.total)}
             loading={summary.state.kind === 'loading'}
           />
           <MetricCard
+            icon={House}
+            tone="positive"
             label={t('dashboard.availableUnits')}
             value={format.number(data?.byStatus.available ?? 0)}
             loading={summary.state.kind === 'loading'}
           />
           <MetricCard
+            icon={CalendarCheck}
             label={t('dashboard.reservedUnits')}
             value={format.number((data?.byStatus.reserved ?? 0) + (data?.byStatus.held ?? 0))}
             loading={summary.state.kind === 'loading'}
           />
           <MetricCard
+            icon={FileSignature}
             label={t('dashboard.contractedUnits')}
             value={format.number(data?.byStatus.contracted ?? 0)}
             loading={summary.state.kind === 'loading'}
           />
         </CardGrid>
+
+        {data && data.total > 0 ? (
+          <RatioMeter
+            label={t('dashboard.availableShare')}
+            value={(data.byStatus.available ?? 0) / data.total}
+            display={format.percent((data.byStatus.available ?? 0) / data.total)}
+            tone="success"
+          />
+        ) : null}
 
         {buildings.length > 0 ? (
           <Box>

@@ -4,10 +4,18 @@ import Button from '@mui/material/Button';
 import { DataTable, PageHeader, type DataColumn } from '@alola/ui';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { useApi } from '../api/useApi';
+import { usePagedList } from '../api/usePagedList';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
-import { EnumChip, RECEIPT_TONES, RequirePermission, Verbatim, tableStatus } from './shared';
+import {
+  EnumChip,
+  ListFooter,
+  RECEIPT_TONES,
+  RequirePermission,
+  Verbatim,
+  tableStatus,
+  useTableLabels,
+} from './shared';
 
 type Receipt = ReceiptPage['items'][number];
 
@@ -23,7 +31,8 @@ function ReceiptsScreen() {
   const { t, td } = useLocale();
   const format = useFormatters();
   const navigate = useNavigate();
-  const receipts = useApi<ReceiptPage>('/api/v1/collections/receipts?limit=50');
+  const labels = useTableLabels();
+  const receipts = usePagedList<Receipt>('/api/v1/collections/receipts?limit=50');
 
   const columns = useMemo<DataColumn<Receipt>[]>(
     () => [
@@ -73,8 +82,9 @@ function ReceiptsScreen() {
       />
       <DataTable
         columns={columns}
-        rows={receipts.state.kind === 'ready' ? receipts.state.data.items : []}
+        rows={receipts.items}
         rowKey={(row) => row.receiptId}
+        rowLabel={(row) => t('list.open', { label: row.receiptNumber })}
         status={tableStatus(receipts.state)}
         caption={t('collections.receiptsTitle')}
         onRowClick={(row) => void navigate(`/receipts/${row.receiptId}`)}
@@ -83,15 +93,17 @@ function ReceiptsScreen() {
             {t('states.retry')}
           </Button>
         }
-        labels={{
-          loadingTitle: t('states.loadingTitle'),
-          emptyTitle: t('states.emptyTitle'),
-          emptyDescription: t('states.emptyDescription'),
-          errorTitle: t('states.errorTitle'),
-          errorDescription: t('states.errorDescription'),
-          forbiddenTitle: t('states.forbiddenTitle'),
-          forbiddenDescription: t('states.forbiddenDescription'),
-        }}
+        labels={labels}
+        footer={
+          <ListFooter
+            shown={receipts.items.length}
+            total={receipts.total}
+            hasMore={receipts.hasMore}
+            loadingMore={receipts.loadingMore}
+            onLoadMore={receipts.loadMore}
+            error={receipts.moreError}
+          />
+        }
       />
     </Box>
   );

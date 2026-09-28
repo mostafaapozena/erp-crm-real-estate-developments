@@ -1,16 +1,31 @@
-import type { ContractPage } from '@alola/contracts';
+import { CONTRACT_STATES, type ContractPage } from '@alola/contracts';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import { DataTable, PageHeader, type DataColumn } from '@alola/ui';
-import { useMemo } from 'react';
+import { DataTable, PageHeader, TableToolbar, type DataColumn } from '@alola/ui';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useApi } from '../api/useApi';
+import { query } from '../api/client';
+import { usePagedList } from '../api/usePagedList';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
-import { CONTRACT_TONES, EnumChip, RequirePermission, Verbatim, tableStatus } from './shared';
+import { PersonName } from '../people';
+import {
+  CONTRACT_TONES,
+  EnumChip,
+  FilterSelect,
+  ListFooter,
+  RequirePermission,
+  Verbatim,
+  tableStatus,
+  useTableLabels,
+} from './shared';
 
 type Contract = ContractPage['items'][number];
 
+/**
+ * The contract register: every contract in the actor's scope, filterable by state, paged by the
+ * server's cursor. Money is the server's decimal string, formatted — never summed here.
+ */
 export default function ContractsPage() {
   return (
     <RequirePermission permission="sales.contract.view">
@@ -20,22 +35,34 @@ export default function ContractsPage() {
 }
 
 function ContractsScreen() {
-  const { t } = useLocale();
+  const { t, td } = useLocale();
   const format = useFormatters();
   const navigate = useNavigate();
-  const contracts = useApi<ContractPage>('/api/v1/sales/contracts?limit=50');
+  const labels = useTableLabels();
+  const [state, setState] = useState('');
+  const contracts = usePagedList<Contract>(`/api/v1/sales/contracts${query({ limit: 50, state })}`);
 
   const columns = useMemo<DataColumn<Contract>[]>(
     () => [
       {
         key: 'number',
         header: t('sales.contractNumber'),
-        render: (row) => <Verbatim>{row.contractNumber}</Verbatim>,
+        render: (row) => (
+          <Box component="span" sx={{ fontWeight: 600 }}>
+            <Verbatim>{row.contractNumber}</Verbatim>
+          </Box>
+        ),
       },
       {
         key: 'date',
         header: t('sales.contractedOn'),
         render: (row) => <Verbatim>{format.date(row.contractedOn)}</Verbatim>,
+      },
+      {
+        key: 'owner',
+        header: t('sales.salesOwner'),
+        render: (row) => <PersonName accountId={row.salesOwnerAccountId} />,
+        secondary: true,
       },
       {
         key: 'total',
@@ -71,26 +98,56 @@ function ContractsScreen() {
       <PageHeader title={t('sales.contractsTitle')} subtitle={t('sales.contractsSubtitle')} />
       <DataTable
         columns={columns}
-        rows={contracts.state.kind === 'ready' ? contracts.state.data.items : []}
+        rows={contracts.items}
         rowKey={(row) => row.contractId}
+        rowLabel={(row) => t('list.open', { label: row.contractNumber })}
         status={tableStatus(contracts.state)}
         caption={t('sales.contractsTitle')}
+        filtered={state !== ''}
         onRowClick={(row) => void navigate(`/contracts/${row.contractId}`)}
         errorAction={
           <Button variant="contained" onClick={contracts.reload}>
             {t('states.retry')}
           </Button>
         }
-        labels={{
-          loadingTitle: t('states.loadingTitle'),
-          loadingDescription: t('states.loadingDescription'),
-          emptyTitle: t('states.emptyTitle'),
-          emptyDescription: t('states.emptyDescription'),
-          errorTitle: t('states.errorTitle'),
-          errorDescription: t('states.errorDescription'),
-          forbiddenTitle: t('states.forbiddenTitle'),
-          forbiddenDescription: t('states.forbiddenDescription'),
-        }}
+        labels={labels}
+        toolbar={
+          <TableToolbar
+            filters={
+              <FilterSelect
+                label={t('fields.state')}
+                value={state}
+                onChange={setState}
+                options={CONTRACT_STATES.map((value) => ({
+                  value,
+                  label: td(`contractState.${value}`),
+                }))}
+              />
+            }
+            activeFilters={
+              state
+                ? [
+                    {
+                      key: 'state',
+                      label: `${t('fields.state')}: ${td(`contractState.${state}`)}`,
+                      onRemove: () => setState(''),
+                    },
+                  ]
+                : []
+            }
+            removeLabel={(label) => t('filters.remove', { label })}
+          />
+        }
+        footer={
+          <ListFooter
+            shown={contracts.items.length}
+            total={contracts.total}
+            hasMore={contracts.hasMore}
+            loadingMore={contracts.loadingMore}
+            onLoadMore={contracts.loadMore}
+            error={contracts.moreError}
+          />
+        }
       />
     </Box>
   );

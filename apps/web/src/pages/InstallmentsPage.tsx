@@ -4,20 +4,24 @@ import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
-import Typography from '@mui/material/Typography';
 import { DataTable, MetricCard, PageHeader, type DataColumn } from '@alola/ui';
+import { CalendarCheck, CalendarClock, TriangleAlert } from '@alola/ui/icons';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { query } from '../api/client';
 import { useApi } from '../api/useApi';
+import { usePagedList } from '../api/usePagedList';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
 import {
   CardGrid,
   EnumChip,
   INSTALLMENT_TONES,
+  ListFooter,
   RequirePermission,
   Verbatim,
   tableStatus,
+  useTableLabels,
 } from './shared';
 
 type Installment = InstallmentPage['items'][number];
@@ -42,15 +46,22 @@ function InstallmentsScreen() {
   const { t, td } = useLocale();
   const format = useFormatters();
   const navigate = useNavigate();
+  const labels = useTableLabels();
   const [bucket, setBucket] = useState<Bucket>('overdue');
 
-  const overdue = useApi<InstallmentPage>('/api/v1/sales/installments?bucket=overdue&limit=100');
-  const due = useApi<InstallmentPage>('/api/v1/sales/installments?bucket=due&limit=100');
+  // The cards need only each bucket's scoped total; the table pages through the selected bucket.
+  const overdue = useApi<InstallmentPage>('/api/v1/sales/installments?bucket=overdue&limit=1');
+  const due = useApi<InstallmentPage>('/api/v1/sales/installments?bucket=due&limit=1');
   const upcoming = useApi<InstallmentPage>(
-    '/api/v1/sales/installments?bucket=upcoming&withinDays=15&limit=100',
+    '/api/v1/sales/installments?bucket=upcoming&withinDays=15&limit=1',
   );
-
-  const active = bucket === 'overdue' ? overdue : bucket === 'due' ? due : upcoming;
+  const active = usePagedList<Installment>(
+    `/api/v1/sales/installments${query({
+      bucket,
+      limit: 50,
+      ...(bucket === 'upcoming' ? { withinDays: 15 } : {}),
+    })}`,
+  );
 
   const columns = useMemo<DataColumn<Installment>[]>(
     () => [
@@ -103,6 +114,7 @@ function InstallmentsScreen() {
       <Stack spacing={3}>
         <CardGrid min={200}>
           <MetricCard
+            icon={TriangleAlert}
             label={t('collections.buckets.overdue')}
             value={format.number(
               overdue.state.kind === 'ready' ? overdue.state.data.total : undefined,
@@ -115,11 +127,13 @@ function InstallmentsScreen() {
             }
           />
           <MetricCard
+            icon={CalendarClock}
             label={t('collections.buckets.due')}
             value={format.number(due.state.kind === 'ready' ? due.state.data.total : undefined)}
             loading={due.state.kind === 'loading'}
           />
           <MetricCard
+            icon={CalendarCheck}
             label={t('collections.buckets.upcoming')}
             value={format.number(
               upcoming.state.kind === 'ready' ? upcoming.state.data.total : undefined,
@@ -140,7 +154,7 @@ function InstallmentsScreen() {
 
         <DataTable
           columns={columns}
-          rows={active.state.kind === 'ready' ? active.state.data.items : []}
+          rows={active.items}
           rowKey={(row) => row.installmentId}
           status={tableStatus(active.state)}
           caption={t('collections.installmentsTitle')}
@@ -150,27 +164,18 @@ function InstallmentsScreen() {
               {t('states.retry')}
             </Button>
           }
-          labels={{
-            loadingTitle: t('states.loadingTitle'),
-            emptyTitle: t('states.emptyTitle'),
-            emptyDescription: t('states.emptyDescription'),
-            errorTitle: t('states.errorTitle'),
-            errorDescription: t('states.errorDescription'),
-            forbiddenTitle: t('states.forbiddenTitle'),
-            forbiddenDescription: t('states.forbiddenDescription'),
-          }}
+          labels={labels}
+          footer={
+            <ListFooter
+              shown={active.items.length}
+              total={active.total}
+              hasMore={active.hasMore}
+              loadingMore={active.loadingMore}
+              onLoadMore={active.loadMore}
+              error={active.moreError}
+            />
+          }
         />
-
-        {active.state.kind === 'ready' ? (
-          <Typography variant="body2" color="text.secondary">
-            <Verbatim>
-              {t('pagination.showing', {
-                shown: active.state.data.items.length,
-                total: active.state.data.total,
-              })}
-            </Verbatim>
-          </Typography>
-        ) : null}
       </Stack>
     </Box>
   );

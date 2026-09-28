@@ -1,4 +1,4 @@
-import type { INSTRUMENT_KINDS, InstrumentPage } from '@alola/contracts';
+import type { INSTRUMENT_KINDS, Instrument as InstrumentRecord } from '@alola/contracts';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
@@ -7,12 +7,20 @@ import Tabs from '@mui/material/Tabs';
 import { DataTable, PageHeader, type DataColumn } from '@alola/ui';
 import { useMemo, useState } from 'react';
 import { query } from '../api/client';
-import { useApi } from '../api/useApi';
+import { usePagedList } from '../api/usePagedList';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
-import { EnumChip, INSTRUMENT_TONES, RequirePermission, Verbatim, tableStatus } from './shared';
+import {
+  EnumChip,
+  INSTRUMENT_TONES,
+  ListFooter,
+  RequirePermission,
+  Verbatim,
+  tableStatus,
+  useTableLabels,
+} from './shared';
 
-type Instrument = InstrumentPage['items'][number];
+type Instrument = InstrumentRecord;
 type Kind = (typeof INSTRUMENT_KINDS)[number];
 
 /**
@@ -33,7 +41,8 @@ function InstrumentsScreen() {
   const format = useFormatters();
   const [kind, setKind] = useState<Kind>('cheque');
 
-  const instruments = useApi<InstrumentPage>(
+  const labels = useTableLabels();
+  const instruments = usePagedList<Instrument>(
     `/api/v1/collections/instruments${query({ kind, limit: 50 })}`,
   );
 
@@ -102,7 +111,7 @@ function InstrumentsScreen() {
 
         <DataTable
           columns={columns}
-          rows={instruments.state.kind === 'ready' ? instruments.state.data.items : []}
+          rows={instruments.items}
           rowKey={(row) => row.instrumentId}
           status={tableStatus(instruments.state)}
           caption={t('collections.instrumentsTitle')}
@@ -111,15 +120,17 @@ function InstrumentsScreen() {
               {t('states.retry')}
             </Button>
           }
-          labels={{
-            loadingTitle: t('states.loadingTitle'),
-            emptyTitle: t('states.emptyTitle'),
-            emptyDescription: t('states.emptyDescription'),
-            errorTitle: t('states.errorTitle'),
-            errorDescription: t('states.errorDescription'),
-            forbiddenTitle: t('states.forbiddenTitle'),
-            forbiddenDescription: t('states.forbiddenDescription'),
-          }}
+          labels={labels}
+          footer={
+            <ListFooter
+              shown={instruments.items.length}
+              total={instruments.total}
+              hasMore={instruments.hasMore}
+              loadingMore={instruments.loadingMore}
+              onLoadMore={instruments.loadMore}
+              error={instruments.moreError}
+            />
+          }
         />
       </Stack>
     </Box>

@@ -64,6 +64,8 @@ export function demoAccounts(): Map<string, DemoAccount> {
 export const SALES_MANAGER = 'sales.manager@demo.invalid';
 export const SALES_REP = 'sales.one@demo.invalid';
 export const COLLECTOR = 'collections@demo.invalid';
+/** Deployment-wide scope, read-only permissions: sees the legal entity a branch-scoped role does not. */
+export const EXECUTIVE = 'executive@demo.invalid';
 
 export const LABELS = {
   ar: {
@@ -109,7 +111,9 @@ export async function signIn(page: Page, login: string): Promise<void> {
 
   await page.goto('/');
   await page.getByLabel(LABELS.ar.identifier).fill(account.loginIdentifier);
-  await page.getByLabel(LABELS.ar.password).fill(account.password);
+  // By role and exact accessible name: the show-password toggle's name ("إظهار كلمة المرور")
+  // contains the field's label, and the label's visible text carries the required asterisk.
+  await page.getByRole('textbox', { name: LABELS.ar.password, exact: true }).fill(account.password);
   await page.getByRole('button', { name: LABELS.ar.signIn, exact: true }).click();
   // The user menu, not the navigation: on a phone the navigation is a drawer that starts closed, and
   // waiting for it would make every mobile test fail before it had begun.

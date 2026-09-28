@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { COLLECTOR, LABELS, SALES_MANAGER, mainNav, open, signIn } from './demo';
+import { COLLECTOR, EXECUTIVE, LABELS, SALES_MANAGER, mainNav, open, signIn } from './demo';
 
 /**
  * The deployment's identity and the redesign's visible guarantees, against the built application,
@@ -25,10 +25,16 @@ test.describe('the company identity', () => {
 
   test('heads the sidebar in both languages', async ({ page }) => {
     await signIn(page, SALES_MANAGER);
+    // Probed before the drawer opens: an open modal drawer hides the rest of the page from the
+    // accessibility tree, so the toggle would read as absent afterwards.
+    const temporary = await page
+      .getByRole('button', { name: LABELS.ar.openNavigation })
+      .isVisible();
     await mainNav(page);
     await expect(page.getByText(ALOLA_AR).first()).toBeVisible();
-    if (await page.getByRole('button', { name: LABELS.ar.openNavigation }).isVisible()) {
+    if (temporary) {
       await page.keyboard.press('Escape');
+      await expect(page.locator('#app-navigation')).toBeHidden();
     }
     await page.getByRole('button', { name: LABELS.ar.switchTo }).click();
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
@@ -39,9 +45,10 @@ test.describe('the company identity', () => {
   test('names the legal entity in Organization, with no trace of the superseded name', async ({
     page,
   }) => {
-    await signIn(page, SALES_MANAGER);
+    // An all-scope account: a branch-scoped one is correctly shown no legal entity at all.
+    await signIn(page, EXECUTIVE);
     await open(page, '/organization');
-    await expect(page.getByText(ALOLA_AR).first()).toBeVisible();
+    await expect(page.locator('main').getByText(ALOLA_AR).first()).toBeVisible();
     await expect(page.getByText(SUPERSEDED)).toHaveCount(0);
   });
 });

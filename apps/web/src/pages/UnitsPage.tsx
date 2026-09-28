@@ -7,20 +7,31 @@ import type {
 } from '@alola/contracts';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { DataTable, MetricCard, PageHeader, type DataColumn } from '@alola/ui';
-import { useMemo, useState, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { DataTable, MetricCard, PageHeader, TableToolbar, type DataColumn } from '@alola/ui';
+import { House } from '@alola/ui/icons';
+import { useMemo } from 'react';
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 import { query } from '../api/client';
 import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
+import { usePagedList } from '../api/usePagedList';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
 import { ExportButton } from './ExportButton';
-import { CardGrid, EnumChip, RequirePermission, UNIT_TONES, Verbatim, tableStatus } from './shared';
+import {
+  CardGrid,
+  EnumChip,
+  FilterSelect,
+  ListFooter,
+  ListSearch,
+  RequirePermission,
+  UNIT_TONES,
+  Verbatim,
+  tableStatus,
+  useTableLabels,
+} from './shared';
 
 type Unit = UnitPage['items'][number];
 type UnitStatus = (typeof UNIT_STATUSES)[number];
@@ -48,21 +59,22 @@ export default function UnitsPage() {
 }
 
 function UnitsScreen() {
-  const { t, td } = useLocale();
+  const { t, td, locale } = useLocale();
   const { can } = useSession();
   const format = useFormatters();
   const navigate = useNavigate();
+  const labels = useTableLabels();
   const [params, setParams] = useSearchParams();
 
   const status = params.get('status') ?? '';
   const usageType = params.get('usageType') ?? '';
   const projectId = params.get('projectId') ?? '';
   const code = params.get('code') ?? '';
-  const [codeDraft, setCodeDraft] = useState(code);
 
   const projects = useApi<{ items: Project[] }>('/api/v1/inventory/projects');
+  const projectList = projects.state.kind === 'ready' ? projects.state.data.items : [];
   const path = `/api/v1/inventory/units${query({ limit: 50, status, usageType, projectId, code })}`;
-  const units = useApi<UnitPage>(path);
+  const units = usePagedList<Unit>(path);
   const summary = useApi<InventorySummary>(
     `/api/v1/inventory/units/summary${query({ projectId })}`,
   );
@@ -74,7 +86,28 @@ function UnitsScreen() {
     setParams(next, { replace: true });
   };
 
-  const rows = units.state.kind === 'ready' ? units.state.data.items : [];
+  const rows = units.items;
+  const chip = (key: string, name: string, value: string) => ({
+    key,
+    label: t('filters.active', { name, value }),
+    onRemove: () => setParam(key, ''),
+  });
+  const active = [
+    ...(code ? [chip('code', t('inventory.searchByCode'), code)] : []),
+    ...(projectId
+      ? [
+          chip(
+            'projectId',
+            t('fields.project'),
+            projectList.find((project) => project.projectId === projectId)?.name[locale] ?? '…',
+          ),
+        ]
+      : []),
+    ...(status ? [chip('status', t('inventory.filterByStatus'), td(`unitStatus.${status}`))] : []),
+    ...(usageType
+      ? [chip('usageType', t('inventory.filterByUsage'), td(`usageType.${usageType}`))]
+      : []),
+  ];
   const pricingVisible = rows.some((unit) => unit.currentPrice !== undefined);
   const summaryData = summary.state.kind === 'ready' ? summary.state.data : undefined;
 
@@ -142,8 +175,9 @@ function UnitsScreen() {
       />
 
       <Stack spacing={3}>
-        <CardGrid min={180}>
+        <CardGrid min={170}>
           <MetricCard
+            icon={House}
             label={t('dashboard.totalUnits')}
             value={format.number(summaryData?.total)}
             loading={summary.state.kind === 'loading'}
@@ -154,112 +188,87 @@ function UnitsScreen() {
               label={td(`unitStatus.${value}`)}
               value={format.number(summaryData?.byStatus[value] ?? 0)}
               loading={summary.state.kind === 'loading'}
+              {...(value === 'available' ? { tone: 'positive' as const } : {})}
+              link={{
+                component: RouterLink,
+                to: `/units${query({ projectId, status: value })}`,
+                label: t('dashboard.openList'),
+              }}
             />
           ))}
         </CardGrid>
-
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ flexWrap: 'wrap' }}>
-          <TextField
-            select
-            size="small"
-            label={t('fields.project')}
-            value={projectId}
-            onChange={(event) => setParam('projectId', event.target.value)}
-            sx={{ minWidth: 200 }}
-          >
-            <MenuItem value="">—</MenuItem>
-            {(projects.state.kind === 'ready' ? projects.state.data.items : []).map((project) => (
-              <MenuItem key={project.projectId} value={project.projectId}>
-                {project.name.ar}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            size="small"
-            label={t('inventory.filterByStatus')}
-            value={status}
-            onChange={(event) => setParam('status', event.target.value)}
-            sx={{ minWidth: 180 }}
-          >
-            <MenuItem value="">—</MenuItem>
-            {STATUSES.map((value) => (
-              <MenuItem key={value} value={value}>
-                {td(`unitStatus.${value}`)}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            size="small"
-            label={t('inventory.filterByUsage')}
-            value={usageType}
-            onChange={(event) => setParam('usageType', event.target.value)}
-            sx={{ minWidth: 180 }}
-          >
-            <MenuItem value="">—</MenuItem>
-            {USAGES.map((value) => (
-              <MenuItem key={value} value={value}>
-                {td(`usageType.${value}`)}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Stack
-            direction="row"
-            spacing={1}
-            component="form"
-            onSubmit={(event: FormEvent) => {
-              event.preventDefault();
-              setParam('code', codeDraft.trim());
-            }}
-          >
-            <TextField
-              size="small"
-              label={t('inventory.searchByCode')}
-              value={codeDraft}
-              onChange={(event) => setCodeDraft(event.target.value)}
-              slotProps={{ htmlInput: { dir: 'ltr' } }}
-            />
-            <Button type="submit" variant="outlined">
-              {t('actions.search')}
-            </Button>
-          </Stack>
-        </Stack>
 
         <DataTable
           columns={columns}
           rows={rows}
           rowKey={(unit) => unit.unitId}
+          rowLabel={(unit) => t('list.open', { label: unit.code })}
           status={tableStatus(units.state)}
           caption={t('inventory.unitsTitle')}
+          filtered={active.length > 0}
           onRowClick={(unit) => void navigate(`/units/${unit.unitId}`)}
           errorAction={
             <Button variant="contained" onClick={units.reload}>
               {t('states.retry')}
             </Button>
           }
-          labels={{
-            loadingTitle: t('states.loadingTitle'),
-            loadingDescription: t('states.loadingDescription'),
-            emptyTitle: t('states.noResults'),
-            emptyDescription: t('states.noResultsHint'),
-            errorTitle: t('states.errorTitle'),
-            errorDescription: t('states.errorDescription'),
-            forbiddenTitle: t('states.forbiddenTitle'),
-            forbiddenDescription: t('states.forbiddenDescription'),
-          }}
+          labels={labels}
+          toolbar={
+            <TableToolbar
+              search={
+                <ListSearch
+                  value={code}
+                  onSubmit={(value) => setParam('code', value)}
+                  label={t('inventory.searchByCode')}
+                  ltr
+                />
+              }
+              filters={
+                <>
+                  <FilterSelect
+                    label={t('fields.project')}
+                    value={projectId}
+                    onChange={(value) => setParam('projectId', value)}
+                    minWidth={200}
+                    options={projectList.map((project) => ({
+                      value: project.projectId,
+                      label: project.name[locale],
+                    }))}
+                  />
+                  <FilterSelect
+                    label={t('inventory.filterByStatus')}
+                    value={status}
+                    onChange={(value) => setParam('status', value)}
+                    options={STATUSES.map((value) => ({
+                      value,
+                      label: td(`unitStatus.${value}`),
+                    }))}
+                  />
+                  <FilterSelect
+                    label={t('inventory.filterByUsage')}
+                    value={usageType}
+                    onChange={(value) => setParam('usageType', value)}
+                    options={USAGES.map((value) => ({ value, label: td(`usageType.${value}`) }))}
+                  />
+                </>
+              }
+              activeFilters={active}
+              clearLabel={t('filters.clearAll')}
+              removeLabel={(label) => t('filters.remove', { label })}
+              onClearAll={() => setParams(new URLSearchParams(), { replace: true })}
+            />
+          }
+          footer={
+            <ListFooter
+              shown={units.items.length}
+              total={units.total}
+              hasMore={units.hasMore}
+              loadingMore={units.loadingMore}
+              onLoadMore={units.loadMore}
+              error={units.moreError}
+            />
+          }
         />
-
-        {units.state.kind === 'ready' ? (
-          <Typography variant="body2" color="text.secondary">
-            <Verbatim>
-              {t('pagination.showing', {
-                shown: units.state.data.items.length,
-                total: units.state.data.total,
-              })}
-            </Verbatim>
-          </Typography>
-        ) : null}
       </Stack>
     </Box>
   );

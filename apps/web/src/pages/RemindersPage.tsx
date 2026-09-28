@@ -20,10 +20,12 @@ import { useLocale } from '../locale';
 import {
   EnumChip,
   Field,
+  ListFooter,
   REMINDER_TONES,
   RequirePermission,
   Verbatim,
   tableStatus,
+  useTableLabels,
 } from './shared';
 
 /**
@@ -50,6 +52,7 @@ function RemindersScreen() {
   const { can } = useSession();
   const format = useFormatters();
   const errorMessage = useErrorMessage();
+  const labels = useTableLabels();
   const [preview, setPreview] = useState<Reminder | undefined>();
   const [generated, setGenerated] = useState<GenerateRemindersResult | undefined>();
 
@@ -192,15 +195,18 @@ function RemindersScreen() {
               {t('states.retry')}
             </Button>
           }
-          labels={{
-            loadingTitle: t('states.loadingTitle'),
-            emptyTitle: t('states.emptyTitle'),
-            emptyDescription: t('states.emptyDescription'),
-            errorTitle: t('states.errorTitle'),
-            errorDescription: t('states.errorDescription'),
-            forbiddenTitle: t('states.forbiddenTitle'),
-            forbiddenDescription: t('states.forbiddenDescription'),
-          }}
+          labels={labels}
+          footer={
+            reminders.state.kind === 'ready' ? (
+              <ListFooter
+                shown={reminders.state.data.items.length}
+                total={reminders.state.data.total}
+                hasMore={false}
+                loadingMore={false}
+                onLoadMore={() => undefined}
+              />
+            ) : undefined
+          }
         />
       </Stack>
 

@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-28 (UI/UX redesign — UI-3)
+Last updated: 2026-09-28 (UI/UX redesign — UI-4)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -558,8 +558,8 @@ build + bundle ✅ (largest `vendor-mui` 389.4 kB / 117.2 kB gzip); **integratio
 |---|---|---|
 | UI-1 Tokens, icon library, shared primitives, ADR-0030 | **complete** | `c208e71` |
 | UI-2 Company identity, application shell, sign-in, people lookup | **complete** | `cbc5275` |
-| UI-3 Dashboard and charts | **complete** | the commit containing this row |
-| UI-4 Lists and tables | not started | — |
+| UI-3 Dashboard and charts | **complete** | `12c3cc3` |
+| UI-4 Lists and tables | **complete** | the commit containing this row |
 | UI-5 Details, forms, marketing, organization, visual QA | not started | — |
 
 ### UI-1 — what changed
@@ -656,6 +656,32 @@ build + bundle ✅ (largest `vendor-mui` 389.4 kB / 117.2 kB gzip); **integratio
   money figure shown is the server's decimal string formatted, never recomputed.
 - Measured: typecheck, lint, unit 570, build, bundle budget (largest `vendor-mui` 409.3 / 122.2 kB
   gzip; `Charts` 378.2 / 107.3 kB gzip).
+
+### UI-4 — what changed
+
+- One list pattern on leads, customers, projects, units, reservations, contracts, instalments,
+  receipts, cheques/notes and reminders: `TableToolbar` (in-list `ListSearch` labelled "search this
+  list", `FilterSelect` with "All", removable active-filter chips, clear-all), `DataTable` with shared
+  `useTableLabels()` (empty vs no-results), keyboard-openable rows with accessible names, and a
+  `ListFooter` ("Showing N of M" from the server's scoped total, "Show more" by keyset cursor through
+  the new `usePagedList`; tested). New filters where the API already supports them: lead stage and
+  source, reservation state, contract state; unit filters moved into the toolbar and kept in the URL.
+  Sales-owner column (as a name) on reservations and contracts. Instalment bucket cards now ask for
+  `limit=1` totals; the table pages the selected bucket.
+- **Defect fixed:** unit and new-lead project/branch selects always showed the Arabic name, also in
+  English — now the current language.
+- Projects: icons, positive tone on availability, an availability meter.
+- **E2E fixes (test code, not product):** the sign-in helper now finds the password field by role and
+  exact name (the show-password toggle's name contains the field label; the label text carries the
+  required asterisk). In `identity.spec.ts` the mobile drawer toggle is probed before the drawer
+  opens, and the Organization identity check signs in as the all-scope executive.
+- **Finding, recorded as behaviour rather than changed:** a branch-scoped role (the demo sales
+  manager) sees **no legal entity** on Organization, because legal entities are scope-filtered and
+  sit above the branch. Correct under ADR-0006; a read-only "own legal entity" view is a candidate
+  for Business Master Prompt 1.
+- E2E measured on the UI-3 tree before these fixes: **50 passed / 2 failed** (both the mobile cases of
+  the new identity spec, fixed above); the full suite reruns at the end of UI-5.
+- Measured: typecheck, lint, web unit 39 (37 + 2 paging tests).
 
 ## Phase status
 

@@ -1,14 +1,26 @@
-import type { ReservationPage } from '@alola/contracts';
+import { RESERVATION_STATES, type ReservationPage } from '@alola/contracts';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import { DataTable, PageHeader, type DataColumn } from '@alola/ui';
-import { useMemo } from 'react';
+import { DataTable, Icon, PageHeader, TableToolbar, type DataColumn } from '@alola/ui';
+import { Plus } from '@alola/ui/icons';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { query } from '../api/client';
 import { useSession } from '../api/session';
-import { useApi } from '../api/useApi';
+import { usePagedList } from '../api/usePagedList';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
-import { EnumChip, RESERVATION_TONES, RequirePermission, Verbatim, tableStatus } from './shared';
+import { PersonName } from '../people';
+import {
+  EnumChip,
+  FilterSelect,
+  ListFooter,
+  RESERVATION_TONES,
+  RequirePermission,
+  Verbatim,
+  tableStatus,
+  useTableLabels,
+} from './shared';
 
 type Reservation = ReservationPage['items'][number];
 
@@ -21,18 +33,26 @@ export default function ReservationsPage() {
 }
 
 function ReservationsScreen() {
-  const { t } = useLocale();
+  const { t, td } = useLocale();
   const { can } = useSession();
   const format = useFormatters();
   const navigate = useNavigate();
-  const reservations = useApi<ReservationPage>('/api/v1/sales/reservations?limit=50');
+  const labels = useTableLabels();
+  const [state, setState] = useState('');
+  const reservations = usePagedList<Reservation>(
+    `/api/v1/sales/reservations${query({ limit: 50, state })}`,
+  );
 
   const columns = useMemo<DataColumn<Reservation>[]>(
     () => [
       {
         key: 'number',
         header: t('sales.reservationNumber'),
-        render: (row) => <Verbatim>{row.reservationNumber}</Verbatim>,
+        render: (row) => (
+          <Box component="span" sx={{ fontWeight: 600 }}>
+            <Verbatim>{row.reservationNumber}</Verbatim>
+          </Box>
+        ),
       },
       {
         key: 'reservedOn',
@@ -43,6 +63,12 @@ function ReservationsScreen() {
         key: 'expiresOn',
         header: t('sales.expiresOn'),
         render: (row) => <Verbatim>{format.date(row.expiresOn)}</Verbatim>,
+      },
+      {
+        key: 'owner',
+        header: t('sales.salesOwner'),
+        render: (row) => <PersonName accountId={row.salesOwnerAccountId} />,
+        secondary: true,
       },
       {
         key: 'price',
@@ -68,7 +94,12 @@ function ReservationsScreen() {
         subtitle={t('sales.reservationsSubtitle')}
         actions={
           can('sales.reservation.create') ? (
-            <Button component={Link} to="/reservations/new" variant="contained">
+            <Button
+              component={Link}
+              to="/reservations/new"
+              variant="contained"
+              startIcon={<Icon icon={Plus} size={18} />}
+            >
               {t('sales.newReservation')}
             </Button>
           ) : undefined
@@ -76,26 +107,56 @@ function ReservationsScreen() {
       />
       <DataTable
         columns={columns}
-        rows={reservations.state.kind === 'ready' ? reservations.state.data.items : []}
+        rows={reservations.items}
         rowKey={(row) => row.reservationId}
+        rowLabel={(row) => t('list.open', { label: row.reservationNumber })}
         status={tableStatus(reservations.state)}
         caption={t('sales.reservationsTitle')}
+        filtered={state !== ''}
         onRowClick={(row) => void navigate(`/reservations/${row.reservationId}`)}
         errorAction={
           <Button variant="contained" onClick={reservations.reload}>
             {t('states.retry')}
           </Button>
         }
-        labels={{
-          loadingTitle: t('states.loadingTitle'),
-          loadingDescription: t('states.loadingDescription'),
-          emptyTitle: t('states.emptyTitle'),
-          emptyDescription: t('states.emptyDescription'),
-          errorTitle: t('states.errorTitle'),
-          errorDescription: t('states.errorDescription'),
-          forbiddenTitle: t('states.forbiddenTitle'),
-          forbiddenDescription: t('states.forbiddenDescription'),
-        }}
+        labels={labels}
+        toolbar={
+          <TableToolbar
+            filters={
+              <FilterSelect
+                label={t('fields.state')}
+                value={state}
+                onChange={setState}
+                options={RESERVATION_STATES.map((value) => ({
+                  value,
+                  label: td(`reservationState.${value}`),
+                }))}
+              />
+            }
+            activeFilters={
+              state
+                ? [
+                    {
+                      key: 'state',
+                      label: `${t('fields.state')}: ${td(`reservationState.${state}`)}`,
+                      onRemove: () => setState(''),
+                    },
+                  ]
+                : []
+            }
+            removeLabel={(label) => t('filters.remove', { label })}
+          />
+        }
+        footer={
+          <ListFooter
+            shown={reservations.items.length}
+            total={reservations.total}
+            hasMore={reservations.hasMore}
+            loadingMore={reservations.loadingMore}
+            onLoadMore={reservations.loadMore}
+            error={reservations.moreError}
+          />
+        }
       />
     </Box>
   );

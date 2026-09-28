@@ -19,21 +19,44 @@ import Stack from '@mui/material/Stack';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
-import { DataTable, PageHeader, type DataColumn } from '@alola/ui';
+import { DataTable, Icon, PageHeader, TableToolbar, type DataColumn } from '@alola/ui';
+import { Plus } from '@alola/ui/icons';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { apiRequest, query } from '../api/client';
 import { useSession } from '../api/session';
 import { useApi, useMutation } from '../api/useApi';
+import { usePagedList } from '../api/usePagedList';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
 import { PersonName } from '../people';
 import { ExportButton } from './ExportButton';
-import { EnumChip, LEAD_TONES, RequirePermission, Verbatim, tableStatus } from './shared';
+import {
+  EnumChip,
+  FilterSelect,
+  LEAD_TONES,
+  ListFooter,
+  ListSearch,
+  RequirePermission,
+  Verbatim,
+  tableStatus,
+  useTableLabels,
+} from './shared';
 
 type Lead = LeadPage['items'][number];
 type LeadSource = (typeof LEAD_SOURCES)[number];
+
+const STAGES = [
+  'new',
+  'contacted',
+  'qualified',
+  'visitScheduled',
+  'negotiation',
+  'reservation',
+  'won',
+  'lost',
+] as const;
 
 const SOURCES: LeadSource[] = [
   'facebook',
@@ -68,13 +91,44 @@ function LeadsScreen() {
   const format = useFormatters();
   const navigate = useNavigate();
 
+  const labels = useTableLabels();
   const [followUp, setFollowUp] = useState<'' | 'due' | 'overdue'>('');
   const [search, setSearch] = useState('');
-  const [submittedSearch, setSubmittedSearch] = useState('');
+  const [stage, setStage] = useState('');
+  const [source, setSource] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const path = `/api/v1/crm/leads${query({ limit: 50, followUp, search: submittedSearch })}`;
-  const leads = useApi<LeadPage>(path);
+  const path = `/api/v1/crm/leads${query({ limit: 50, followUp, search, stage, source })}`;
+  const leads = usePagedList<Lead>(path);
+  const active = [
+    ...(search
+      ? [
+          {
+            key: 'search',
+            label: `${t('actions.search')}: ${search}`,
+            onRemove: () => setSearch(''),
+          },
+        ]
+      : []),
+    ...(stage
+      ? [
+          {
+            key: 'stage',
+            label: `${t('crm.stage')}: ${td(`leadStage.${stage}`)}`,
+            onRemove: () => setStage(''),
+          },
+        ]
+      : []),
+    ...(source
+      ? [
+          {
+            key: 'source',
+            label: `${t('crm.source')}: ${td(`leadSource.${source}`)}`,
+            onRemove: () => setSource(''),
+          },
+        ]
+      : []),
+  ];
 
   const columns = useMemo<DataColumn<Lead>[]>(
     () => [
@@ -122,7 +176,11 @@ function LeadsScreen() {
           <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
             <ExportButton kind="leads" permission="crm.lead.export" />
             {can('crm.lead.create') ? (
-              <Button variant="contained" onClick={() => setDialogOpen(true)}>
+              <Button
+                variant="contained"
+                onClick={() => setDialogOpen(true)}
+                startIcon={<Icon icon={Plus} size={18} />}
+              >
                 {t('crm.newLead')}
               </Button>
             ) : null}
@@ -141,60 +199,66 @@ function LeadsScreen() {
           <Tab value="overdue" label={t('crm.followUpOverdue')} />
         </Tabs>
 
-        <Stack
-          direction="row"
-          spacing={1}
-          component="form"
-          onSubmit={(event: FormEvent) => {
-            event.preventDefault();
-            setSubmittedSearch(search.trim());
-          }}
-        >
-          <TextField
-            size="small"
-            label={t('crm.searchPlaceholder')}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            sx={{ maxWidth: 360, flexGrow: 1 }}
-          />
-          <Button type="submit" variant="outlined">
-            {t('actions.search')}
-          </Button>
-          {submittedSearch ? (
-            <Button
-              variant="text"
-              onClick={() => {
-                setSearch('');
-                setSubmittedSearch('');
-              }}
-            >
-              {t('actions.clearFilters')}
-            </Button>
-          ) : null}
-        </Stack>
-
         <DataTable
           columns={columns}
-          rows={leads.state.kind === 'ready' ? leads.state.data.items : []}
+          rows={leads.items}
           rowKey={(lead) => lead.leadId}
+          rowLabel={(lead) => t('list.open', { label: lead.name })}
           status={tableStatus(leads.state)}
           caption={t('crm.title')}
+          filtered={active.length > 0 || followUp !== ''}
           onRowClick={(lead) => void navigate(`/leads/${lead.leadId}`)}
           errorAction={
             <Button variant="contained" onClick={leads.reload}>
               {t('states.retry')}
             </Button>
           }
-          labels={{
-            loadingTitle: t('states.loadingTitle'),
-            loadingDescription: t('states.loadingDescription'),
-            emptyTitle: t('states.emptyTitle'),
-            emptyDescription: t('states.emptyDescription'),
-            errorTitle: t('states.errorTitle'),
-            errorDescription: t('states.errorDescription'),
-            forbiddenTitle: t('states.forbiddenTitle'),
-            forbiddenDescription: t('states.forbiddenDescription'),
-          }}
+          labels={labels}
+          toolbar={
+            <TableToolbar
+              search={
+                <ListSearch
+                  value={search}
+                  onSubmit={setSearch}
+                  label={t('crm.searchPlaceholder')}
+                />
+              }
+              filters={
+                <>
+                  <FilterSelect
+                    label={t('crm.stage')}
+                    value={stage}
+                    onChange={setStage}
+                    options={STAGES.map((value) => ({ value, label: td(`leadStage.${value}`) }))}
+                  />
+                  <FilterSelect
+                    label={t('crm.source')}
+                    value={source}
+                    onChange={setSource}
+                    options={SOURCES.map((value) => ({ value, label: td(`leadSource.${value}`) }))}
+                  />
+                </>
+              }
+              activeFilters={active}
+              clearLabel={t('filters.clearAll')}
+              removeLabel={(label) => t('filters.remove', { label })}
+              onClearAll={() => {
+                setSearch('');
+                setStage('');
+                setSource('');
+              }}
+            />
+          }
+          footer={
+            <ListFooter
+              shown={leads.items.length}
+              total={leads.total}
+              hasMore={leads.hasMore}
+              loadingMore={leads.loadingMore}
+              onLoadMore={leads.loadMore}
+              error={leads.moreError}
+            />
+          }
         />
       </Stack>
 
@@ -219,7 +283,7 @@ function LeadsScreen() {
  * useful action is to go and talk to the colleague who already owns the other lead.
  */
 function NewLeadDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const { t, td } = useLocale();
+  const { t, td, locale } = useLocale();
   const errorMessage = useErrorMessage();
   const chart = useApi<OrgChart>('/api/v1/organization/chart');
   const projects = useApi<{ items: Project[] }>('/api/v1/inventory/projects');
@@ -322,7 +386,7 @@ function NewLeadDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
             >
               {branches.map((branch) => (
                 <MenuItem key={branch.branchId} value={branch.branchId}>
-                  {branch.name.ar}
+                  {branch.name[locale]}
                 </MenuItem>
               ))}
             </TextField>
@@ -335,7 +399,7 @@ function NewLeadDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
               <MenuItem value="">—</MenuItem>
               {projectList.map((project) => (
                 <MenuItem key={project.projectId} value={project.projectId}>
-                  {project.name.ar}
+                  {project.name[locale]}
                 </MenuItem>
               ))}
             </TextField>
