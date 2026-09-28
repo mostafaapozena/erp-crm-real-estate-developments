@@ -11,7 +11,8 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { DataTable, Icon, PageHeader, StateView, type DataColumn } from '@alola/ui';
-import { Printer } from '@alola/ui/icons';
+import { Printer, Receipt as ReceiptIcon } from '@alola/ui/icons';
+import MuiLink from '@mui/material/Link';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { apiRequest } from '../api/client';
@@ -24,7 +25,10 @@ import { PersonName } from '../people';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
   BackLink,
-  CardGrid,
+  DetailLayout,
+  FieldGroup,
+  TableSection,
+  useTableLabels,
   EnumChip,
   ErrorState,
   Field,
@@ -57,6 +61,7 @@ function ReceiptDetailScreen() {
   const { can } = useSession();
   const format = useFormatters();
   const errorMessage = useErrorMessage();
+  const labels = useTableLabels();
   const [reverseOpen, setReverseOpen] = useState(false);
   const [reason, setReason] = useState('');
 
@@ -150,61 +155,64 @@ function ReceiptDetailScreen() {
         }
       />
 
-      <Stack spacing={3}>
-        <Panel title={t('collections.receiptDetails')}>
-          <CardGrid min={200}>
-            <Field label={t('fields.amount')}>
-              <Verbatim>{format.money(record.amount)}</Verbatim>
-            </Field>
-            <Field label={t('fields.method')}>{td(`paymentMethod.${record.method}`)}</Field>
-            <Field label={t('collections.receivedOn')}>
-              <Verbatim>{format.date(record.receivedOn)}</Verbatim>
-            </Field>
-            <Field label={t('fields.receivedBy')}>
-              <PersonName accountId={record.receivedByAccountId} showTitle />
-            </Field>
-            {record.depositReference ? (
-              <Field label={t('collections.depositReference')}>
-                <Verbatim>{record.depositReference}</Verbatim>
-              </Field>
-            ) : null}
-            {record.transactionReference ? (
-              <Field label={t('collections.transactionReference')}>
-                <Verbatim>{record.transactionReference}</Verbatim>
-              </Field>
-            ) : null}
-            <Field label={t('fields.contract')}>
-              <Box
-                component={Link}
-                to={`/contracts/${record.contractId}`}
-                sx={{ color: 'primary.main' }}
-              >
-                {t('actions.details')}
-              </Box>
-            </Field>
-          </CardGrid>
-        </Panel>
-
-        <Panel title={t('collections.allocations')}>
-          <DataTable
-            columns={columns}
-            rows={record.allocations}
-            rowKey={(row) => row.installmentId}
-            status="ready"
-            caption={t('collections.allocations')}
-            labels={{
-              loadingTitle: t('states.loadingTitle'),
-              emptyTitle: t('states.emptyTitle'),
-              errorTitle: t('states.errorTitle'),
-              forbiddenTitle: t('states.forbiddenTitle'),
-            }}
-          />
-        </Panel>
-
-        <Alert severity="info" variant="outlined">
-          {t('collections.reverseHint')}
-        </Alert>
-      </Stack>
+      <DetailLayout
+        main={
+          <Panel title={t('collections.receiptDetails')} icon={ReceiptIcon}>
+            <Stack spacing={3}>
+              <FieldGroup title={t('detail.payment')}>
+                <Field label={t('fields.amount')}>
+                  <Verbatim>{format.money(record.amount)}</Verbatim>
+                </Field>
+                <Field label={t('fields.method')}>{td(`paymentMethod.${record.method}`)}</Field>
+                <Field label={t('collections.receivedOn')}>
+                  <Verbatim>{format.date(record.receivedOn)}</Verbatim>
+                </Field>
+                <Field label={t('fields.receivedBy')}>
+                  <PersonName accountId={record.receivedByAccountId} showTitle />
+                </Field>
+              </FieldGroup>
+              <FieldGroup title={t('detail.references')}>
+                {record.depositReference ? (
+                  <Field label={t('collections.depositReference')}>
+                    <Verbatim>{record.depositReference}</Verbatim>
+                  </Field>
+                ) : null}
+                {record.transactionReference ? (
+                  <Field label={t('collections.transactionReference')}>
+                    <Verbatim>{record.transactionReference}</Verbatim>
+                  </Field>
+                ) : null}
+                <Field label={t('fields.contract')}>
+                  <MuiLink
+                    component={Link}
+                    to={`/contracts/${record.contractId}`}
+                    underline="hover"
+                  >
+                    {t('detail.openContract')}
+                  </MuiLink>
+                </Field>
+              </FieldGroup>
+            </Stack>
+          </Panel>
+        }
+        aside={
+          <>
+            <TableSection title={t('collections.allocations')}>
+              <DataTable
+                columns={columns}
+                rows={record.allocations}
+                rowKey={(row) => row.installmentId}
+                status="ready"
+                caption={t('collections.allocations')}
+                labels={labels}
+              />
+            </TableSection>
+            <Alert severity="info" variant="outlined">
+              {t('collections.reverseHint')}
+            </Alert>
+          </>
+        }
+      />
 
       <Dialog open={reverseOpen} onClose={() => setReverseOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{t('collections.reverseTitle')}</DialogTitle>

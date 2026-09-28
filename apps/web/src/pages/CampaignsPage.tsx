@@ -16,11 +16,10 @@ import {
   NotConnectedNotice,
   PageHeader,
   SectionCard,
-  StatusChip,
   TableToolbar,
   type DataColumn,
 } from '@alola/ui';
-import { ChartColumn, Coins, Eye, Megaphone, Target, Unplug, Users, Wallet } from '@alola/ui/icons';
+import { ChartColumn, Coins, Eye, Megaphone, Target, Users, Wallet } from '@alola/ui/icons';
 import { useMemo, useState } from 'react';
 import { query } from '../api/client';
 import { useApi } from '../api/useApi';
@@ -31,7 +30,6 @@ import { useLocale } from '../locale';
 import {
   CAMPAIGN_TONES,
   EnumChip,
-  Field,
   FilterSelect,
   ListFooter,
   RequirePermission,
@@ -140,17 +138,12 @@ function CampaignsScreen() {
         key: 'state',
         header: t('fields.state'),
         render: (row) => (
-          <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-            <EnumChip namespace="campaignState" value={row.state} tones={CAMPAIGN_TONES} />
-            <DemoBadge label={t('marketing.simulated')} />
-          </Stack>
+          <EnumChip namespace="campaignState" value={row.state} tones={CAMPAIGN_TONES} />
         ),
       },
     ],
     [format, t, td],
   );
-
-  const figures = <DemoBadge label={t('marketing.demoFigures')} />;
 
   return (
     <Box>
@@ -161,36 +154,46 @@ function CampaignsScreen() {
           <NotConnectedNotice
             title={t('marketing.notConnectedTitle')}
             body={t('marketing.notConnectedBody')}
-          />
+          >
+            <Box
+              component="dl"
+              aria-label={t('marketing.connectionTitle')}
+              sx={{
+                margin: 0,
+                display: 'grid',
+                columnGap: 3,
+                rowGap: 1,
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, auto)', lg: 'repeat(4, auto)' },
+                justifyContent: 'start',
+              }}
+            >
+              {[
+                [t('marketing.provider'), t('marketing.providerMeta')],
+                [t('marketing.connectionState'), t('marketing.notConnected')],
+                [t('marketing.lastSync'), t('marketing.neverSynced')],
+                [t('marketing.mode'), t('marketing.simulated')],
+              ].map(([term, value]) => (
+                <Box key={term} sx={{ display: 'flex', gap: 0.75, typography: 'body2' }}>
+                  <Box component="dt" sx={{ color: 'text.secondary' }}>
+                    {`${term}:`}
+                  </Box>
+                  <Box component="dd" sx={{ margin: 0, fontWeight: 600 }}>
+                    {value}
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          </NotConnectedNotice>
         }
       />
 
       <Stack spacing={3}>
-        <SectionCard title={t('marketing.connectionTitle')} icon={Unplug}>
-          <Box
-            sx={{
-              display: 'grid',
-              gap: 2,
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' },
-            }}
-          >
-            <Field label={t('marketing.provider')}>{t('marketing.providerMeta')}</Field>
-            <Field label={t('marketing.connectionState')}>
-              <StatusChip tone="neutral" label={t('marketing.notConnected')} />
-            </Field>
-            <Field label={t('marketing.lastSync')}>{t('marketing.neverSynced')}</Field>
-            <Field label={t('marketing.mode')}>
-              <DemoBadge label={t('marketing.simulated')} />
-            </Field>
-          </Box>
-        </SectionCard>
-
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, marginBlockEnd: 1.5 }}>
             <Typography component="h2" sx={{ fontSize: '1rem', fontWeight: 700 }}>
               {t('marketing.performance')}
             </Typography>
-            {figures}
+            <DemoBadge label={t('marketing.demoFigures')} />
           </Box>
           <Box
             sx={{
@@ -255,52 +258,53 @@ function CampaignsScreen() {
               loading={loading}
             />
           </Box>
-        </Box>
 
-        <Box
-          sx={{
-            display: 'grid',
-            gap: 2,
-            gridTemplateColumns: { xs: '1fr', lg: 'repeat(2, minmax(0, 1fr))' },
-          }}
-        >
-          <SectionCard title={t('marketing.leadsByCampaign')} icon={Target} actions={figures} fill>
-            {campaigns.state.kind === 'loading' ? (
-              <ChartSkeleton />
-            ) : (
-              <CategoryBarChart
-                caption={t('marketing.leadsByCampaign')}
-                data={campaigns.items.map((row) => ({
-                  key: row.campaignId,
-                  label: row.name,
-                  value: row.demoMetrics.leads,
-                  display: format.number(row.demoMetrics.leads),
-                }))}
-                headers={{ category: t('fields.name'), value: t('marketing.leads') }}
-                emptyLabel={t('states.emptyDescription')}
-              />
-            )}
-          </SectionCard>
-          <SectionCard title={t('marketing.byPlatform')} icon={ChartColumn} actions={figures} fill>
-            {loading ? (
-              <ChartSkeleton />
-            ) : (
-              <CategoryBarChart
-                caption={t('marketing.byPlatform')}
-                multicolour
-                data={(overviewData?.byPlatform ?? []).map((row) => ({
-                  key: row.platform,
-                  label: enumLabel('campaignPlatform', row.platform),
-                  value: Number(row.spend.amount),
-                  display: `${format.money(row.spend, 0)} · ${t('marketing.leadsCount', {
-                    count: format.number(row.leads),
-                  })}`,
-                }))}
-                headers={{ category: t('marketing.platform'), value: t('marketing.spend') }}
-                emptyLabel={t('states.emptyDescription')}
-              />
-            )}
-          </SectionCard>
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 2,
+              marginBlockStart: 2,
+              gridTemplateColumns: { xs: '1fr', lg: 'repeat(2, minmax(0, 1fr))' },
+            }}
+          >
+            <SectionCard title={t('marketing.leadsByCampaign')} icon={Target} fill>
+              {campaigns.state.kind === 'loading' ? (
+                <ChartSkeleton />
+              ) : (
+                <CategoryBarChart
+                  caption={t('marketing.leadsByCampaign')}
+                  data={campaigns.items.map((row) => ({
+                    key: row.campaignId,
+                    label: row.name,
+                    value: row.demoMetrics.leads,
+                    display: format.number(row.demoMetrics.leads),
+                  }))}
+                  headers={{ category: t('fields.name'), value: t('marketing.leads') }}
+                  emptyLabel={t('states.emptyDescription')}
+                />
+              )}
+            </SectionCard>
+            <SectionCard title={t('marketing.byPlatform')} icon={ChartColumn} fill>
+              {loading ? (
+                <ChartSkeleton />
+              ) : (
+                <CategoryBarChart
+                  caption={t('marketing.byPlatform')}
+                  multicolour
+                  data={(overviewData?.byPlatform ?? []).map((row) => ({
+                    key: row.platform,
+                    label: enumLabel('campaignPlatform', row.platform),
+                    value: Number(row.spend.amount),
+                    display: `${format.money(row.spend, 0)} · ${t('marketing.leadsCount', {
+                      count: format.number(row.leads),
+                    })}`,
+                  }))}
+                  headers={{ category: t('marketing.platform'), value: t('marketing.spend') }}
+                  emptyLabel={t('states.emptyDescription')}
+                />
+              )}
+            </SectionCard>
+          </Box>
         </Box>
 
         <DataTable
@@ -361,6 +365,7 @@ function CampaignsScreen() {
                   : []),
               ]}
               removeLabel={(label) => t('filters.remove', { label })}
+              summary={t('marketing.tableNote')}
             />
           }
           footer={

@@ -11,7 +11,16 @@ import type {
 import { LEAD_STAGES, businessDateInZone, nowInstant } from '@alola/contracts';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { DemoBadge, Icon, MetricCard, PageHeader, SectionCard, StateView, tokens } from '@alola/ui';
+import {
+  DemoBadge,
+  FormattedValue,
+  Icon,
+  MetricCard,
+  PageHeader,
+  SectionCard,
+  StateView,
+  tokens,
+} from '@alola/ui';
 import {
   AlarmClock,
   BellRing,
@@ -361,7 +370,12 @@ export default function DashboardPage() {
                     loading={contracts.state.kind === 'loading'}
                     {...(collectionRatio !== undefined
                       ? {
-                          hint: `${t('dashboard.collectionRate')}: ${format.percent(collectionRatio)}`,
+                          hint: (
+                            <>
+                              {`${t('dashboard.collectionRate')}: `}
+                              <FormattedValue>{format.percent(collectionRatio)}</FormattedValue>
+                            </>
+                          ),
                         }
                       : {})}
                   />

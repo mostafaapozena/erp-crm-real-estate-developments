@@ -13,7 +13,9 @@ import { useLocale } from '../locale';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
   BackLink,
-  CardGrid,
+  DetailLayout,
+  FieldGroup,
+  SystemNote,
   EnumChip,
   ErrorState,
   Field,
@@ -90,83 +92,90 @@ function UnitDetailScreen() {
         }
       />
 
-      <Stack spacing={3}>
-        <Panel title={t('inventory.unitDetails')} icon={House}>
-          <CardGrid min={200}>
-            <Field label={t('inventory.propertyType')}>
-              {td(`propertyType.${data.propertyType}`)}
-            </Field>
-            <Field label={t('inventory.usage')}>{td(`usageType.${data.usageType}`)}</Field>
-            <Field label={t('fields.floor')}>
-              <Verbatim>{format.number(data.floor)}</Verbatim>
-            </Field>
-            <Field label={t('fields.area')}>
-              <Verbatim>{`${format.number(data.area, 2)} ${t('inventory.squareMetre')}`}</Verbatim>
-            </Field>
-            <Field label={t('inventory.finishing')}>
-              {td(`finishingStatus.${data.finishingStatus}`)}
-            </Field>
-            {data.view ? <Field label={t('inventory.view')}>{data.view[locale]}</Field> : null}
-            {/*
-              Price fields are absent — not null — for an actor without inventory.unit.viewPricing,
-              so their absence is what decides whether they render (SEC-029).
-            */}
-            {data.currentPrice ? (
-              <Field label={t('inventory.currentPrice')}>
-                <Verbatim>{format.money(data.currentPrice)}</Verbatim>
-              </Field>
-            ) : null}
-            {data.basePrice ? (
-              <Field label={t('inventory.basePrice')}>
-                <Verbatim>{format.money(data.basePrice)}</Verbatim>
-              </Field>
-            ) : null}
-            {data.pricePerSquareMeter ? (
-              <Field label={t('inventory.pricePerSquareMeter')}>
-                <Verbatim>{format.money(data.pricePerSquareMeter)}</Verbatim>
-              </Field>
-            ) : null}
-          </CardGrid>
-          {!data.currentPrice ? (
-            <Typography variant="body2" color="text.secondary" sx={{ marginBlockStart: 2 }}>
-              {t('inventory.pricingHidden')}
-            </Typography>
-          ) : null}
-          {data.paymentPlanSummary ? (
-            <Box sx={{ marginBlockStart: 2 }}>
-              <Field label={t('inventory.paymentPlanSummary')}>
-                {data.paymentPlanSummary[locale]}
-              </Field>
-            </Box>
-          ) : null}
-        </Panel>
-
-        <Panel title={t('inventory.history')} icon={History}>
-          {history.state.kind === 'loading' ? (
-            <StateView variant="inline" kind="loading" title={t('states.loadingTitle')} />
-          ) : (
-            <Timeline
-              emptyLabel={t('states.emptyDescription')}
-              entries={(history.state.kind === 'ready' ? history.state.data.items : []).map(
-                (event) => ({
-                  key: event.eventId,
-                  title:
-                    event.fromStatus && event.toStatus ? (
-                      <Transition
-                        from={td(`unitStatus.${event.fromStatus}`)}
-                        to={td(`unitStatus.${event.toStatus}`)}
-                      />
-                    ) : (
-                      td(`unitStatus.${event.toStatus ?? 'available'}`)
-                    ),
-                  when: format.dateTime(event.occurredAt),
-                  ...(event.reason ? { body: event.reason } : {}),
-                }),
-              )}
-            />
-          )}
-        </Panel>
-      </Stack>
+      <DetailLayout
+        main={
+          <Panel title={t('inventory.unitDetails')} icon={House}>
+            <Stack spacing={3}>
+              <FieldGroup title={t('detail.specification')}>
+                <Field label={t('inventory.propertyType')}>
+                  {td(`propertyType.${data.propertyType}`)}
+                </Field>
+                <Field label={t('inventory.usage')}>{td(`usageType.${data.usageType}`)}</Field>
+                <Field label={t('fields.floor')}>
+                  <Verbatim>{format.number(data.floor)}</Verbatim>
+                </Field>
+                <Field label={t('fields.area')}>
+                  <Verbatim>{`${format.number(data.area, 2)} ${t('inventory.squareMetre')}`}</Verbatim>
+                </Field>
+                <Field label={t('inventory.finishing')}>
+                  {td(`finishingStatus.${data.finishingStatus}`)}
+                </Field>
+                {data.view ? <Field label={t('inventory.view')}>{data.view[locale]}</Field> : null}
+              </FieldGroup>
+              {/*
+                Price fields are absent — not null — for an actor without inventory.unit.viewPricing,
+                so their absence is what decides whether they render (SEC-029).
+              */}
+              <FieldGroup title={t('detail.pricing')}>
+                {data.currentPrice ? (
+                  <Field label={t('inventory.currentPrice')}>
+                    <Verbatim>{format.money(data.currentPrice)}</Verbatim>
+                  </Field>
+                ) : null}
+                {data.basePrice ? (
+                  <Field label={t('inventory.basePrice')}>
+                    <Verbatim>{format.money(data.basePrice)}</Verbatim>
+                  </Field>
+                ) : null}
+                {data.pricePerSquareMeter ? (
+                  <Field label={t('inventory.pricePerSquareMeter')}>
+                    <Verbatim>{format.money(data.pricePerSquareMeter)}</Verbatim>
+                  </Field>
+                ) : null}
+                {!data.currentPrice ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ gridColumn: '1 / -1' }}>
+                    {t('inventory.pricingHidden')}
+                  </Typography>
+                ) : null}
+              </FieldGroup>
+              {data.paymentPlanSummary ? (
+                <FieldGroup title={t('inventory.paymentPlanSummary')}>
+                  <Box sx={{ gridColumn: '1 / -1', typography: 'body2' }}>
+                    {data.paymentPlanSummary[locale]}
+                  </Box>
+                </FieldGroup>
+              ) : null}
+            </Stack>
+          </Panel>
+        }
+        aside={
+          <Panel title={t('inventory.history')} icon={History}>
+            {history.state.kind === 'loading' ? (
+              <StateView variant="inline" kind="loading" title={t('states.loadingTitle')} />
+            ) : (
+              <Timeline
+                emptyLabel={t('states.emptyDescription')}
+                entries={(history.state.kind === 'ready' ? history.state.data.items : []).map(
+                  (event) => ({
+                    key: event.eventId,
+                    title:
+                      event.fromStatus && event.toStatus ? (
+                        <Transition
+                          from={td(`unitStatus.${event.fromStatus}`)}
+                          to={td(`unitStatus.${event.toStatus}`)}
+                        />
+                      ) : (
+                        td(`unitStatus.${event.toStatus ?? 'available'}`)
+                      ),
+                    when: format.dateTime(event.occurredAt),
+                    ...(event.reason ? { body: <SystemNote text={event.reason} /> } : {}),
+                  }),
+                )}
+              />
+            )}
+          </Panel>
+        }
+      />
     </Box>
   );
 }

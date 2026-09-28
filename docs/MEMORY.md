@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-28 (UI/UX redesign — complete)
+Last updated: 2026-09-29 (final UI polish and RTL formatting pass — complete)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -754,6 +754,67 @@ Master Prompts 1–5 remain **not started**. To review: `npm run dev:services:up
 `npm run build`, `node apps/api/dist/main.js` and `npm run preview -w @alola/web` →
 http://localhost:4173 (or `npm run dev:api` + `npm run dev:web` → http://localhost:5173). Passwords
 are in the ignored `.demo-credentials.md`.
+
+## Final UI polish and RTL formatting pass — COMPLETE (2026-09-29), stopped for review
+
+Scope: a bounded polish pass over the redesign, starting at `6cc12dd`. No API, permission, scope,
+business rule, schema, migration or requirement status changed; Business Master Prompts remain **not
+started**. One local commit (`fix: complete final UI polish and RTL formatting`).
+
+- **RTL-safe values:** new `FormattedValue` and `ValueRange` (`packages/ui/src/FormattedValue.tsx`):
+  the isolate's direction follows the content (Arabic script → RTL, everything else → LTR), values
+  never wrap internally, long e-mails may. Fixes `%24.62` → `24.62%` and Arabic money units reordered
+  inside LTR isolates. Used by `MetricCard`, `BarChart`, the web charts, `RatioMeter`,
+  `HorizontalBars`, the dashboard hint and the web `Verbatim`. The lead budget is a `ValueRange`.
+  `tests/bidi-source.test.ts` refuses raw bidi control characters in source.
+- **System references:** `SystemNote` (`pages/shared.tsx`) translates the sales service's stored
+  English references (`contract CTR-…`, `reservation RSV-… confirmed|cancelled`) on display — "عقد
+  CTR-…" — in lead activity and unit history. Stored data unchanged; unmatched text shown as written.
+- **Record pages:** `DetailLayout` (main + aside) and `FieldGroup` (titled sections, 1–3 columns) on
+  lead, unit, reservation, receipt and contract detail; the reservation's unit is a link showing the
+  unit code, never an identifier; the receipt links to its contract.
+- **Tasks empty states:** open/mine is a success state ("no open tasks for you"), closed and scoped views
+  have their own wording, the "new task" action appears only with `task.create`, errors retry
+  (`DataTable` gained `emptyKind`).
+- **Sidebar:** brand fixed at the top, collapse control at the bottom, the navigation list the only
+  scrolling region, thin scrollbar visible on hover/focus, `overscroll-behavior: contain`, 44 px
+  touch rows on phones. Measured at 1440×900 and 1920×900 in Arabic (right) and English (left) and
+  in the mobile drawer.
+- **Branding:** `BrandMark` falls back to the monogram when a logo fails to load; the logo is
+  documented as client-provided content.
+- **Marketing disclosure:** one banner (provider, connection, last sync, mode), one badge on the
+  performance section; per-row and per-chart badges removed.
+- **Row labels:** instalment and unit-picker rows carry descriptive accessible names.
+- **`vendor-charts`:** the prompt asked to preserve a separate `vendor-charts` chunk. None exists by
+  design since UI-5 (ADR-0030 status update: the manual group pulled React into itself and the entry
+  imported it at start-up). Recharts stays in the lazy `Charts` chunk; the entry does not load it.
+- Docs: `architecture/localization-and-theming.md` (logo note; §10 building blocks, RTL-safe
+  formatting, empty states and disclosure, sidebar structure, visual QA).
+
+Visual QA: `scratch/ui-visual-qa-final.mjs` → `scratch/visual-qa-final-polish/` (ignored), 38 screens +
+5 sidebar measurements, Arabic and English, 1920/1440/1024/390: **0 issues** (overflow, raw keys,
+`acc_`, emoji, h1 count, unnamed controls, percent isolation, range order, English record words in
+Arabic, sidebar structure); 0 failed API calls; the only console errors are the expected signed-out
+401 of the session probe. Screenshots inspected.
+
+Verification (`scratch/ui-final-polish-verify.sh`, logs `scratch/final-polish/`): format, lint (0/0),
+strict typecheck, i18n, secrets, links, ignored-source, 0 vulnerabilities ✅ · **unit 595 passed, 45
+files** · **integration 501 passed / 0 failed / 0 skipped** · build ✅ · bundle ✅ (largest
+`vendor-mui` 409.3 / 122.2 kB gzip, budget unchanged) · migration status and source/built parity ✅ ·
+client file ✅ · built-API smoke ✅ ready 200, 181 OpenAPI paths (the first smoke attempt failed only
+because the copied harness pointed at a misnamed script; rerun with the real one) · **E2E 52 passed /
+0 failed / 0 skipped**. Demo data: every business collection byte-identical to
+`scratch/polish-demo-before.json`; only `auditEvents`, `authSessions`, `authRefreshTokens` and
+last sign-in times changed (sign-ins by QA and E2E). No seed or reset ran.
+
+Remaining debt: unchanged from the redesign list below, plus — the unit-test tier sometimes hits vitest
+worker start-up timeouts when run chained under load (0 assertion failures; a standalone rerun passes
+all); the visual QA is still a script, not a CI gate.
+
+**Resume point: stop.** Nothing pushed or deployed. Review at http://localhost:4173 after
+`npm run build`, `node apps/api/dist/main.js`, `npm run preview -w @alola/web`; recommended account
+`executive@demo.invalid` (password in the ignored `.demo-credentials.md`). Business Master Prompts
+1–5 remain not started.
 
 ## Phase status
 

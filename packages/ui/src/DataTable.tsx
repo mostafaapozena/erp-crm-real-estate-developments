@@ -78,6 +78,11 @@ export interface DataTableProps<T> {
   emptyAction?: ReactNode;
   /** True when filters are active: an empty result is "no results", not "nothing yet". */
   filtered?: boolean;
+  /**
+   * How an unfiltered empty list reads. `success` is for a work queue, where an empty list is good
+   * news ("nothing needs your attention"), not a missing feature.
+   */
+  emptyKind?: 'empty' | 'success';
   toolbar?: ReactNode;
   footer?: ReactNode;
   maxHeight?: number | string;
@@ -97,6 +102,7 @@ export function DataTable<T>({
   errorAction,
   emptyAction,
   filtered = false,
+  emptyKind = 'empty',
   toolbar,
   footer,
   maxHeight,
@@ -140,7 +146,7 @@ export function DataTable<T>({
     body = (
       <StateView
         variant="inline"
-        kind={noResults ? 'noResults' : 'empty'}
+        kind={noResults ? 'noResults' : emptyKind}
         title={noResults ? (labels.noResultsTitle ?? labels.emptyTitle) : labels.emptyTitle}
         {...(description ? { description } : {})}
         {...(emptyAction ? { action: emptyAction } : {})}

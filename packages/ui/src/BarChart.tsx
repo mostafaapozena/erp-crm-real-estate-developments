@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { LtrIsolate } from './LtrIsolate';
+import { FormattedValue } from './FormattedValue';
 import { CHART_SERIES_ORDER, tokens } from './tokens';
 
 /**
@@ -63,7 +63,7 @@ export function BarChart({ data, caption, emptyLabel, maxBars = 10 }: BarChartPr
                 {row.label}
               </Typography>
               <Typography component="dd" variant="body2" color="text.secondary" sx={{ margin: 0 }}>
-                <LtrIsolate>{row.displayValue}</LtrIsolate>
+                <FormattedValue>{row.displayValue}</FormattedValue>
               </Typography>
             </Box>
             <Box

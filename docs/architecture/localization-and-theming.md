@@ -171,6 +171,9 @@ uploads its own (Settings → Company identity, since 2026-09-28):
   imitates no logo and is not an image file.
 - No logo is invented, redrawn, traced, or permanently embedded.
 - The earlier development-only text placeholder was retired with the redesign.
+- **The logo is client-provided content.** The product never ships, draws or implies one. A logo
+  that fails to load (a deleted asset, a network error) falls back to the same monogram instead of a
+  broken-image icon (`BrandMark`, 2026-09-29).
 
 ## 8. Accessibility
 
@@ -210,6 +213,10 @@ uploads its own (Settings → Company identity, since 2026-09-28):
 | An icon | `<Icon icon={…} />` from `@alola/ui/icons` | another icon package (lint), an emoji, a Unicode arrow |
 | A chart | `apps/web/src/charts` (`CategoryBarChart`, `DonutChart`, `RatioMeter`) | a chart without its numbers in text |
 | History | `Timeline`, `Transition` | "→" typed into a string (it does not mirror) |
+| A formatted value (money, percentage, date, number, code, phone, e-mail) | `FormattedValue` (web `Verbatim`) | a bare formatted string in running text |
+| A range (budget, period) | `ValueRange` | "from – to" assembled in one string |
+| A record's fields | `FieldGroup` inside `DetailLayout` (main + aside) | one long list of unrelated fields |
+| A machine-written record reference in history | `SystemNote` | showing the stored English text in Arabic |
 
 ### Direction rules added by the redesign
 
@@ -222,11 +229,47 @@ uploads its own (Settings → Company identity, since 2026-09-28):
 - In MUI `sx`, a number ≤ 1 is a fraction: sizes meant as pixels are written `'1px'` (a `width: 1`
   once made every visually hidden label page-wide).
 
+### RTL-safe formatting (2026-09-29)
+
+The formatters (§6) produce correct **logical** strings; the defects found in review were all in
+how those strings were placed inside the opposite direction:
+
+- A percentage is isolated **left-to-right** in both languages, so it reads `24.62%` and never
+  `%24.62` (a bare `%` is neutral and follows the paragraph).
+- `FormattedValue` chooses the isolate's direction from the **content**: text containing Arabic
+  script (Arabic money such as `4,000,000.00 ج.م.`) is isolated right-to-left; everything else —
+  digits, percentages, dates, English money, codes, phones, e-mail addresses — left-to-right. Values
+  never wrap inside themselves (the formatter's no-break space already binds a number to its unit);
+  a long e-mail or URL may break anywhere instead of overflowing.
+- Isolation is markup (`<bdi dir>`), never invisible control characters: a copied value is exactly
+  the value. `tests/bidi-source.test.ts` fails on any raw bidi control character in the web, UI,
+  i18n or contracts source.
+- `ValueRange` lays out *from*, a visual dash (hidden from screen readers, which hear "to" / "إلى")
+  and *to* in the inline direction, so the dash is always between the values and the range wraps
+  only between whole values.
+- A few histories store machine-written English references (`contract CTR-…`,
+  `reservation RSV-… confirmed`). The stored data is unchanged; `SystemNote` translates the record
+  type and outcome on display and isolates the reference ("عقد CTR-2026-00002"). Free text is shown
+  as written.
+
+### Empty states and disclosure
+
+- An empty list distinguishes *nothing yet* from *nothing matches the filters*; an empty personal
+  queue (open tasks assigned to me) is a success state, not a warning. The "create" action appears
+  in the empty state only when the viewer holds the permission; an error offers retry; a missing
+  permission shows the forbidden state.
+- Simulation is disclosed once per level: one banner at the top of a simulated screen (provider,
+  connection state, last synchronisation, mode), one badge on the section whose figures are
+  simulated, and per-row badges only when rows differ. Repeating the same badge on every row and
+  chart hides it.
+
 ### Responsive behaviour
 
 - ≥ `md`: a permanent sidebar at the inline start (272 px, 76 px collapsed, preference remembered in
-  this browser), a sticky top bar, one page scroll; the sidebar scrolls on its own only when taller
-  than the window.
+  this browser), a sticky top bar, one page scroll. Inside the sidebar the brand stays at the top and
+  the collapse control at the bottom; the navigation list is the **only** scrolling region, with a
+  thin scrollbar that is quiet at rest and clearly visible on hover or keyboard focus, and
+  `overscroll-behavior: contain` so reaching its end does not scroll the page.
 - < `md`: a temporary drawer from the inline start (right in Arabic), search inside the drawer, the
   language switch as an icon button with its language name as its accessible name.
 - Tables become label/value cards below `md`; `secondary` columns appear from `lg`.
@@ -241,3 +284,8 @@ overflow, raw translation keys, raw account references, emoji, heading count, un
 console errors and failed API calls. It never prints a credential; the administrator's one-time code
 is computed in memory and waits for a fresh time step. DOM assertions are not visual QA: the
 screenshots are looked at.
+
+The final polish pass (2026-09-29) added `scratch/ui-visual-qa-final.mjs` → `scratch/visual-qa-final-polish/`,
+which also fails on a percentage outside a left-to-right isolate, a range whose values are out of
+order on screen, English record words in Arabic text, and a sidebar whose brand or bottom control
+moves or disappears at 900 px height (measured in Arabic on the right and English on the left).

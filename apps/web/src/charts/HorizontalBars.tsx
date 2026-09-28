@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { CHART_SERIES_ORDER, LtrIsolate, tokens } from '@alola/ui';
+import { CHART_SERIES_ORDER, FormattedValue, tokens } from '@alola/ui';
 import type { ChartDatum } from './Charts';
 
 /**
@@ -68,7 +68,7 @@ export function HorizontalBars({
                 variant="body2"
                 sx={{ margin: 0, fontWeight: 600, color: 'text.secondary', whiteSpace: 'nowrap' }}
               >
-                <LtrIsolate>{datum.display}</LtrIsolate>
+                <FormattedValue>{datum.display}</FormattedValue>
               </Typography>
             </Box>
             <Box

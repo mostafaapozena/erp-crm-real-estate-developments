@@ -265,9 +265,25 @@ function Sidebar({
           overflowY: 'auto',
           overflowX: 'hidden',
           paddingInline: collapsed ? 1 : 1.5,
-          paddingBlock: 1.5,
+          paddingBlock: 1,
+          // The only scrolling region of the sidebar: brand above and the collapse control below stay
+          // put. The scrollbar is thin and quiet at rest, and clearly visible (borderStrong, 4.76:1)
+          // while the pointer is over the list or focus is inside it. Wheel, keyboard and touch
+          // scrolling are untouched; reaching the end does not scroll the page behind.
+          overscrollBehavior: 'contain',
           scrollbarWidth: 'thin',
-          scrollbarColor: `${tokens.borderSubtle} transparent`,
+          scrollbarColor: `${tokens.borderSoft} transparent`,
+          '&:hover, &:focus-within': {
+            scrollbarColor: `${tokens.borderStrong} transparent`,
+          },
+          '&::-webkit-scrollbar': { inlineSize: 6 },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: tokens.borderSoft,
+            borderRadius: 999,
+          },
+          '&:hover::-webkit-scrollbar-thumb, &:focus-within::-webkit-scrollbar-thumb': {
+            backgroundColor: tokens.borderStrong,
+          },
         }}
       >
         {groups.map((group, index) => (
@@ -343,7 +359,7 @@ function NavSection({
   const tooltipPlacement = theme.direction === 'rtl' ? 'left' : 'right';
 
   return (
-    <Box sx={{ marginBlockStart: first ? 0 : collapsed ? 1 : 1.5 }}>
+    <Box sx={{ marginBlockStart: first ? 0 : 1 }}>
       {collapsed ? (
         first ? null : (
           <Divider sx={{ marginBlockEnd: 1, marginInline: 1 }} />
@@ -409,7 +425,9 @@ function NavSection({
                 {...(collapsed ? { 'aria-label': name } : {})}
                 onClick={onNavigate}
                 sx={{
-                  minBlockSize: 40,
+                  // Denser at desktop height so more of the list fits at 900 px; the phone drawer
+                  // keeps a 44 px touch target.
+                  minBlockSize: { xs: 44, md: 36 },
                   paddingInline: collapsed ? 0 : 1.25,
                   justifyContent: collapsed ? 'center' : 'flex-start',
                   color: selected ? 'text.primary' : 'text.secondary',

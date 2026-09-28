@@ -26,6 +26,7 @@ import {
   BackLink,
   CONTRACT_TONES,
   CardGrid,
+  FieldGroup,
   EnumChip,
   ErrorState,
   Field,
@@ -206,7 +207,7 @@ function ContractDetailScreen() {
         </CardGrid>
 
         <Panel title={t('sales.paymentPlan')} icon={CalendarClock}>
-          <CardGrid min={180}>
+          <FieldGroup>
             <Field label={t('sales.contractedOn')}>
               <Verbatim>{format.date(record.contractedOn)}</Verbatim>
             </Field>
@@ -222,7 +223,7 @@ function ContractDetailScreen() {
             <Field label={t('sales.reservationAmount')}>
               <Verbatim>{format.money(record.reservationAmount)}</Verbatim>
             </Field>
-          </CardGrid>
+          </FieldGroup>
         </Panel>
 
         <TableSection title={t('sales.schedule')}>

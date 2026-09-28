@@ -1,7 +1,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import { CHART_SERIES_ORDER, LtrIsolate, elevation, tokens, visuallyHidden } from '@alola/ui';
+import { CHART_SERIES_ORDER, FormattedValue, elevation, tokens, visuallyHidden } from '@alola/ui';
 import type { ReactNode } from 'react';
 import {
   Bar,
@@ -111,7 +111,7 @@ function ChartTable({
           <tr key={datum.key}>
             <th scope="row">{datum.label}</th>
             <td>
-              <LtrIsolate>{datum.display}</LtrIsolate>
+              <FormattedValue>{datum.display}</FormattedValue>
             </td>
           </tr>
         ))}
@@ -145,7 +145,7 @@ function ChartTooltip({
         {datum.label}
       </Typography>
       <Typography variant="body2" sx={{ fontWeight: 700 }} component="p">
-        <LtrIsolate>{datum.display}</LtrIsolate>
+        <FormattedValue>{datum.display}</FormattedValue>
       </Typography>
     </Box>
   );
@@ -362,7 +362,7 @@ export function DonutChart({ caption, data, headers, emptyLabel, centre }: Donut
             }}
           >
             <Typography sx={{ fontWeight: 700, fontSize: '1.375rem', lineHeight: 1.1 }}>
-              <LtrIsolate>{centre.value}</LtrIsolate>
+              <FormattedValue>{centre.value}</FormattedValue>
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {centre.label}
@@ -395,14 +395,14 @@ export function DonutChart({ caption, data, headers, emptyLabel, centre }: Donut
                 {datum.label}
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                <LtrIsolate>{datum.display}</LtrIsolate>
+                <FormattedValue>{datum.display}</FormattedValue>
               </Typography>
               <Typography
                 variant="caption"
                 color="text.secondary"
                 sx={{ minInlineSize: 40, textAlign: 'end' }}
               >
-                <LtrIsolate>{`${Math.round((datum.value / total) * 100)}%`}</LtrIsolate>
+                <FormattedValue>{`${Math.round((datum.value / total) * 100)}%`}</FormattedValue>
               </Typography>
             </Box>
           ))}

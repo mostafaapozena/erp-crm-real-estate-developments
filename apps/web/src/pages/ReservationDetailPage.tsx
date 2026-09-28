@@ -11,7 +11,9 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { Icon, PageHeader, StateView } from '@alola/ui';
-import { Printer } from '@alola/ui/icons';
+import { CalendarCheck, CalendarClock, Printer } from '@alola/ui/icons';
+import Link from '@mui/material/Link';
+import { Link as RouterLink } from 'react-router';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { apiRequest } from '../api/client';
@@ -24,7 +26,7 @@ import { PersonName } from '../people';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
   BackLink,
-  CardGrid,
+  FieldGroup,
   EnumChip,
   ErrorState,
   Field,
@@ -188,39 +190,47 @@ function ReservationDetailScreen() {
           </Alert>
         ) : null}
 
-        <Panel title={t('sales.reservationDetails')}>
-          <CardGrid min={200}>
-            <Field label={t('fields.unit')}>
-              <Verbatim>
-                {unit.state.kind === 'ready' ? unit.state.data.code : record.unitId}
-              </Verbatim>
-            </Field>
-            <Field label={t('sales.reservedOn')}>
-              <Verbatim>{format.date(record.reservedOn)}</Verbatim>
-            </Field>
-            <Field label={t('sales.expiresOn')}>
-              <Verbatim>{format.date(record.expiresOn)}</Verbatim>
-            </Field>
-            <Field label={t('sales.agreedPrice')}>
-              <Verbatim>{format.money(record.agreedPrice)}</Verbatim>
-            </Field>
-            <Field label={t('sales.reservationAmount')}>
-              <Verbatim>{format.money(record.reservationAmount)}</Verbatim>
-            </Field>
-            <Field label={t('sales.discount')}>
-              <Verbatim>{`${format.number(record.discountPercentage, 2)}%`}</Verbatim>
-            </Field>
-            <Field label={t('sales.salesOwner')}>
-              <PersonName accountId={record.salesOwnerAccountId} showTitle />
-            </Field>
-            {record.cancellationReason ? (
-              <Field label={t('fields.reason')}>{record.cancellationReason}</Field>
-            ) : null}
-          </CardGrid>
+        <Panel title={t('sales.reservationDetails')} icon={CalendarCheck}>
+          <Stack spacing={3}>
+            <FieldGroup title={t('detail.record')}>
+              <Field label={t('fields.unit')}>
+                {unit.state.kind === 'ready' ? (
+                  <Link component={RouterLink} to={`/units/${record.unitId}`} underline="hover">
+                    <Verbatim>{unit.state.data.code}</Verbatim>
+                  </Link>
+                ) : (
+                  '—'
+                )}
+              </Field>
+              <Field label={t('sales.reservedOn')}>
+                <Verbatim>{format.date(record.reservedOn)}</Verbatim>
+              </Field>
+              <Field label={t('sales.expiresOn')}>
+                <Verbatim>{format.date(record.expiresOn)}</Verbatim>
+              </Field>
+              <Field label={t('sales.salesOwner')}>
+                <PersonName accountId={record.salesOwnerAccountId} showTitle />
+              </Field>
+              {record.cancellationReason ? (
+                <Field label={t('fields.reason')}>{record.cancellationReason}</Field>
+              ) : null}
+            </FieldGroup>
+            <FieldGroup title={t('detail.financial')}>
+              <Field label={t('sales.agreedPrice')}>
+                <Verbatim>{format.money(record.agreedPrice)}</Verbatim>
+              </Field>
+              <Field label={t('sales.reservationAmount')}>
+                <Verbatim>{format.money(record.reservationAmount)}</Verbatim>
+              </Field>
+              <Field label={t('sales.discount')}>
+                <Verbatim>{`${format.number(record.discountPercentage, 2)}%`}</Verbatim>
+              </Field>
+            </FieldGroup>
+          </Stack>
         </Panel>
 
-        <Panel title={t('sales.paymentPlan')}>
-          <CardGrid min={180}>
+        <Panel title={t('sales.paymentPlan')} icon={CalendarClock}>
+          <FieldGroup>
             <Field label={t('sales.downPayment')}>
               <Verbatim>{format.money(record.paymentPlan.downPayment)}</Verbatim>
             </Field>
@@ -233,7 +243,7 @@ function ReservationDetailScreen() {
             <Field label={t('sales.firstDueOn')}>
               <Verbatim>{format.date(record.paymentPlan.firstDueOn)}</Verbatim>
             </Field>
-          </CardGrid>
+          </FieldGroup>
         </Panel>
 
         {/* A printed summary is a demonstration document and says so (ADR-0026). */}

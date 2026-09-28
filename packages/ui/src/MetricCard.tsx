@@ -7,13 +7,13 @@ import type { LucideIcon } from 'lucide-react';
 import { ArrowRight } from 'lucide-react';
 import type { ElementType, ReactNode } from 'react';
 import { Icon } from './Icon';
-import { LtrIsolate } from './LtrIsolate';
+import { FormattedValue } from './FormattedValue';
 import { tokens } from './tokens';
 
 /**
  * One headline figure (a KPI).
  *
- * The value is rendered inside `LtrIsolate` because it is almost always a number, a money amount or a
+ * The value is rendered inside `FormattedValue` because it is almost always a number, a money amount or a
  * count, and those read left-to-right inside Arabic text. Without isolation a figure ending in a
  * currency symbol reorders on screen and shows the wrong number to the person reading it.
  *
@@ -30,8 +30,8 @@ import { tokens } from './tokens';
 export interface MetricCardProps {
   label: string;
   value?: string;
-  /** One line of context under the value: the period, the scope, what is counted. */
-  hint?: string;
+  /** One line of context under the value — text, or text with a `FormattedValue` inside. */
+  hint?: ReactNode;
   loading?: boolean;
   /** A glyph from `@alola/ui/icons`. */
   icon?: LucideIcon | ReactNode;
@@ -134,7 +134,7 @@ export function MetricCard({
             ...((value?.includes(' · ') ?? false) ? { '& bdi': { whiteSpace: 'normal' } } : {}),
           }}
         >
-          <LtrIsolate>{value ?? '—'}</LtrIsolate>
+          <FormattedValue>{value ?? '—'}</FormattedValue>
         </Typography>
       )}
       {hint ? (
@@ -144,7 +144,7 @@ export function MetricCard({
       ) : null}
       {footnote ? (
         <Typography variant="caption" color="text.secondary" component="p">
-          <LtrIsolate>{footnote}</LtrIsolate>
+          <FormattedValue>{footnote}</FormattedValue>
         </Typography>
       ) : null}
       {link ? (

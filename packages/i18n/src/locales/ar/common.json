@@ -569,7 +569,8 @@
     "performance": "أداء الحملات",
     "remainingBudget": "الميزانية المتبقية",
     "leadsByCampaign": "العملاء المحتملون حسب الحملة",
-    "leadsCount": "العملاء المحتملون: {{count}}"
+    "leadsCount": "العملاء المحتملون: {{count}}",
+    "tableNote": "جميع الحملات مسودات محلية بأرقام عرض تجريبية، ولم يُنشر أي منها."
   },
   "campaignPlatform": {
     "facebook": "فيسبوك",
@@ -742,7 +743,13 @@
     "previousMonth": "الشهر السابق",
     "nextMonth": "الشهر التالي",
     "truncated": "تُعرض أول 500 مهمة فقط في هذه الفترة.",
-    "timeZoneNote": "التواريخ والأوقات بتوقيت الجهة ({{timeZone}})."
+    "timeZoneNote": "التواريخ والأوقات بتوقيت الجهة ({{timeZone}}).",
+    "emptyMineTitle": "لا توجد مهام مفتوحة لك",
+    "emptyMineHint": "لا شيء يتطلب انتباهك الآن. ستظهر هنا المهام المسندة إليك وتلك المصعَّدة إليك.",
+    "emptyClosedTitle": "لا توجد مهام منتهية",
+    "emptyClosedHint": "تظهر هنا المهام بعد إنجازها أو إلغائها.",
+    "emptyScopeTitle": "لا توجد مهام مفتوحة ضمن نطاقك",
+    "emptyScopeHint": "لا توجد مهام مفتوحة لأعضاء فريقك ضمن نطاق صلاحياتك."
   },
   "search": {
     "label": "بحث",
@@ -928,6 +935,23 @@
     "lead": "عميل محتمل",
     "unit": "وحدة",
     "receipt": "إيصال",
-    "overdueInstallments": "الأقساط المتأخرة: {{count}}"
+    "overdueInstallments": "الأقساط المتأخرة: {{count}}",
+    "contact": "بيانات الاتصال",
+    "interest": "الاهتمام والميزانية",
+    "ownership": "المسؤولية والمتابعة",
+    "rangeTo": "إلى",
+    "specification": "المواصفات",
+    "pricing": "التسعير",
+    "record": "بيانات السجل",
+    "financial": "البيانات المالية",
+    "payment": "بيانات الدفع",
+    "references": "المراجع",
+    "openContract": "فتح العقد"
+  },
+  "references": {
+    "reservation": "حجز",
+    "contract": "عقد",
+    "confirmed": "تم التأكيد",
+    "cancelled": "تم الإلغاء"
   }
 }

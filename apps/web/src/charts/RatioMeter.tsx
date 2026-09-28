@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { LtrIsolate, tokens } from '@alola/ui';
+import { FormattedValue, tokens } from '@alola/ui';
 
 /**
  * A single proportion as a labelled meter — "collected of contracted". A progress bar with its value
@@ -29,7 +29,7 @@ export function RatioMeter({
           {label}
         </Typography>
         <Typography variant="body2" sx={{ fontWeight: 700 }}>
-          <LtrIsolate>{display}</LtrIsolate>
+          <FormattedValue>{display}</FormattedValue>
         </Typography>
       </Box>
       <Box

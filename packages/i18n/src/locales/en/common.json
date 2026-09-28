@@ -569,7 +569,8 @@
     "performance": "Campaign performance",
     "remainingBudget": "Remaining budget",
     "leadsByCampaign": "Leads by campaign",
-    "leadsCount": "Leads: {{count}}"
+    "leadsCount": "Leads: {{count}}",
+    "tableNote": "Every campaign is a local draft with demonstration figures; none has been published."
   },
   "campaignPlatform": {
     "facebook": "Facebook",
@@ -734,7 +735,13 @@
     "previousMonth": "Previous month",
     "nextMonth": "Next month",
     "truncated": "Only the first 500 tasks in this range are shown.",
-    "timeZoneNote": "Dates and times are in the organization’s timezone ({{timeZone}})."
+    "timeZoneNote": "Dates and times are in the organization’s timezone ({{timeZone}}).",
+    "emptyMineTitle": "No open tasks for you",
+    "emptyMineHint": "Nothing needs your attention right now. Tasks assigned or escalated to you appear here.",
+    "emptyClosedTitle": "No completed tasks",
+    "emptyClosedHint": "Tasks appear here once they are done or cancelled.",
+    "emptyScopeTitle": "No open tasks in your scope",
+    "emptyScopeHint": "There are no open tasks for the people within your permitted scope."
   },
   "search": {
     "label": "Search",
@@ -920,6 +927,23 @@
     "lead": "Lead",
     "unit": "Unit",
     "receipt": "Receipt",
-    "overdueInstallments": "Overdue instalments: {{count}}"
+    "overdueInstallments": "Overdue instalments: {{count}}",
+    "contact": "Contact",
+    "interest": "Interest and budget",
+    "ownership": "Ownership and follow-up",
+    "rangeTo": "to",
+    "specification": "Specification",
+    "pricing": "Pricing",
+    "record": "Record",
+    "financial": "Financial",
+    "payment": "Payment",
+    "references": "References",
+    "openContract": "Open contract"
+  },
+  "references": {
+    "reservation": "Reservation",
+    "contract": "Contract",
+    "confirmed": "confirmed",
+    "cancelled": "cancelled"
   }
 }

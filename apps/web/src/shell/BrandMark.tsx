@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import { useState } from 'react';
 import { brandDisplayName, brandName, initialsOf, useBranding } from '../branding';
 import { useLocale } from '../locale';
 
@@ -17,6 +18,9 @@ import { useLocale } from '../locale';
  * - `sidebar` — logo, display name and the product descriptor, at the top of the navigation.
  * - `compact` — the compact logo or monogram alone, for the collapsed sidebar.
  * - `signIn` — a larger, centred block above the sign-in form.
+ *
+ * The final logo is client-provided content, uploaded in Settings → Company identity; until one is
+ * uploaded — or if it cannot be loaded — the monogram stands in. No logo is invented here.
  */
 export function BrandMark({ variant }: { variant: 'sidebar' | 'compact' | 'signIn' }) {
   const branding = useBranding();
@@ -24,10 +28,14 @@ export function BrandMark({ variant }: { variant: 'sidebar' | 'compact' | 'signI
   const configuredName = brandDisplayName(branding, locale);
   const name = configuredName ?? t('app.title');
   const short = brandName(branding, locale) ?? name;
-  const asset =
+  // A configured image that fails to load (missing, corrupt, blocked) falls back to the monogram
+  // rather than leaving a broken-image icon where the company's mark belongs.
+  const [failedUrl, setFailedUrl] = useState<string | undefined>();
+  const configured =
     variant === 'compact'
       ? (branding.assets.compactLogo ?? branding.assets.logo)
       : (branding.assets.logo ?? branding.assets.compactLogo);
+  const asset = configured && configured.url !== failedUrl ? configured : undefined;
   const markSize = variant === 'signIn' ? 56 : variant === 'compact' ? 40 : 40;
   const centred = variant === 'signIn';
 
@@ -37,6 +45,7 @@ export function BrandMark({ variant }: { variant: 'sidebar' | 'compact' | 'signI
       src={asset.url}
       alt={name}
       data-testid="brand-logo"
+      onError={() => setFailedUrl(asset.url)}
       sx={{
         blockSize: markSize,
         inlineSize: 'auto',

@@ -159,6 +159,9 @@ function InstallmentsScreen() {
           status={tableStatus(active.state)}
           caption={t('collections.installmentsTitle')}
           onRowClick={(row) => void navigate(`/contracts/${row.contractId}`)}
+          rowLabel={(row) =>
+            `${t('detail.openContract')} — ${t('fields.sequence')} ${format.number(row.sequence)}, ${format.date(row.dueOn)}`
+          }
           errorAction={
             <Button variant="contained" onClick={active.reload}>
               {t('states.retry')}

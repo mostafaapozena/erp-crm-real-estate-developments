@@ -236,6 +236,7 @@ function ReservationWizard() {
                 rowKey={(row) => row.unitId}
                 status={tableStatus(availableUnits.state)}
                 caption={t('inventory.unitsTitle')}
+                rowLabel={(row) => `${t('actions.selectUnit')}: ${row.code}`}
                 onRowClick={(row) => {
                   setUnitId(row.unitId);
                   setAgreedPrice(row.currentPrice?.amount ?? '');

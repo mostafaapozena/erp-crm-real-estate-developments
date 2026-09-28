@@ -1,5 +1,6 @@
 import type { Permission } from '@alola/contracts';
 import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import InputAdornment from '@mui/material/InputAdornment';
 import MenuItem from '@mui/material/MenuItem';
@@ -7,7 +8,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import {
   Icon,
-  LtrIsolate,
+  FormattedValue,
   SectionCard,
   StateView,
   StatusChip,
@@ -222,9 +223,12 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
-/** A value that must never be reformatted: a code, a phone number, a reference (ADR-0003). */
+/**
+ * A formatted or technical value shown exactly as produced: a code, a phone number, a reference, money,
+ * a date (ADR-0003). Isolated by content direction and never split (`FormattedValue`).
+ */
 export function Verbatim({ children }: { children: ReactNode }) {
-  return <LtrIsolate>{children}</LtrIsolate>;
+  return <FormattedValue>{children}</FormattedValue>;
 }
 
 /** A titled section. Every detail card uses it, so spacing and headings stay consistent. */
@@ -538,7 +542,7 @@ export function Timeline({
                 {entry.title}
               </Typography>
               <Typography component="span" variant="caption" color="text.secondary">
-                <LtrIsolate>{entry.when}</LtrIsolate>
+                <FormattedValue>{entry.when}</FormattedValue>
               </Typography>
             </Box>
             {entry.body ? (
@@ -549,6 +553,110 @@ export function Timeline({
           </Box>
         </Box>
       ))}
+    </Box>
+  );
+}
+
+/**
+ * A record page's body: the record itself in the main column, its actions and side information in a
+ * narrower column beside it on wide screens, one column below `lg`. Keeps short fields from being
+ * spread across the full width of a large monitor.
+ */
+export function DetailLayout({ main, aside }: { main: ReactNode; aside?: ReactNode }) {
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gap: 3,
+        alignItems: 'start',
+        gridTemplateColumns: aside
+          ? { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 2fr) minmax(300px, 1fr)' }
+          : 'minmax(0, 1fr)',
+      }}
+    >
+      <Stack spacing={3} sx={{ minWidth: 0 }}>
+        {main}
+      </Stack>
+      {aside ? (
+        <Stack spacing={3} sx={{ minWidth: 0 }}>
+          {aside}
+        </Stack>
+      ) : null}
+    </Box>
+  );
+}
+
+/**
+ * A titled group of related fields inside a section: contact, interest, ownership. At most three
+ * columns, one on a phone, so a group reads as a unit rather than a row across the screen.
+ */
+export function FieldGroup({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <Box component="section" {...(title ? { 'aria-label': title } : {})} sx={{ minWidth: 0 }}>
+      {title ? (
+        <Typography
+          component="h3"
+          sx={{
+            fontSize: '0.8125rem',
+            fontWeight: 700,
+            color: 'text.secondary',
+            marginBlockEnd: 1.25,
+          }}
+        >
+          {title}
+        </Typography>
+      ) : null}
+      <Box
+        sx={{
+          display: 'grid',
+          columnGap: 3,
+          rowGap: 2,
+          gridTemplateColumns: {
+            xs: 'minmax(0, 1fr)',
+            sm: 'repeat(2, minmax(0, 1fr))',
+            xl: 'repeat(3, minmax(0, 1fr))',
+          },
+        }}
+      >
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * The sales service records a few machine-written references in English — "reservation
+ * RSV-2026-00002", "contract CTR-2026-00002", with "confirmed" or "cancelled" appended — as lead
+ * activity bodies and unit history reasons. They are stored data and stay as stored; on screen the
+ * record type and the outcome are translated and the reference is shown as an isolated value.
+ * Anything that does not match exactly is shown unchanged.
+ */
+const SYSTEM_REFERENCE =
+  /^(reservation|contract) ([A-Z]{2,6}-\d{4}-\d{3,8})(?: (confirmed|cancelled))?$/;
+
+export function parseSystemReference(
+  text: string,
+):
+  | { type: 'reservation' | 'contract'; reference: string; outcome?: 'confirmed' | 'cancelled' }
+  | undefined {
+  const match = SYSTEM_REFERENCE.exec(text.trim());
+  if (!match?.[1] || !match[2]) return undefined;
+  return {
+    type: match[1] as 'reservation' | 'contract',
+    reference: match[2],
+    ...(match[3] ? { outcome: match[3] as 'confirmed' | 'cancelled' } : {}),
+  };
+}
+
+export function SystemNote({ text }: { text: string }) {
+  const { td } = useLocale();
+  const parsed = parseSystemReference(text);
+  if (!parsed) return <>{text}</>;
+  return (
+    <Box component="span" sx={{ display: 'inline-flex', flexWrap: 'wrap', columnGap: 0.75 }}>
+      <span>{td(`references.${parsed.type}`)}</span>
+      <FormattedValue>{parsed.reference}</FormattedValue>
+      {parsed.outcome ? <span>{`— ${td(`references.${parsed.outcome}`)}`}</span> : null}
     </Box>
   );
 }

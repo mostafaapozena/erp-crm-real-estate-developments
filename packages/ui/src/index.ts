@@ -2,6 +2,7 @@ export * from './BarChart';
 export * from './brand';
 export * from './contrast';
 export * from './DataTable';
+export * from './FormattedValue';
 export * from './Icon';
 export * from './layout';
 export * from './LtrIsolate';

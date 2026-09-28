@@ -27,12 +27,14 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import {
   DataTable,
+  Icon,
   PageHeader,
   StateView,
   StatusChip,
   type DataColumn,
   type StatusTone,
 } from '@alola/ui';
+import { Plus } from '@alola/ui/icons';
 import { useMemo, useState } from 'react';
 import { apiRequest, query } from '../api/client';
 import { useSession } from '../api/session';
@@ -41,7 +43,7 @@ import { useBranding } from '../branding';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
-import { EnumChip, ErrorState, Verbatim, tableStatus } from './shared';
+import { EnumChip, ErrorState, Verbatim, tableStatus, useTableLabels } from './shared';
 
 /**
  * Tasks (CORE-TASK-001, CORE-TASK-004).
@@ -89,7 +91,11 @@ export default function TasksPage() {
         subtitle={t('tasks.subtitle')}
         actions={
           can('task.create') ? (
-            <Button variant="contained" onClick={() => setCreating(true)}>
+            <Button
+              variant="contained"
+              onClick={() => setCreating(true)}
+              startIcon={<Icon icon={Plus} size={18} />}
+            >
               {t('tasks.new')}
             </Button>
           ) : undefined
@@ -118,7 +124,11 @@ export default function TasksPage() {
         ) : null}
       </Stack>
       {tab === 'list' ? (
-        <TaskList key={`${view}-${refresh}`} view={view} />
+        <TaskList
+          key={`${view}-${refresh}`}
+          view={view}
+          {...(can('task.create') ? { onCreate: () => setCreating(true) } : {})}
+        />
       ) : (
         <TaskCalendar key={`${view}-${refresh}`} view={view} />
       )}
@@ -135,8 +145,15 @@ export default function TasksPage() {
   );
 }
 
-function TaskList({ view }: { view: View }) {
+/**
+ * The task list. An empty list is read according to what was asked: "your open tasks" being empty is
+ * good news — nothing needs attention — while "completed" or "in my scope" being empty is simply no
+ * results for that view. The create action appears only for someone allowed to create a task, and
+ * opens the same dialog as the header button.
+ */
+function TaskList({ view, onCreate }: { view: View; onCreate?: () => void }) {
   const { t, td } = useLocale();
+  const labels = useTableLabels();
   const { session } = useSession();
   const format = useFormatters();
   const errorMessage = useErrorMessage();
@@ -237,14 +254,39 @@ function TaskList({ view }: { view: View }) {
         rows={tasks.state.kind === 'ready' ? tasks.state.data.items : []}
         rowKey={(row) => row.taskId}
         status={tableStatus(tasks.state)}
+        emptyKind={view === 'mine' && state === 'open' ? 'success' : 'empty'}
         labels={{
-          loadingTitle: t('states.loadingTitle'),
-          emptyTitle: t('tasks.empty'),
-          errorTitle: t('states.errorTitle'),
-          errorDescription: t('states.errorDescription'),
-          forbiddenTitle: t('states.forbiddenTitle'),
-          forbiddenDescription: t('states.forbiddenDescription'),
+          ...labels,
+          ...(view === 'mine' && state === 'open'
+            ? { emptyTitle: t('tasks.emptyMineTitle'), emptyDescription: t('tasks.emptyMineHint') }
+            : state === 'closed'
+              ? {
+                  emptyTitle: t('tasks.emptyClosedTitle'),
+                  emptyDescription: t('tasks.emptyClosedHint'),
+                }
+              : {
+                  emptyTitle: t('tasks.emptyScopeTitle'),
+                  emptyDescription: t('tasks.emptyScopeHint'),
+                }),
         }}
+        {...(onCreate && state === 'open'
+          ? {
+              emptyAction: (
+                <Button
+                  variant="outlined"
+                  onClick={onCreate}
+                  startIcon={<Icon icon={Plus} size={18} />}
+                >
+                  {t('tasks.new')}
+                </Button>
+              ),
+            }
+          : {})}
+        errorAction={
+          <Button variant="contained" onClick={tasks.reload}>
+            {t('states.retry')}
+          </Button>
+        }
       />
     </Stack>
   );

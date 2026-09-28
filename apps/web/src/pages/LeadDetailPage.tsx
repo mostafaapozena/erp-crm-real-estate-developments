@@ -5,7 +5,7 @@ import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import { PageHeader, StateView } from '@alola/ui';
+import { PageHeader, StateView, ValueRange } from '@alola/ui';
 import {
   BadgeCheck,
   CalendarClock,
@@ -24,7 +24,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
 import { apiRequest, type ApiError } from '../api/client';
 import { useSession } from '../api/session';
-import { useApi, useMutation } from '../api/useApi';
+import { useApi, useMutation, type AsyncState } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
@@ -32,13 +32,15 @@ import { PersonName } from '../people';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
   BackLink,
-  CardGrid,
+  DetailLayout,
   EnumChip,
   ErrorState,
   Field,
+  FieldGroup,
   LEAD_TONES,
   Panel,
   RequirePermission,
+  SystemNote,
   Timeline,
   Transition,
   Verbatim,
@@ -140,109 +142,141 @@ function LeadDetailScreen() {
         }
       />
 
-      <Stack spacing={3}>
-        <Panel title={t('crm.leadDetails')}>
-          <CardGrid min={200}>
-            <Field label={t('fields.phone')}>
-              <Verbatim>{data.primaryPhone}</Verbatim>
-            </Field>
-            {data.secondaryPhone ? (
-              <Field label={t('fields.secondaryPhone')}>
-                <Verbatim>{data.secondaryPhone}</Verbatim>
-              </Field>
-            ) : null}
-            {data.email ? (
-              <Field label={t('fields.email')}>
-                <Verbatim>{data.email}</Verbatim>
-              </Field>
-            ) : null}
-            <Field label={t('crm.source')}>{td(`leadSource.${data.source}`)}</Field>
-            <Field label={t('crm.assignedTo')}>
-              <PersonName accountId={data.assignedToAccountId} showTitle />
-            </Field>
-            <Field label={t('crm.nextFollowUp')}>{format.date(data.nextFollowUpOn)}</Field>
-            {data.budgetMin || data.budgetMax ? (
-              <Field label={t('crm.budget')}>
-                {`${format.money(data.budgetMin)} – ${format.money(data.budgetMax)}`}
-              </Field>
-            ) : null}
-            {data.lostReason ? <Field label={t('crm.lostReason')}>{data.lostReason}</Field> : null}
-            <Field label={t('fields.createdAt')}>{format.dateTime(data.createdAt)}</Field>
-          </CardGrid>
-          {data.notes ? (
-            <Box sx={{ marginBlockStart: 2 }}>
-              <Field label={t('fields.notes')}>{data.notes}</Field>
-            </Box>
-          ) : null}
-        </Panel>
-
-        {can('sales.reservation.create') && data.stage !== 'lost' && data.stage !== 'won' ? (
-          <Alert
-            severity="info"
-            variant="outlined"
-            action={
-              <Button
-                component={Link}
-                to={`/reservations/new?leadId=${data.leadId}`}
-                variant="contained"
-                size="small"
-              >
-                {t('sales.newReservation')}
-              </Button>
-            }
-          >
-            {t('sales.selectUnitHint')}
-          </Alert>
-        ) : null}
-
-        {can('crm.lead.edit') ? (
-          <StageForm lead={data} onDone={reload} errorMessage={errorMessage} />
-        ) : null}
-
-        {can('crm.activity.create') ? (
-          <ActivityForm leadId={data.leadId} onDone={reload} errorMessage={errorMessage} />
-        ) : null}
-
-        <Panel title={t('crm.timeline')} icon={History}>
-          {activities.state.kind === 'loading' ? (
-            <StateView variant="inline" kind="loading" title={t('states.loadingTitle')} />
-          ) : (
-            <Timeline
-              emptyLabel={t('states.emptyDescription')}
-              entries={(activities.state.kind === 'ready' ? activities.state.data.items : []).map(
-                (activity) => ({
-                  key: activity.activityId,
-                  icon: ACTIVITY_ICONS[activity.kind] ?? CircleDot,
-                  title: td(`activityKind.${activity.kind}`),
-                  when: format.dateTime(activity.occurredAt),
-                  body: (
-                    <>
-                      {activity.fromStage && activity.toStage ? (
-                        <Box>
-                          <Transition
-                            from={td(`leadStage.${activity.fromStage}`)}
-                            to={td(`leadStage.${activity.toStage}`)}
-                          />
-                        </Box>
-                      ) : null}
-                      {activity.body ? (
-                        <Box sx={{ color: 'text.primary' }}>{activity.body}</Box>
-                      ) : null}
-                      {activity.dueOn ? (
-                        <Box>
-                          {`${t('crm.activityDueOn')}: `}
-                          <Verbatim>{format.date(activity.dueOn)}</Verbatim>
-                        </Box>
-                      ) : null}
-                    </>
-                  ),
-                }),
-              )}
-            />
-          )}
-        </Panel>
-      </Stack>
+      <DetailLayout
+        main={
+          <>
+            <Panel title={t('crm.leadDetails')} icon={UserPlus}>
+              <Stack spacing={3}>
+                <FieldGroup title={t('detail.contact')}>
+                  <Field label={t('fields.phone')}>
+                    <Verbatim>{data.primaryPhone}</Verbatim>
+                  </Field>
+                  {data.secondaryPhone ? (
+                    <Field label={t('fields.secondaryPhone')}>
+                      <Verbatim>{data.secondaryPhone}</Verbatim>
+                    </Field>
+                  ) : null}
+                  {data.email ? (
+                    <Field label={t('fields.email')}>
+                      <Verbatim>{data.email}</Verbatim>
+                    </Field>
+                  ) : null}
+                </FieldGroup>
+                <FieldGroup title={t('detail.interest')}>
+                  <Field label={t('crm.source')}>{td(`leadSource.${data.source}`)}</Field>
+                  {data.budgetMin || data.budgetMax ? (
+                    <Field label={t('crm.budget')}>
+                      <ValueRange
+                        from={format.money(data.budgetMin)}
+                        to={format.money(data.budgetMax)}
+                        spokenSeparator={t('detail.rangeTo')}
+                      />
+                    </Field>
+                  ) : null}
+                  {data.lostReason ? (
+                    <Field label={t('crm.lostReason')}>{data.lostReason}</Field>
+                  ) : null}
+                </FieldGroup>
+                <FieldGroup title={t('detail.ownership')}>
+                  <Field label={t('crm.assignedTo')}>
+                    <PersonName accountId={data.assignedToAccountId} showTitle />
+                  </Field>
+                  <Field label={t('crm.nextFollowUp')}>
+                    <Verbatim>{format.date(data.nextFollowUpOn)}</Verbatim>
+                  </Field>
+                  <Field label={t('fields.createdAt')}>
+                    <Verbatim>{format.dateTime(data.createdAt)}</Verbatim>
+                  </Field>
+                </FieldGroup>
+                {data.notes ? (
+                  <FieldGroup title={t('fields.notes')}>
+                    <Box sx={{ gridColumn: '1 / -1', typography: 'body2', whiteSpace: 'pre-line' }}>
+                      {data.notes}
+                    </Box>
+                  </FieldGroup>
+                ) : null}
+              </Stack>
+            </Panel>
+            <LeadTimeline activities={activities.state} />
+          </>
+        }
+        aside={
+          can('sales.reservation.create') || can('crm.lead.edit') || can('crm.activity.create') ? (
+            <>
+              {can('sales.reservation.create') && data.stage !== 'lost' && data.stage !== 'won' ? (
+                <Alert
+                  severity="info"
+                  variant="outlined"
+                  sx={{ '& .MuiAlert-message': { inlineSize: '100%' } }}
+                >
+                  <Box sx={{ marginBlockEnd: 1.25 }}>{t('sales.selectUnitHint')}</Box>
+                  <Button
+                    component={Link}
+                    to={`/reservations/new?leadId=${data.leadId}`}
+                    variant="contained"
+                    size="small"
+                  >
+                    {t('sales.newReservation')}
+                  </Button>
+                </Alert>
+              ) : null}
+              {can('crm.lead.edit') ? (
+                <StageForm lead={data} onDone={reload} errorMessage={errorMessage} />
+              ) : null}
+              {can('crm.activity.create') ? (
+                <ActivityForm leadId={data.leadId} onDone={reload} errorMessage={errorMessage} />
+              ) : null}
+            </>
+          ) : undefined
+        }
+      />
     </Box>
+  );
+}
+
+/** The lead's activity history, newest first. System-written references are translated on display. */
+function LeadTimeline({ activities }: { activities: AsyncState<{ items: Activity[] }> }) {
+  const { t, td } = useLocale();
+  const format = useFormatters();
+  return (
+    <Panel title={t('crm.timeline')} icon={History}>
+      {activities.kind === 'loading' ? (
+        <StateView variant="inline" kind="loading" title={t('states.loadingTitle')} />
+      ) : (
+        <Timeline
+          emptyLabel={t('states.emptyDescription')}
+          entries={(activities.kind === 'ready' ? activities.data.items : []).map((activity) => ({
+            key: activity.activityId,
+            icon: ACTIVITY_ICONS[activity.kind] ?? CircleDot,
+            title: td(`activityKind.${activity.kind}`),
+            when: format.dateTime(activity.occurredAt),
+            body: (
+              <>
+                {activity.fromStage && activity.toStage ? (
+                  <Box>
+                    <Transition
+                      from={td(`leadStage.${activity.fromStage}`)}
+                      to={td(`leadStage.${activity.toStage}`)}
+                    />
+                  </Box>
+                ) : null}
+                {activity.body ? (
+                  <Box sx={{ color: 'text.primary' }}>
+                    <SystemNote text={activity.body} />
+                  </Box>
+                ) : null}
+                {activity.dueOn ? (
+                  <Box>
+                    {`${t('crm.activityDueOn')}: `}
+                    <Verbatim>{format.date(activity.dueOn)}</Verbatim>
+                  </Box>
+                ) : null}
+              </>
+            ),
+          }))}
+        />
+      )}
+    </Panel>
   );
 }
 
