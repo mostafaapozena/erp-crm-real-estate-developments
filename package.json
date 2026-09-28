@@ -37,7 +37,10 @@
     "seed:demo": "node scripts/bin.mjs tsx scripts/seed-demo/index.ts",
     "seed:demo:reset": "node scripts/bin.mjs tsx scripts/seed-demo/reset.ts",
     "check:links": "node scripts/check-doc-links.mjs",
-    "check:ignored": "node scripts/check-ignored-source.mjs"
+    "check:ignored": "node scripts/check-ignored-source.mjs",
+    "db:migrate": "node scripts/bin.mjs tsx scripts/db-migrate.ts",
+    "db:migrate:status": "node scripts/bin.mjs tsx scripts/db-migrate.ts --status",
+    "client:init": "node scripts/bin.mjs tsx scripts/client-init.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

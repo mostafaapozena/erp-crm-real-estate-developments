@@ -77,8 +77,8 @@ real **values** (`SD-01`) remain a Phase 2 input, and no business policy is deci
 | PLAT-025 | Reference data with stable codes, bilingual labels, ordering and deactivation; a code in use is never removed or recoded | F3 | implemented |
 | PLAT-026 | Feature flags limited to an approved catalog, audited | F3 | implemented |
 | CORE-IMPORT-003 | Export: permission-checked, scope- and field-restricted, bounded, formula-safe, audited, expiring | F9 | implemented |
-| OPS-004 | Explicit, versioned schema migrations with a recorded database version | F11 | approved |
-| OPS-005 | Repeatable client-deployment initialization, idempotent, refusing destructive resets | F11 | approved |
+| OPS-004 | Explicit, versioned schema migrations with a recorded database version | F11 | implemented |
+| OPS-005 | Repeatable client-deployment initialization, idempotent, refusing destructive resets | F11 | implemented |
 | OPS-006 | Operational readiness: worker, queue, integration and migration health; build metadata; redacted diagnostics | F12 | approved |
 | OPS-007 | Scheduled maintenance sweeps run by the system, single-runner, idempotent | F12 | approved |
 
@@ -225,12 +225,23 @@ every provider slot reads `noAdapter`.
 | INTEGRATION-004 | The signature is verified on the **raw bytes** (kept by the JSON parser for webhook paths only) before anything is parsed or stored; a wrong secret, a changed body, a capture older than five minutes and an unsigned request are `401`, audited, and store nothing; `verifyHmacSha256` compares in constant time; a provider with no adapter, no credentials or switched off has no endpoint (`404`) |
 | INTEGRATION-005 | A unique index on provider + provider event ID: a repeat is `200` acknowledged and discarded, one row stored; processing happens in the sweep, never in the provider's request; two parallel sweeps process each event once; a failing event backs off and is kept as `failed` after five attempts; the outbox records one operation per idempotency key, holds it while the provider is not connected, and passes the **same key** on every attempt |
 
+### Implementation evidence — F11 (2026-09-28)
+
+Tests: `apps/api/src/platform/migrations.int-test.ts` (7) and `client-init.int-test.ts` (4), real
+MongoDB; both commands also run against the development database (`db:migrate` applied the baseline
+once and nothing on the second run; `client:init` refused the demonstration database).
+
+| ID | Evidence |
+|---|---|
+| OPS-004 | Ordered, identified migrations recorded with a checksum in `schemaMigrations`; the database version is the last applied; a second run applies nothing; an applied migration edited afterwards (`MIGRATION_CHANGED`) and a database newer than the code (`MIGRATION_UNKNOWN`) are refused before anything changes; one run at a time under an expiring lock; a failing transactional migration rolls back and stops the run with the earlier ones kept; `db:migrate` needs `--confirm` in staging and production |
+| OPS-005 | `client:init` validates the client file (duplicate codes refused) and creates the company profile, legal entities and branches through the services as the documented system actor, audited; a second run reports every item `exists`; a differing item is reported `differs` and **not** overwritten; a demonstration database and pending migrations are refused; there is no reset or delete path |
+
 ## Current status summary
 
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
-| Status `implemented` (code and passing tests) | **102** of the original 113, plus 13 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
+| Status `implemented` (code and passing tests) | **102** of the original 113, plus 15 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |

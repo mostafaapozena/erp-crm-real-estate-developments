@@ -292,6 +292,19 @@ except the signing secret, which has none: a default signing key is a shared key
 | Signing secret | generated locally into the ignored `.env` | required, from the environment or a secrets manager |
 | Throttle store | Redis, with an in-memory insurance limiter | same |
 
+### Migrations and client initialization (OPS-004, OPS-005)
+
+```
+npm run db:migrate:status                              # read-only; exit 2 on a changed or unknown migration
+npm run db:migrate                                     # staging and production need -- --confirm
+npm run client:init -- --file <client.json> --check    # validate a client file; touches nothing
+npm run client:init -- --file <client.json>            # create what is missing; never overwrites
+```
+
+See [migrations and upgrades](../operations/migrations-and-upgrades.md) and the
+[client deployment checklist](../operations/client-deployment-checklist.md). `client:init` refuses a
+database holding the demonstration data and a database with pending migrations.
+
 ### Creating the first account
 
 ```

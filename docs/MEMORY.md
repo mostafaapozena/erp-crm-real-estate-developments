@@ -97,8 +97,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 | F7 Tasks and escalation | **complete** | `505b1e5` |
 | F8 Global search | **complete** | `e79b456` |
 | F9 Import and export | **complete** | `fe2127c` |
-| F10 Integration foundation | **complete** | the commit containing this row |
-| F11–F12 | not started | — |
+| F10 Integration foundation | **complete** | `17b6fef` |
+| F11 Migrations, client initialization, operations docs | **complete** | the commit containing this row |
+| F12 | not started | — |
 
 ### F0 — what changed
 
@@ -381,10 +382,33 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
   **unit 524**, **integration 474 passed / 0 failed / 0 skipped**, build, bundle, OpenAPI 179 paths / 0
   broken refs, **E2E 42 passed / 0 skipped**; 30 baseline demonstration collections unchanged.
 
+### F11 — what changed
+
+- `OPS-004` implemented: `apps/api/src/platform/migrations.ts` (runner, checksum, lock) and
+  `migration-list.ts` (one migration, `0001-foundation-baseline`, a no-op that records the starting
+  version). Commands `db:migrate`, `db:migrate:status`. The development database is now at
+  `0001-foundation-baseline` (a `schemaMigrations` row; no business data touched).
+- `OPS-005` implemented: `packages/contracts/src/client-init.ts` (file schema),
+  `apps/api/src/platform/client-init.ts` (`initializeClient`, system actor `system:client-init`),
+  `scripts/client-init.ts` (`client:init --file … [--check]`). The first administrator stays with
+  `bootstrap:admin`, which already refuses a second run.
+- Documents: `docs/operations/` — client deployment checklist, client data-intake checklist,
+  migrations and upgrades runbook, backup/restore/retention, example client file; and
+  `docs/decisions/business-decision-register.md` (24 entries, BD-01…BD-24, each with options,
+  a default only where safe, owner, blocking macro phase and status; four `proposed`, the rest `open`).
+- A schema with no declared index is not created by `ensureIndexes` (Mongoose creates the collection
+  on the first index); the lock schema declares one for that reason.
+- Measured at the F11 commit: lint, format, typecheck, i18n, secrets (441 files), ignored-source, links,
+  **unit 524**, **integration 485 passed / 0 failed / 0 skipped**, build, bundle, **E2E 42 passed / 0
+  skipped**; 30 baseline demonstration collections unchanged (new: one `schemaMigrations` row).
+
 ### Resume point
 
-Next package: **F11 — migrations, deployment configuration, client initialization** (`OPS-004`, `OPS-005`)
-with the client deployment checklist and the client data-intake checklist.
+Next package: **F12 — observability and operational readiness** (`OPS-006`, `OPS-007`): readiness
+reporting worker, queue, integration and migration health, build metadata, redacted diagnostics; the
+worker running the notification, task, integration and instalment sweeps on a schedule, single-runner
+and idempotent. Then SEC-033's provider-neutral KMS interface status, the five business-phase
+planning documents and ADR, the final 22-item verification and the final report.
 
 ### Superseded resume note (F9, kept for traceability)
 
@@ -874,10 +898,10 @@ approval escalates through the real reporting line, and an unresolvable one is s
 
 ### Foundation additions (registered 2026-09-27, 17 IDs)
 
-**`implemented` (13):** PLAT-022, PLAT-023, THEME-013 (F1) · CORE-ORG-001–006 (F2) · PLAT-024–026 (F3) ·
-CORE-IMPORT-003 (F9)
+**`implemented` (15):** PLAT-022, PLAT-023, THEME-013 (F1) · CORE-ORG-001–006 (F2) · PLAT-024–026 (F3) ·
+CORE-IMPORT-003 (F9) · OPS-004, OPS-005 (F11)
 
-**`approved`, not started (4):** OPS-004–007 (F11, F12)
+**`approved`, not started (2):** OPS-006, OPS-007 (F12)
 
 ## Next exact task
 

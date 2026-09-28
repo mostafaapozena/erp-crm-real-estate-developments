@@ -18,6 +18,7 @@ export * from './tasks';
 export * from './search';
 export * from './imports';
 export * from './integrations';
+export * from './client-init';
 export * from './numbering';
 export * from './organization';
 export * from './sales';

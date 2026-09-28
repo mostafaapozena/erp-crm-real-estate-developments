@@ -55,7 +55,9 @@ silently violate a constraint whose reason was never written down.
 
 Decisions that are **not** the implementation team's to make — business rules, thresholds, legal
 entities, accounting policy, brand assets — are tracked separately in
-[open-decisions.md](open-decisions.md). No ADR may assume an answer to an open item.
+[open-decisions.md](open-decisions.md), refined into individual configuration choices in the
+[business decision register](business-decision-register.md). No ADR may assume an answer to an
+open item.
 
 ## Writing a new ADR
 

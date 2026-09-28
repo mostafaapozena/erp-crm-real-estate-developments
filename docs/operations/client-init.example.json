@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "company": {
+    "legalName": { "ar": "شركة المثال للتطوير العقاري", "en": "Example Real Estate Development Co." },
+    "tradeName": { "ar": "المثال", "en": "Example Estates" },
+    "shortName": { "ar": "المثال", "en": "Example" },
+    "country": "EG",
+    "defaultLocale": "ar",
+    "supportedLocales": ["ar", "en"],
+    "timeZone": "Africa/Cairo",
+    "baseCurrency": "EGP"
+  },
+  "legalEntities": [
+    {
+      "code": "MAIN",
+      "name": { "ar": "الكيان الرئيسي", "en": "Main entity" },
+      "currency": "EGP",
+      "timeZone": "Africa/Cairo",
+      "branches": [
+        {
+          "code": "HQ",
+          "name": { "ar": "المقر الرئيسي", "en": "Head office" },
+          "city": { "ar": "القاهرة", "en": "Cairo" }
+        }
+      ]
+    }
+  ]
+}
