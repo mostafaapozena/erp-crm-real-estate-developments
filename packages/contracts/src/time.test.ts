@@ -4,6 +4,7 @@ import {
   InstantSchema,
   businessDateInZone,
   instantFromDate,
+  instantInZone,
   isValidTimeZone,
   type BusinessDate,
   type Instant,
@@ -50,5 +51,38 @@ describe('time types (PLAT-013)', () => {
     // @ts-expect-error — a plain string is neither.
     const plain: BusinessDate = '2026-09-19';
     expect([wrongInstant, wrongDate, plain]).toHaveLength(3);
+  });
+});
+
+describe('instantInZone (CORE-TASK-002, ADR-0008)', () => {
+  const date = (value: string) => BusinessDateSchema.parse(value);
+
+  it('stores a local wall time as the matching UTC instant', () => {
+    expect(instantInZone(date('2026-09-28'), '09:00', 'Africa/Cairo')).toBe(
+      '2026-09-28T06:00:00.000Z',
+    );
+    expect(instantInZone(date('2026-07-01'), '09:00', 'America/New_York')).toBe(
+      '2026-07-01T13:00:00.000Z',
+    );
+    expect(instantInZone(date('2026-01-15'), '09:00', 'America/New_York')).toBe(
+      '2026-01-15T14:00:00.000Z',
+    );
+    expect(instantInZone(date('2026-01-15'), '00:00', 'UTC')).toBe('2026-01-15T00:00:00.000Z');
+  });
+
+  it('moves a skipped time forward by the gap, and takes the first of a repeated one', () => {
+    // 2026-03-08 02:00 → 03:00 in New York: 02:30 does not exist.
+    expect(instantInZone(date('2026-03-08'), '02:30', 'America/New_York')).toBe(
+      '2026-03-08T07:30:00.000Z',
+    );
+    // 2026-11-01 01:00–02:00 happens twice; the earlier (EDT) occurrence is chosen.
+    expect(instantInZone(date('2026-11-01'), '01:30', 'America/New_York')).toBe(
+      '2026-11-01T05:30:00.000Z',
+    );
+  });
+
+  it('round-trips to the same calendar date in the zone', () => {
+    const instant = instantInZone(date('2026-12-31'), '23:59', 'Asia/Tokyo');
+    expect(businessDateInZone(instant, 'Asia/Tokyo')).toBe('2026-12-31');
   });
 });

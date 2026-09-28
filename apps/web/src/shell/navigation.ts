@@ -26,7 +26,11 @@ export interface NavGroup {
 export const NAVIGATION: NavGroup[] = [
   {
     labelKey: 'nav.dashboard',
-    items: [{ path: '/', labelKey: 'nav.dashboard', permissions: [] }],
+    items: [
+      { path: '/', labelKey: 'nav.dashboard', permissions: [] },
+      // Everyone has their own tasks; no permission is needed to see them (CORE-TASK-001).
+      { path: '/tasks', labelKey: 'nav.tasks', permissions: [] },
+    ],
   },
   {
     labelKey: 'nav.groupSales',

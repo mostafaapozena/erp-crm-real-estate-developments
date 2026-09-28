@@ -54,11 +54,11 @@ implemented or verified requirement.
   ([ADR-0020](decisions/adr-0020-local-docker-development-services.md)). Integration tier: **59 passed,
   0 failed, 0 skipped** (191 tests).
 - Gate status: **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Every mandatory verification check passes, but
-  **15 of 113** Phase 1 requirements are not started (`INTEGRATION-001`–`005`, `CORE-TASK`,
+  **10 of 113** Phase 1 requirements are not started (`INTEGRATION-001`–`005`,
   `CORE-DOC-003`/`005`, `CORE-SEARCH`, `CORE-IMPORT`), 9 are in progress, and the gate also requires a
   stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
-- Requirements `implemented` (code + passing tests): **89 of 113** · `in-progress`: 9 · not started: 15 (as of F6, 2026-09-28)
+- Requirements `implemented` (code + passing tests): **94 of 113** · `in-progress`: 9 · not started: 10 (as of F7, 2026-09-28)
 
 ## Foundation completion (post-demo master prompt) — IN PROGRESS
 
@@ -94,8 +94,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 | F3 Settings, reference data, feature flags | **complete** | `d64ec0c` |
 | F4 Number sequences | **complete** | `85cf2ca` |
 | F5 Documents and templates | **complete** | `92d3110` |
-| F6 Internal notifications | **complete** | the commit containing this row |
-| F7–F12 | not started | — |
+| F6 Internal notifications | **complete** | `8ee6271` |
+| F7 Tasks and escalation | **complete** | the commit containing this row |
+| F8–F12 | not started | — |
 
 ### F0 — what changed
 
@@ -269,16 +270,49 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 - Measured at the F6 commit: typecheck, lint, format, **unit 504**, **integration 429 passed / 0
   failed / 0 skipped**, i18n; E2E and demonstration counts as recorded in the F6 commit message.
 
+### F7 — what changed
+
+- `CORE-TASK-001`–`005` implemented: module `apps/api/src/modules/tasks/`, contracts
+  `packages/contracts/src/tasks.ts`, routes under `/api/v1/tasks` (list, calendar, create, read,
+  edit, transition, assign; administrative `task.reassign` and `task.sweep`), screen `/tasks` (list
+  and a Saturday-first month calendar) and a navigation entry visible to everyone.
+- Permissions `task.view`, `task.create`, `task.manage`, and administrative `task.reassign`,
+  `task.sweep`. One's own tasks (assigned, escalated to, or created by) need no permission.
+- Linked tasks resolve their record through the documents' scoped owner resolver (one port, wired
+  once in `domain-services.ts`) and copy its placement for their own scope. **A personal, unlinked
+  task has no placement**, so a team or branch manager does not see a member's personal tasks — only
+  the three people on the task and an `all`-scope viewer do.
+- New shared helper `instantInZone(date, time, zone)` in `packages/contracts/src/time.ts`: a wall
+  time in a zone to UTC; a skipped daylight-saving time moves forward by the gap and a repeated one
+  takes its first occurrence.
+- New setting `tasks.escalationDelayHours` (category `tasks`), default `null` = escalate as soon
+  as overdue (the registry's own rule, G-09); a grace period is `SD-02`.
+- The sweep (`TaskService.sweep`) is idempotent — conditional updates plus notification dedupe keys
+  tied to the moment concerned; the worker schedule arrives with F12. The demonstration seeds no tasks
+  and its roles hold no task permission.
+- Assigning to someone else in the web screen needs an account picker, which the business modules
+  bring; the API accepts any active account. Account administration has no organization scope yet, so
+  assignment is not limited to the creator's organization unit — recorded as debt.
+- **E2E and the sign-in budget:** the suite now signs in about forty times, a third of the per-address
+  budget (120 per 15 minutes). A run started while an earlier run's window is still open can cross it
+  mid-run. Check `throttle-login-ip:*` in Redis, or wait fifteen minutes between full runs.
+- Web page tests render the whole lazily loaded shell; with two such files running in parallel the
+  first render exceeded Testing Library's 1 s default. Their first heading lookup now waits up to 10 s
+  (`FIRST_RENDER`) — test infrastructure, not an application change.
+- Measured at the F7 commit: typecheck, lint, format, **unit 509**, **integration 444 passed / 0
+  failed / 0 skipped**, **E2E 40 passed / 0 skipped**, i18n, links, secrets, ignored-source, build,
+  bundle; 30 baseline demonstration collections unchanged (new empty `tasks`).
+
 ### Resume point
 
-Next package: **F7 — tasks and escalation** (`CORE-TASK-001`–`005`), notifying through F6
-(`task.assigned`, `task.dueSoon`, `task.overdue`, `task.escalated` are already typed and labelled).
+Next package: **F8 — global search** (`CORE-SEARCH-001`): permission-aware search whose scope is
+applied inside each module's query, never filtered afterwards.
 
 ## Phase status
 
 - [ ] Phase 1 — *in progress: scaffolding, audit, authorization, identity/authentication, and the
-      approval engine done; integration registry, notifications, tasks, documents, search, and import not
-      started*
+      approval engine done; foundation packages F0–F7 done (organization, settings, numbering, documents,
+      notifications, tasks); search, import, integration registry, PDF/QR not started*
 - [ ] Phases 2–9 — not started. **Do not start Phase 2.**
 
 ## Recently completed — 2026-09-19
@@ -718,11 +752,11 @@ untouched.
 
 ### Phase 1 registry (113 IDs)
 
-**`implemented` (89):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+**`implemented` (94):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
 **SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2) ·
-**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6)
+**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6) · **CORE-TASK-001–005** (F7)
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -750,7 +784,7 @@ nothing while both hold; it becomes necessary only if a cookie ever needs `SameS
 `APPROVAL-005` left `in-progress` on 2026-09-27: with the organization foundation (F2) an overdue
 approval escalates through the real reporting line, and an unresolvable one is still reported as such.
 
-**Not started (15):** INTEGRATION-001–005 · CORE-TASK-001–005 · CORE-DOC-003, 005 ·
+**Not started (10):** INTEGRATION-001–005 · CORE-DOC-003, 005 ·
 CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 ### Foundation additions (registered 2026-09-27, 17 IDs)
@@ -986,7 +1020,7 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 | ID | Blocker | Blocks |
 |---|---|---|
-| Phase 1 scope | 15 of 113 requirements not started; 9 in progress (F6) | **Phase 1 approval** (phase-gates §1) |
+| Phase 1 scope | 10 of 113 requirements not started; 9 in progress (F7) | **Phase 1 approval** (phase-gates §1) |
 | Stakeholder gate | Written approval outstanding. The demonstration is now **buildable and runnable** — `npm run seed:demo` — but has not been given | **Phase 1 approval** |
 | `SD-01`, `SD-02` | The real organization, roles, approval thresholds and segregation-of-duty rules. The demonstration seeds illustrative ones and closes neither | **Macro Phase 2** |
 | `SEC-033` | No KMS adapter, so staging and production cannot store an MFA secret | Any environment beyond development |

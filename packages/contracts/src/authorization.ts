@@ -94,6 +94,17 @@ export const PERMISSIONS = [
   /** Run the delivery sweep by hand. Administrative. */
   'notification.dispatch',
 
+  // Tasks (CORE-TASK). A person needs no permission for tasks assigned to, escalated to, or created by them.
+  /** See every task inside one's data scope, not only one's own. */
+  'task.view',
+  'task.create',
+  /** Edit, reassign, cancel and reopen tasks inside one's data scope, not only those one created. */
+  'task.manage',
+  /** Move all of a person's open tasks to someone else, e.g. at offboarding. Administrative. */
+  'task.reassign',
+  /** Run the reminder and escalation sweep by hand. Administrative. */
+  'task.sweep',
+
   // Security administration
   'security.role.view',
   'security.role.create',
@@ -205,6 +216,9 @@ export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
   'template.manage',
   'notification.viewDeliveries',
   'notification.dispatch',
+  /** Moving someone's whole workload changes who is accountable for it. */
+  'task.reassign',
+  'task.sweep',
   /**
    * Organization structure is administrative because **every data scope resolves against it**
    * (SEC-026) and the reporting line decides where an overdue approval escalates (`APPROVAL-005`).

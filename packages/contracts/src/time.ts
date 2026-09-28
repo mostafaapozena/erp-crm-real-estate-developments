@@ -100,3 +100,54 @@ export function isValidTimeZone(timeZone: string): boolean {
     return false;
   }
 }
+
+/** A wall-clock time of day, `HH:mm` on a 24-hour clock. */
+export const LocalTimeSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'LOCAL_TIME_EXPECTED' });
+
+/** Milliseconds `timeZone` is ahead of UTC at the moment `epochMs`. */
+function zoneOffsetMs(epochMs: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(new Date(epochMs));
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const asUtc = Date.UTC(
+    part('year'),
+    part('month') - 1,
+    part('day'),
+    part('hour'),
+    part('minute'),
+    part('second'),
+  );
+  return asUtc - (epochMs - (epochMs % 1000));
+}
+
+/**
+ * The instant at which the wall clock in `timeZone` reads `date` `time` (ADR-0008) — how a reminder
+ * set for "09:00 on the 5th" in the organization's calendar is stored as UTC.
+ *
+ * Around a daylight-saving change a wall time can be skipped or repeated. A skipped time moves forward
+ * by the length of the gap (02:30 on a spring-forward night becomes 03:30), and a repeated time
+ * resolves to its **first** occurrence — the earlier, never the later, so a reminder is not late.
+ */
+export function instantInZone(date: BusinessDate, time: string, timeZone: string): Instant {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const [hh, mm] = LocalTimeSchema.parse(time).split(':').map(Number) as [number, number];
+  const wall = Date.UTC(y, m - 1, d, hh, mm);
+  // Two passes settle the offset in every zone that exists; the earlier candidate wins a repeat.
+  const first = wall - zoneOffsetMs(wall, timeZone);
+  const second = wall - zoneOffsetMs(first, timeZone);
+  const candidates = [first, second].filter(
+    (epoch) => epoch + zoneOffsetMs(epoch, timeZone) === wall,
+  );
+  const chosen = candidates.length > 0 ? Math.min(...candidates) : Math.max(first, second);
+  return instantFromDate(new Date(chosen));
+}

@@ -177,12 +177,26 @@ Tests: `apps/api/src/modules/notifications/notifications.int-test.ts` (14, real 
 escalation target and the requester; the reminder centre delivers through the notification service
 (deduplicated per reminder) and still reaches only `simulated`, never `sent`.
 
+### Implementation evidence — F7 (2026-09-28)
+
+Tests: `apps/api/src/modules/tasks/tasks.int-test.ts` (15, real MongoDB),
+`packages/contracts/src/time.test.ts` (`instantInZone`, including both daylight-saving edges),
+`apps/web/src/pages/TasksPage.test.tsx` (2) and one end-to-end test against the real stack.
+
+| ID | Evidence |
+|---|---|
+| CORE-TASK-001 | A task has an assignee, a due moment, a priority and an optional link to a lead, customer, project, unit, reservation, contract or receipt; creation is audited and tells the assignee; an inactive assignee (`ASSIGNEE_INACTIVE`), a record outside the creator's scope (`404`, nothing stored) and a creator without `task.create` are refused; a task is always visible to its assignee, escalation target and creator, and with `task.view` to the scope that reaches its linked record — out of scope it is `404`; the model refuses deletion |
+| CORE-TASK-002 | Due and reminder moments are entered as wall-clock times in the organization timezone and stored as UTC; the organization-calendar due date is kept beside the instant (01:30 on the 6th in Cairo is stored as 22:30 UTC on the 5th and filed on the 6th); a reminder after the due moment is refused; the sweep sends a due reminder exactly once however often it runs |
+| CORE-TASK-003 | An overdue task notifies its assignee once and escalates once to the assignee's effective manager from the `CORE-ORG` reporting line, audited; with no resolvable manager it is reported `unresolved` and retried on the next run, never sent to a guess; the `tasks.escalationDelayHours` setting (`null`: escalate at once — `SD-02`) holds escalation for its grace period; a new due moment restarts the overdue notice and escalation |
+| CORE-TASK-004 | `GET /tasks/calendar` returns the visible tasks by organization-calendar day for up to 42 days; the web calendar shows a six-week, Saturday-first month grid with today marked, overdue tasks named in words |
+| CORE-TASK-005 | `POST /tasks/reassign` (administrative `task.reassign`) moves every open task assigned **or escalated** to a person, within the caller's scope, audits each move with its reason and tells the new assignee; finished tasks keep their history; an inactive target is refused |
+
 ## Current status summary
 
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
-| Status `implemented` (code and passing tests) | **89** of the original 113, plus 12 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
+| Status `implemented` (code and passing tests) | **94** of the original 113, plus 12 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
@@ -471,11 +485,11 @@ adapter exists ([ADR-0023](decisions/adr-0023-password-hashing-and-session-token
 
 | ID | Requirement | Source | Notes |
 |---|---|---|---|
-| CORE-TASK-001 | Task with owner, due date, priority, and linked entity | MM §8 | Arabic scope p17 |
-| CORE-TASK-002 | Reminder scheduling computed in the organization timezone, stored in UTC | ADR-0008 | |
-| CORE-TASK-003 | Escalation on overdue | **G-09** | |
-| CORE-TASK-004 | Calendar view | MM §8 | |
-| CORE-TASK-005 | Reassign an offboarded user's open tasks, audited | **G-08**, ADR-0019 | New 2026-09-19 — split from `SEC-021` |
+| CORE-TASK-001 | Task with owner, due date, priority, and linked entity | MM §8 | **implemented** 2026-09-28 (F7). Arabic scope p17 |
+| CORE-TASK-002 | Reminder scheduling computed in the organization timezone, stored in UTC | ADR-0008 | **implemented** 2026-09-28 (F7) |
+| CORE-TASK-003 | Escalation on overdue | **G-09** | **implemented** 2026-09-28 (F7) |
+| CORE-TASK-004 | Calendar view | MM §8 | **implemented** 2026-09-28 (F7) |
+| CORE-TASK-005 | Reassign an offboarded user's open tasks, audited | **G-08**, ADR-0019 | **implemented** 2026-09-28 (F7). New 2026-09-19 — split from `SEC-021` |
 
 ## CORE-DOC — Documents, templates, numbering
 

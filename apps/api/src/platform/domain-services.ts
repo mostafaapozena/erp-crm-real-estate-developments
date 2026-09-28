@@ -37,6 +37,7 @@ import { OrganizationService } from '../modules/organization';
 import { SalesService } from '../modules/sales';
 import { SecurityService } from '../modules/security';
 import { SettingsService } from '../modules/settings';
+import { TaskService } from '../modules/tasks';
 import { AppError } from '../errors';
 
 /**
@@ -88,6 +89,7 @@ export interface DomainServices {
   documents: () => DocumentService;
   templates: () => TemplateService;
   notifications: () => NotificationService;
+  tasks: () => TaskService;
   /** The private file store; a `LocalDiskFileStore` only in development and test. */
   fileStore: PrivateFileStore;
 }
@@ -111,6 +113,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let documentService: DocumentService | undefined;
   let templateService: TemplateService | undefined;
   let notificationService: NotificationService | undefined;
+  let taskService: TaskService | undefined;
 
   /**
    * Encryption for MFA secrets (`SEC-017`).
@@ -338,6 +341,33 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
         getSettingsService().valueOf<{ start: string; end: string }>('notifications.quietHours'),
     });
     return notificationService;
+  }
+
+  /**
+   * Tasks (CORE-TASK-001 … 005). A linked task resolves its record through the same scoped getters a
+   * document does, so a task is exactly as visible as the record it is about; escalation follows the
+   * `CORE-ORG` reporting line, and every notice goes through `CORE-NOTIFY`.
+   */
+  function getTaskService(): TaskService {
+    const connection = requireConnection();
+    taskService ??= new TaskService({
+      connection,
+      audit: getAuditService(),
+      timeZone: config.ORG_TIMEZONE,
+      resolveLink: (actor, type, id) => resolveOwner(actor, type, id),
+      isActiveAccount: async (accountId) => {
+        try {
+          return (await getIdentityService().getAccount(accountId)).state === 'active';
+        } catch {
+          return false;
+        }
+      },
+      resolveManager: (accountId) => getOrganizationService().resolveManagerAccount(accountId),
+      escalationDelayHours: () =>
+        getSettingsService().valueOf<number>('tasks.escalationDelayHours'),
+      notifier: getNotificationService(),
+    });
+    return taskService;
   }
 
   function getOrganizationService(): OrganizationService {
@@ -659,6 +689,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     documents: getDocumentService,
     templates: getTemplateService,
     notifications: getNotificationService,
+    tasks: getTaskService,
     fileStore,
   };
 }

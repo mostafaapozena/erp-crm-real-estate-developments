@@ -41,7 +41,8 @@
     "groupSales": "المبيعات والعملاء",
     "groupFinance": "التحصيل والمالية",
     "groupMarketing": "التسويق",
-    "groupAdmin": "الإدارة"
+    "groupAdmin": "الإدارة",
+    "tasks": "المهام"
   },
   "auth": {
     "signInTitle": "تسجيل الدخول",
@@ -616,5 +617,42 @@
     "unreadCount_few": "{{count}} إشعارات غير مقروءة",
     "unreadCount_many": "{{count}} إشعارًا غير مقروء",
     "unreadCount_other": "{{count}} إشعار غير مقروء"
+  },
+  "taskState": {
+    "open": "مفتوحة",
+    "inProgress": "قيد التنفيذ",
+    "done": "منجزة",
+    "cancelled": "ملغاة"
+  },
+  "taskPriority": {
+    "low": "منخفضة",
+    "normal": "عادية",
+    "high": "مرتفعة",
+    "urgent": "عاجلة"
+  },
+  "tasks": {
+    "title": "المهام",
+    "subtitle": "أعمال مستحقة في مواعيد محددة، بتقويم الجهة",
+    "new": "مهمة جديدة",
+    "create": "إنشاء المهمة",
+    "list": "قائمة",
+    "calendar": "التقويم",
+    "viewLabel": "أي المهام",
+    "mine": "مهامي",
+    "scope": "كل ما في نطاقي",
+    "stateFilter": "حالة المهمة",
+    "openTasks": "المفتوحة",
+    "closedTasks": "المنتهية",
+    "titleField": "المهمة",
+    "priority": "الأولوية",
+    "dueTime": "وقت الاستحقاق",
+    "overdue": "متأخرة",
+    "start": "بدء",
+    "complete": "تمييز كمنجزة",
+    "empty": "لا توجد مهام",
+    "previousMonth": "الشهر السابق",
+    "nextMonth": "الشهر التالي",
+    "truncated": "تُعرض أول 500 مهمة فقط في هذه الفترة.",
+    "timeZoneNote": "التواريخ والأوقات بتوقيت الجهة ({{timeZone}})."
   }
 }

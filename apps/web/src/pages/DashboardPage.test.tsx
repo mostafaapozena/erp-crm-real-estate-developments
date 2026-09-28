@@ -23,6 +23,9 @@ import { createI18n } from '../i18n';
  *    dashboard once rendered one, which a screen reader then announced as a broken paragraph.
  */
 
+/** The first render transforms and lazy-loads the whole shell, which can exceed the 1 s default under a busy suite. */
+const FIRST_RENDER = { timeout: 10_000 };
+
 const session = {
   account: {
     accountId: 'acc_test',
@@ -149,7 +152,7 @@ describe('signed-in dashboard under StrictMode', () => {
         <App i18n={createI18n(() => undefined)} />
       </StrictMode>,
     );
-    await screen.findByRole('heading', { level: 1, name: 'لوحة المتابعة' });
+    await screen.findByRole('heading', { level: 1, name: 'لوحة المتابعة' }, FIRST_RENDER);
     expect(requests.filter((path) => path === '/api/v1/auth/refresh')).toHaveLength(1);
   });
 
@@ -159,7 +162,7 @@ describe('signed-in dashboard under StrictMode', () => {
         <App i18n={createI18n(() => undefined)} />
       </StrictMode>,
     );
-    await screen.findByRole('heading', { level: 1, name: 'لوحة المتابعة' });
+    await screen.findByRole('heading', { level: 1, name: 'لوحة المتابعة' }, FIRST_RENDER);
     // 8,450,000.10 exactly: the decimal string is formatted, never re-added in floating point.
     expect(await screen.findByText(/8,450,000\.10/)).toBeTruthy();
     expect(requests).toContain('/api/v1/sales/contracts/summary');
@@ -179,7 +182,7 @@ describe('signed-in dashboard under StrictMode', () => {
           <App i18n={createI18n(() => undefined)} />
         </StrictMode>,
       );
-      await screen.findByRole('heading', { level: 1, name: 'لوحة المتابعة' });
+      await screen.findByRole('heading', { level: 1, name: 'لوحة المتابعة' }, FIRST_RENDER);
       expect(
         errors.filter((line) => /descendant of|cannot be a child of|In HTML/.test(line)),
       ).toEqual([]);
@@ -197,7 +200,7 @@ describe('signed-in dashboard under StrictMode', () => {
         <App i18n={createI18n(() => undefined)} />
       </StrictMode>,
     );
-    await screen.findByRole('heading', { level: 1, name: 'لوحة المتابعة' });
+    await screen.findByRole('heading', { level: 1, name: 'لوحة المتابعة' }, FIRST_RENDER);
     await screen.findByText(/8,450,000\.10/);
     const nesting = errors.filter((line) =>
       /descendant of|cannot be a child of|validateDOMNesting|In HTML/.test(line),

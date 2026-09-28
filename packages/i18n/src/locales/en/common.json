@@ -41,7 +41,8 @@
     "groupSales": "Sales and customers",
     "groupFinance": "Collections and finance",
     "groupMarketing": "Marketing",
-    "groupAdmin": "Administration"
+    "groupAdmin": "Administration",
+    "tasks": "Tasks"
   },
   "auth": {
     "signInTitle": "Sign in",
@@ -608,5 +609,42 @@
     "empty": "No notifications",
     "unreadCount_one": "One unread notification",
     "unreadCount_other": "{{count}} unread notifications"
+  },
+  "taskState": {
+    "open": "Open",
+    "inProgress": "In progress",
+    "done": "Done",
+    "cancelled": "Cancelled"
+  },
+  "taskPriority": {
+    "low": "Low",
+    "normal": "Normal",
+    "high": "High",
+    "urgent": "Urgent"
+  },
+  "tasks": {
+    "title": "Tasks",
+    "subtitle": "Work owed by a date, in the organization’s calendar",
+    "new": "New task",
+    "create": "Create task",
+    "list": "List",
+    "calendar": "Calendar",
+    "viewLabel": "Which tasks",
+    "mine": "My tasks",
+    "scope": "All in my scope",
+    "stateFilter": "Task state",
+    "openTasks": "Open",
+    "closedTasks": "Finished",
+    "titleField": "Task",
+    "priority": "Priority",
+    "dueTime": "Due time",
+    "overdue": "Overdue",
+    "start": "Start",
+    "complete": "Mark done",
+    "empty": "No tasks",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "truncated": "Only the first 500 tasks in this range are shown.",
+    "timeZoneNote": "Dates and times are in the organization’s timezone ({{timeZone}})."
   }
 }

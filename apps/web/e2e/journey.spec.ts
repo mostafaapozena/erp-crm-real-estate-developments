@@ -86,3 +86,17 @@ test.describe('collections and the reminder centre', () => {
     await expect(page.getByText('مُرسل', { exact: true })).toHaveCount(0);
   });
 });
+
+test.describe('tasks', () => {
+  test('opens the tasks screen and its calendar against the real API', async ({ page }) => {
+    await signIn(page, SALES_MANAGER);
+    await open(page, '/tasks');
+    await expect(page.getByRole('heading', { name: 'المهام', level: 1 })).toBeVisible();
+    // The demonstration seeds no tasks: the empty state is shown, not a blank table.
+    await expect(page.getByText('لا توجد مهام').first()).toBeVisible();
+    await page.getByRole('tab', { name: 'التقويم' }).click();
+    const grid = page.getByRole('grid');
+    await expect(grid.getByRole('columnheader')).toHaveCount(7);
+    await expect(grid.getByRole('gridcell')).toHaveCount(42);
+  });
+});

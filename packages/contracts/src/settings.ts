@@ -27,7 +27,7 @@ const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'TIME_OF_D
 
 /** One catalogued setting. `decision` names the open stakeholder item a `null` default waits for. */
 export interface SettingDefinition {
-  category: 'display' | 'finance' | 'sales' | 'collections' | 'notifications' | 'feature';
+  category: 'display' | 'finance' | 'sales' | 'collections' | 'notifications' | 'tasks' | 'feature';
   schema: z.ZodType;
   defaultValue: unknown;
   decision?: string;
@@ -89,6 +89,17 @@ export const SETTING_DEFINITIONS = {
     defaultValue: null,
     decision: 'SD-21',
   },
+  /**
+   * Hours after its due moment before an overdue task escalates to the assignee's manager
+   * (CORE-TASK-003). `null` — not configured — escalates as soon as the task is overdue, which is the
+   * registry's own rule (G-09); a grace period is a stakeholder choice (`SD-02`).
+   */
+  'tasks.escalationDelayHours': {
+    category: 'tasks',
+    schema: z.number().int().min(0).max(720),
+    defaultValue: null,
+    decision: 'SD-02',
+  },
   'feature.notifications.externalDelivery': {
     category: 'feature',
     schema: z.boolean(),
@@ -125,7 +136,15 @@ const JsonValueSchema: z.ZodType = z.lazy(() =>
 
 export const SettingSchema = z.strictObject({
   key: SettingKeySchema,
-  category: z.enum(['display', 'finance', 'sales', 'collections', 'notifications', 'feature']),
+  category: z.enum([
+    'display',
+    'finance',
+    'sales',
+    'collections',
+    'notifications',
+    'tasks',
+    'feature',
+  ]),
   /** The value in force: the configured one, or the default. `null` means not configured. */
   value: JsonValueSchema,
   defaultValue: JsonValueSchema,

@@ -22,6 +22,8 @@ import {
   REMINDER_STATES,
   RESERVATION_STATES,
   SUPPORTED_LOCALES,
+  TASK_PRIORITIES,
+  TASK_STATES,
   UNIT_STATUSES,
   USAGE_TYPES,
   type Locale,
@@ -67,6 +69,8 @@ export const DISPLAYED_ENUMS: Readonly<Record<string, readonly string[]>> = {
   notificationTitle: NOTIFICATION_TYPES,
   notificationBody: NOTIFICATION_TYPES,
   notificationState: NOTIFICATION_STATES,
+  taskState: TASK_STATES,
+  taskPriority: TASK_PRIORITIES,
 };
 
 export interface EnumLabelProblem {

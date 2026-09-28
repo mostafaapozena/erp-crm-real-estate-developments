@@ -28,6 +28,7 @@ import {
   notificationModel,
   notificationPreferencesModel,
 } from '../modules/notifications/model';
+import { taskModel } from '../modules/tasks/model';
 import {
   branchModel,
   departmentModel,
@@ -111,6 +112,7 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     notificationModel(connection),
     notificationAttemptModel(connection),
     notificationPreferencesModel(connection),
+    taskModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {
