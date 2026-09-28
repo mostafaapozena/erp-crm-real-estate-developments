@@ -40,6 +40,8 @@
     "check:ignored": "node scripts/check-ignored-source.mjs",
     "db:migrate": "node scripts/bin.mjs tsx scripts/db-migrate.ts",
     "db:migrate:status": "node scripts/bin.mjs tsx scripts/db-migrate.ts --status",
+    "db:migrate:transition-checksum": "node scripts/bin.mjs tsx scripts/db-migrate-transition-checksum.ts",
+    "check:migrations:parity": "node scripts/check-migration-parity.mjs",
     "client:init": "node scripts/bin.mjs tsx scripts/client-init.ts"
   },
   "devDependencies": {

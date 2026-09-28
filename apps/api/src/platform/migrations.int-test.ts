@@ -2,12 +2,17 @@ import { createLogger } from '@alola/security';
 import { serviceGate } from '@alola/testing';
 import mongoose, { type Connection } from 'mongoose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { readiness } from '../health';
 import { ensureIndexes } from './indexes';
 import { MIGRATIONS } from './migration-list';
 import {
   MIGRATION_LOCK_COLLECTION,
   MigrationRunner,
   SCHEMA_MIGRATIONS_COLLECTION,
+  migrationChecksum,
+  schemaHealth,
+  transitionMigrationChecksum,
+  type ChecksumTransition,
   type Migration,
 } from './migrations';
 import { configureMongoose } from './mongo';
@@ -30,6 +35,8 @@ describe.skipIf(!gate.available)(`schema migrations — ${gate.reason}`, () => {
 
   const insert = (id: string, marker: string): Migration => ({
     id,
+    revision: 1,
+    fingerprint: `insert:${marker}`,
     description: `insert ${marker}`,
     transactional: true,
     up: async ({ connection: db, session }) => {
@@ -86,7 +93,7 @@ describe.skipIf(!gate.available)(`schema migrations — ${gate.reason}`, () => {
 
   it('refuses a released migration that was edited afterwards, before changing anything', async () => {
     await new MigrationRunner(connection, [insert('0001-a', 'a')]).migrate('test');
-    const edited: Migration = { ...insert('0001-a', 'a'), description: 'insert something else' };
+    const edited: Migration = { ...insert('0001-a', 'a'), fingerprint: 'insert:something-else' };
     const runner = new MigrationRunner(connection, [edited, insert('0002-b', 'b')]);
     expect((await runner.status()).changed).toEqual(['0001-a']);
     await expect(runner.migrate('test')).rejects.toMatchObject({ code: 'MIGRATION_CHANGED' });
@@ -123,6 +130,8 @@ describe.skipIf(!gate.available)(`schema migrations — ${gate.reason}`, () => {
   it('stops at a failing migration, rolls it back, and keeps the ones before it', async () => {
     const failing: Migration = {
       id: '0002-fails',
+      revision: 1,
+      fingerprint: 'insert-then-throw',
       description: 'writes then fails',
       transactional: true,
       up: async ({ connection: db, session }) => {
@@ -157,5 +166,186 @@ describe.skipIf(!gate.available)(`schema migrations — ${gate.reason}`, () => {
 
   it('ships a valid, ordered migration list', () => {
     expect(() => new MigrationRunner(connection, MIGRATIONS)).not.toThrow();
+  });
+
+  it('treats a reworded description as the same migration, and a new revision as a change', async () => {
+    await new MigrationRunner(connection, [insert('0001-a', 'a')]).migrate('test');
+    const reworded = { ...insert('0001-a', 'a'), description: 'Reworded for people.' };
+    expect((await new MigrationRunner(connection, [reworded]).status()).changed).toEqual([]);
+    const revised = { ...insert('0001-a', 'a'), revision: 2 };
+    expect((await new MigrationRunner(connection, [revised]).status()).changed).toEqual(['0001-a']);
+  });
+
+  describe('readiness against the recorded schema (OPS-006)', () => {
+    const mongo = { health: () => Promise.resolve({ status: 'up' as const, transactions: true }) };
+    const redis = { health: () => Promise.resolve({ status: 'up' as const }) };
+    const probe = (runner: MigrationRunner) => ({
+      health: async () => schemaHealth(await runner.status()),
+    });
+
+    it('is ready when every applied checksum matches, and not ready when pending or edited', async () => {
+      await new MigrationRunner(connection, [insert('0001-a', 'a')]).migrate('test');
+      const current = await readiness(
+        mongo,
+        redis,
+        probe(new MigrationRunner(connection, [insert('0001-a', 'a')])),
+      );
+      expect(current).toMatchObject({
+        status: 'ready',
+        checks: { migrations: { status: 'current' } },
+      });
+
+      const pending = await readiness(
+        mongo,
+        redis,
+        probe(new MigrationRunner(connection, [insert('0001-a', 'a'), insert('0002-b', 'b')])),
+      );
+      expect(pending).toMatchObject({
+        status: 'not_ready',
+        checks: { migrations: { status: 'pending' } },
+      });
+
+      const edited = { ...insert('0001-a', 'a'), fingerprint: 'insert:changed' };
+      const mismatch = await readiness(
+        mongo,
+        redis,
+        probe(new MigrationRunner(connection, [edited])),
+      );
+      expect(mismatch).toMatchObject({
+        status: 'not_ready',
+        checks: { migrations: { status: 'mismatch' } },
+      });
+    });
+
+    it('is not ready when the migration history cannot be read', async () => {
+      const lost = mongoose.createConnection(process.env['MONGODB_URI'] as string, {
+        dbName: process.env['MONGODB_DB_NAME'] as string,
+      });
+      await lost.asPromise();
+      const runner = new MigrationRunner(lost, [insert('0001-a', 'a')]);
+      await lost.close();
+      expect(await readiness(mongo, redis, probe(runner))).toMatchObject({
+        status: 'not_ready',
+        checks: { migrations: { status: 'unknown' } },
+      });
+    });
+  });
+
+  describe('development checksum transition', () => {
+    const LEGACY = 'a'.repeat(64);
+    let bodyRuns = 0;
+    const tracked: Migration = {
+      ...insert('0001-a', 'a'),
+      up: async () => {
+        bodyRuns += 1;
+        await Promise.resolve();
+      },
+    };
+    const expected = migrationChecksum(tracked);
+    const request = (overrides: Partial<ChecksumTransition> = {}): ChecksumTransition => ({
+      appEnv: 'development',
+      migrationId: '0001-a',
+      fromChecksum: LEGACY,
+      toChecksum: expected,
+      ...overrides,
+    });
+    const appliedAt = new Date('2026-09-01T00:00:00.000Z');
+    const seedLegacyRow = () =>
+      applied().insertOne({
+        migrationId: '0001-a',
+        checksum: LEGACY,
+        description: 'insert a',
+        appliedAt,
+        durationMs: 3,
+      });
+    const otherCounts = async () => {
+      const names = (await connection.db!.listCollections().toArray())
+        .map((c) => c.name)
+        .filter((name) => name !== SCHEMA_MIGRATIONS_COLLECTION)
+        .sort();
+      const counts: Record<string, number> = {};
+      for (const name of names) counts[name] = await connection.collection(name).countDocuments();
+      return counts;
+    };
+
+    beforeEach(() => {
+      bodyRuns = 0;
+    });
+
+    it('moves the exact old checksum to the build checksum, on one row, without running the migration', async () => {
+      await seedLegacyRow();
+      const before = await applied().findOne({ migrationId: '0001-a' });
+      const others = await otherCounts();
+      expect((await new MigrationRunner(connection, [tracked]).status()).changed).toEqual([
+        '0001-a',
+      ]);
+
+      await expect(transitionMigrationChecksum(connection, [tracked], request())).resolves.toEqual({
+        migrationId: '0001-a',
+        outcome: 'updated',
+      });
+
+      const after = await applied().find({}).toArray();
+      expect(after).toHaveLength(1);
+      expect(after[0]).toEqual({ ...before, checksum: expected });
+      expect(bodyRuns).toBe(0);
+      expect(await sandbox().countDocuments()).toBe(0);
+      expect(await otherCounts()).toEqual(others);
+      expect(await new MigrationRunner(connection, [tracked]).status()).toMatchObject({
+        changed: [],
+        pending: [],
+        databaseVersion: '0001-a',
+      });
+    });
+
+    it('is idempotent once the row carries the build checksum', async () => {
+      await seedLegacyRow();
+      await transitionMigrationChecksum(connection, [tracked], request());
+      const once = await applied().find({}).toArray();
+      await expect(transitionMigrationChecksum(connection, [tracked], request())).resolves.toEqual({
+        migrationId: '0001-a',
+        outcome: 'unchanged',
+      });
+      expect(await applied().find({}).toArray()).toEqual(once);
+    });
+
+    it('refuses an unknown current checksum, and leaves the row alone', async () => {
+      await seedLegacyRow();
+      const before = await applied().find({}).toArray();
+      await expect(
+        transitionMigrationChecksum(
+          connection,
+          [tracked],
+          request({ fromChecksum: 'b'.repeat(64) }),
+        ),
+      ).rejects.toMatchObject({ code: 'MIGRATION_TRANSITION_REFUSED' });
+      expect(await applied().find({}).toArray()).toEqual(before);
+    });
+
+    it('refuses staging and production before reading anything', async () => {
+      await seedLegacyRow();
+      const before = await applied().find({}).toArray();
+      for (const appEnv of ['staging', 'production', 'test']) {
+        await expect(
+          transitionMigrationChecksum(connection, [tracked], request({ appEnv })),
+        ).rejects.toMatchObject({ code: 'MIGRATION_TRANSITION_REFUSED' });
+      }
+      expect(await applied().find({}).toArray()).toEqual(before);
+      expect(bodyRuns).toBe(0);
+    });
+
+    it('refuses a new checksum this build does not compute, a missing row, and an unknown migration', async () => {
+      await expect(transitionMigrationChecksum(connection, [tracked], request())).rejects.toThrow(
+        /No applied row/,
+      );
+      await seedLegacyRow();
+      await expect(
+        transitionMigrationChecksum(connection, [tracked], request({ toChecksum: 'c'.repeat(64) })),
+      ).rejects.toThrow(/not the one this build computes/);
+      await expect(
+        transitionMigrationChecksum(connection, [tracked], request({ migrationId: '0009-z' })),
+      ).rejects.toThrow(/no migration 0009-z/);
+      expect((await applied().findOne({ migrationId: '0001-a' }))?.['checksum']).toBe(LEGACY);
+    });
   });
 });

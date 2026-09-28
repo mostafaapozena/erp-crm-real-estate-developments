@@ -1,7 +1,9 @@
-import { createHash } from 'node:crypto';
 import { Schema, type ClientSession, type Connection, type Model } from 'mongoose';
 import type { Logger } from 'pino';
+import { MigrationError, migrationChecksum, validateMigrations } from './migration-registry';
 import { withTransaction } from './transactions';
+
+export { MigrationError, migrationChecksum } from './migration-registry';
 
 /**
  * Explicit, versioned schema migrations (OPS-004).
@@ -9,7 +11,7 @@ import { withTransaction } from './transactions';
  * Indexes are created at startup (`indexes.ts`); **data** changes — backfills, renames, reshaping —
  * are migrations. A migration is code with a fixed identifier, run once, in order, by an operator
  * command (`npm run db:migrate`), never implicitly by a web process. The database records which ran,
- * when, and a checksum of what ran, so:
+ * when, and a checksum of its declared identity (`migration-registry.ts`), so:
  *
  * - the **database version** is the last applied migration, readable by readiness checks;
  * - a migration that was edited after it ran is detected and refused (`MIGRATION_CHANGED`) instead of
@@ -26,6 +28,17 @@ export const MIGRATION_LOCK_COLLECTION = 'schemaMigrationLock';
 export interface Migration {
   /** `NNNN-kebab-name`; the numeric prefix is the order. Never renamed once released. */
   id: string;
+  /**
+   * Positive integer, starting at 1. Raise it whenever what `up` does changes before release; it is
+   * part of the checksum. After release the migration is immutable and a correction is a new one.
+   */
+  revision: number;
+  /**
+   * A declared statement of the change in printable ASCII, such as `noop:record-baseline` or
+   * `backfill:units.usageType`. Part of the checksum; the function's text never is.
+   */
+  fingerprint: string;
+  /** Prose for people; stored, but not part of the checksum. */
   description: string;
   /**
    * The change. It may be retried after a crash, so it must be idempotent: re-running a migration that
@@ -51,17 +64,6 @@ interface LockDocument {
   expiresAt: Date;
 }
 
-export class MigrationError extends Error {
-  constructor(
-    readonly code:
-      'MIGRATION_CHANGED' | 'MIGRATION_LOCKED' | 'MIGRATION_ORDER' | 'MIGRATION_UNKNOWN',
-    message: string,
-  ) {
-    super(message);
-    this.name = 'MigrationError';
-  }
-}
-
 export interface MigrationStatus {
   /** The last applied migration's identifier, or `none`. */
   databaseVersion: string;
@@ -69,21 +71,26 @@ export interface MigrationStatus {
   codeVersion: string;
   applied: string[];
   pending: string[];
-  /** Applied migrations whose code changed since — a deployment that must not proceed. */
+  /** Applied migrations whose declared revision or fingerprint changed since — do not proceed. */
   changed: string[];
   /** Applied in the database but unknown to this build — the database is newer than the code. */
   unknown: string[];
 }
 
-const MIGRATION_ID = /^\d{4}-[a-z0-9-]{1,60}$/;
 const LOCK_ID = 'migrations';
 const LOCK_MS = 15 * 60_000;
 
-/** The checksum of what a migration does, so an edit after release is detected. */
-export function migrationChecksum(migration: Migration): string {
-  return createHash('sha256')
-    .update(`${migration.id}\n${migration.description}\n${migration.up.toString()}`)
-    .digest('hex');
+/**
+ * The readiness answer for a schema (OPS-006): an edited or unknown migration is a mismatch, a pending
+ * one keeps the instance out of service until an operator migrates, and only a matching schema is
+ * current. A status that cannot be read is the caller's failure to report — readiness treats a
+ * rejected probe as `unknown`, which is not ready.
+ */
+export function schemaHealth(status: MigrationStatus): {
+  status: 'current' | 'pending' | 'mismatch';
+} {
+  if (status.changed.length > 0 || status.unknown.length > 0) return { status: 'mismatch' };
+  return { status: status.pending.length > 0 ? 'pending' : 'current' };
 }
 
 function appliedModel(connection: Connection): Model<AppliedDocument> {
@@ -133,14 +140,7 @@ export class MigrationRunner {
     private readonly migrations: readonly Migration[],
     private readonly options: { logger?: Logger; now?: () => Date } = {},
   ) {
-    const ids = migrations.map((migration) => migration.id);
-    for (const [index, id] of ids.entries()) {
-      if (!MIGRATION_ID.test(id))
-        throw new MigrationError('MIGRATION_ORDER', `Bad migration id: ${id}`);
-      if (index > 0 && id <= (ids[index - 1] ?? '')) {
-        throw new MigrationError('MIGRATION_ORDER', `Migrations out of order at ${id}`);
-      }
-    }
+    validateMigrations(migrations);
     this.applied = appliedModel(connection);
     this.lock = lockModel(connection);
   }
@@ -256,4 +256,73 @@ export class MigrationRunner {
       throw error;
     }
   }
+}
+
+const HEX_SHA256 = /^[0-9a-f]{64}$/;
+
+export interface ChecksumTransition {
+  /** Refused unless `development`: no other environment ever stored a function-text checksum. */
+  appEnv: string;
+  migrationId: string;
+  /** The exact checksum the row carries now. */
+  fromChecksum: string;
+  /** The exact checksum this build computes for the migration; anything else is refused. */
+  toChecksum: string;
+}
+
+/**
+ * One-time move of a development database's `schemaMigrations` row from a function-text checksum
+ * (before the checksum became build-stable) to the declared-identity checksum of this build.
+ *
+ * Narrow on purpose: development only; one named migration this build knows; the exact old and new
+ * checksums supplied by the operator; the new one must be what this build computes; exactly one row,
+ * changed by compare-and-set on its current checksum. It never runs the migration, never touches
+ * `appliedAt` or any other field, and never deletes or recreates the row. Already on the new checksum
+ * is success with no change; any other checksum is refused.
+ *
+ * It writes through the driver, not the model: the model declares `checksum` immutable, which is
+ * right for every other caller.
+ */
+export async function transitionMigrationChecksum(
+  connection: Connection,
+  migrations: readonly Migration[],
+  request: ChecksumTransition,
+): Promise<{ migrationId: string; outcome: 'updated' | 'unchanged' }> {
+  const refuse = (message: string): never => {
+    throw new MigrationError('MIGRATION_TRANSITION_REFUSED', message);
+  };
+  if (request.appEnv !== 'development') {
+    refuse(`Checksum transition is for development databases only (APP_ENV=${request.appEnv}).`);
+  }
+  validateMigrations(migrations);
+  const migration = migrations.find((candidate) => candidate.id === request.migrationId);
+  if (!migration) return refuse(`This build has no migration ${request.migrationId}.`);
+  if (!HEX_SHA256.test(request.fromChecksum) || !HEX_SHA256.test(request.toChecksum)) {
+    refuse('Checksums must be 64 lower-case hexadecimal characters.');
+  }
+  if (request.toChecksum !== migrationChecksum(migration)) {
+    refuse(`The new checksum is not the one this build computes for ${migration.id}.`);
+  }
+  if (request.fromChecksum === request.toChecksum) refuse('The old and new checksums are equal.');
+
+  const applied = connection.collection<AppliedDocument>(SCHEMA_MIGRATIONS_COLLECTION);
+  const rows = await applied.find({ migrationId: migration.id }).limit(2).toArray();
+  if (rows.length === 0) refuse(`No applied row for ${migration.id}.`);
+  if (rows.length > 1) refuse(`More than one applied row for ${migration.id}.`);
+  const row = rows[0] as (typeof rows)[number];
+  if (row.checksum === request.toChecksum)
+    return { migrationId: migration.id, outcome: 'unchanged' };
+  if (row.checksum !== request.fromChecksum) {
+    refuse(`The applied row for ${migration.id} carries neither the old nor the new checksum.`);
+  }
+  const result = await applied.updateOne(
+    { _id: row._id, migrationId: migration.id, checksum: request.fromChecksum },
+    { $set: { checksum: request.toChecksum } },
+  );
+  if (result.matchedCount !== 1 || result.modifiedCount !== 1) {
+    refuse(
+      `The applied row for ${migration.id} changed during the transition; nothing was written.`,
+    );
+  }
+  return { migrationId: migration.id, outcome: 'updated' };
 }

@@ -26,7 +26,7 @@ import { buildInfo, ENV_VARIABLES } from '@alola/config';
 import { WORKER_HEARTBEAT_KEY } from '@alola/contracts';
 import { MaintenanceScheduler, type SweepDefinition } from './platform/maintenance';
 import { MIGRATIONS } from './platform/migration-list';
-import { MigrationRunner } from './platform/migrations';
+import { MigrationRunner, schemaHealth } from './platform/migrations';
 import { organizationRouter } from './modules/organization';
 import { salesRouter } from './modules/sales';
 import { securityRouter } from './modules/security';
@@ -129,12 +129,7 @@ const startedAt = new Date();
 let migrationRunner: MigrationRunner | undefined;
 const migrations = () => (migrationRunner ??= new MigrationRunner(requireConnection(), MIGRATIONS));
 const migrationProbe = {
-  health: async () => {
-    const status = await migrations().status();
-    if (status.changed.length > 0 || status.unknown.length > 0)
-      return { status: 'mismatch' as const };
-    return { status: status.pending.length > 0 ? ('pending' as const) : ('current' as const) };
-  },
+  health: async () => schemaHealth(await migrations().status()),
 };
 
 /**

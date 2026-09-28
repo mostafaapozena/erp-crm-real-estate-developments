@@ -233,7 +233,7 @@ once and nothing on the second run; `client:init` refused the demonstration data
 
 | ID | Evidence |
 |---|---|
-| OPS-004 | Ordered, identified migrations recorded with a checksum in `schemaMigrations`; the database version is the last applied; a second run applies nothing; an applied migration edited afterwards (`MIGRATION_CHANGED`) and a database newer than the code (`MIGRATION_UNKNOWN`) are refused before anything changes; one run at a time under an expiring lock; a failing transactional migration rolls back and stops the run with the earlier ones kept; `db:migrate` needs `--confirm` in staging and production |
+| OPS-004 | Ordered, identified migrations recorded in `schemaMigrations` with a checksum of their declared identity (identifier, revision, fingerprint — never the function text, so source and production build agree: `check:migrations:parity`, fixed 2026-09-28); the database version is the last applied; a second run applies nothing; an applied migration edited afterwards (`MIGRATION_CHANGED`) and a database newer than the code (`MIGRATION_UNKNOWN`) are refused before anything changes; one run at a time under an expiring lock; a failing transactional migration rolls back and stops the run with the earlier ones kept; `db:migrate` needs `--confirm` in staging and production |
 | OPS-005 | `client:init` validates the client file (duplicate codes refused) and creates the company profile, legal entities and branches through the services as the documented system actor, audited; a second run reports every item `exists`; a differing item is reported `differs` and **not** overwritten; a demonstration database and pending migrations are refused; there is no reset or delete path |
 
 ### Implementation evidence — F12 (2026-09-28)
