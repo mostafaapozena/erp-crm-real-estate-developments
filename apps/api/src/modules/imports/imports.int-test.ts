@@ -17,7 +17,7 @@ import { parseCsv } from '../../platform/csv';
 import { ensureIndexes } from '../../platform/indexes';
 import { configureMongoose } from '../../platform/mongo';
 import { AUDIT_COLLECTION, AuditService } from '../audit';
-import { CrmService, LEADS_COLLECTION } from '../crm';
+import { ACTIVITIES_COLLECTION, CrmService, LEADS_COLLECTION, leadImporter } from '../crm';
 import { InventoryService, UNITS_COLLECTION } from '../inventory';
 import {
   ACCOUNT_GRANTS_COLLECTION,
@@ -142,6 +142,7 @@ describe.skipIf(!gate.available)(`import and export — ${gate.reason}`, () => {
   const PLAIN = `acc_${RUN}plain`; // no import permission
   const EXPORTER_A = `acc_${RUN}expa`; // lead and unit export, branch A, no pricing
   const PRICER_A = `acc_${RUN}pricea`; // unit export with pricing, branch A
+  const IMPORTER_A = `acc_${RUN}impa`; // lead import, branch A only
 
   const header = 'list,code,label_ar,label_en,description_ar,description_en,sort_order';
   const code = (suffix: string) => `R${RUN}${suffix}`;
@@ -199,7 +200,20 @@ describe.skipIf(!gate.available)(`import and export — ${gate.reason}`, () => {
       connection,
       audit,
       store,
-      importers: [referenceItemImporter(() => settings)],
+      importers: [
+        referenceItemImporter(() => settings),
+        leadImporter(
+          () => crm,
+          (branchCode) =>
+            Promise.resolve(
+              branchCode === 'BR-A'
+                ? { branchId: BRANCH_A, legalEntityId: `le_${RUN}` }
+                : branchCode === 'BR-B'
+                  ? { branchId: BRANCH_B, legalEntityId: `le_${RUN}` }
+                  : undefined,
+            ),
+        ),
+      ],
       exporters: [
         { kind: 'leads', permission: 'crm.lead.export', rows: (a, l) => crm.exportLeads(a, l) },
         {
@@ -239,6 +253,10 @@ describe.skipIf(!gate.available)(`import and export — ${gate.reason}`, () => {
       branchIds: [BRANCH_A],
     });
     await grant(PRICER_A, ['inventory.unit.export', 'inventory.unit.viewPricing'], {
+      level: 'branch',
+      branchIds: [BRANCH_A],
+    });
+    await grant(IMPORTER_A, ['crm.lead.import', 'crm.lead.view'], {
       level: 'branch',
       branchIds: [BRANCH_A],
     });
@@ -326,6 +344,14 @@ describe.skipIf(!gate.available)(`import and export — ${gate.reason}`, () => {
       .collection(EXPORT_RECORDS_COLLECTION)
       .deleteMany({ createdBy: { $regex: `^acc_${RUN}` } });
     await connection.collection(LEADS_COLLECTION).deleteMany({ leadId: { $regex: `_${RUN}` } });
+    const imported = await connection
+      .collection(LEADS_COLLECTION)
+      .find({ assignedToAccountId: IMPORTER_A }, { projection: { leadId: 1 } })
+      .toArray();
+    await connection
+      .collection(ACTIVITIES_COLLECTION)
+      .deleteMany({ leadId: { $in: imported.map((row) => row['leadId'] as string) } });
+    await connection.collection(LEADS_COLLECTION).deleteMany({ assignedToAccountId: IMPORTER_A });
     await connection.collection(UNITS_COLLECTION).deleteMany({ unitId: { $regex: `_${RUN}` } });
     await connection.collection(ROLES_COLLECTION).deleteMany({ key: { $regex: `^${RUN}` } });
     await connection
@@ -336,6 +362,91 @@ describe.skipIf(!gate.available)(`import and export — ${gate.reason}`, () => {
       .deleteMany({ 'actor.accountId': { $regex: `^acc_${RUN}` } });
     await connection.close();
     await rm(root, { recursive: true, force: true });
+  });
+
+  /* ========================================================== CRM-LEAD-006 */
+
+  describe('leads import (CRM-LEAD-006)', () => {
+    const leadsHeader = 'name,primary_phone,secondary_phone,email,source,branch_code,notes';
+    const uploadLeads = (accountId: string, csv: string) =>
+      request(app)
+        .post('/api/v1/imports')
+        .query({ kind: 'leads', fileName: 'leads.csv' })
+        .set(ACCOUNT_HEADER, accountId)
+        .set('Origin', ALLOWED_ORIGIN)
+        .set('Content-Type', 'application/octet-stream')
+        .send(Buffer.from(csv, 'utf8'));
+    const importedCount = () =>
+      connection.collection(LEADS_COLLECTION).countDocuments({ assignedToAccountId: IMPORTER_A });
+
+    it('refuses a phone twice in one file and an unknown branch, by row and column', async () => {
+      const csv = [
+        leadsHeader,
+        'Mona Adel,+20 122 555 0101,,,facebook,BR-A,',
+        'Mona again,+20 122 555 0101,,,website,BR-A,',
+        'Nour,+20 122 555 0102,,,referral,BR-Z,',
+        'Omar,not a phone,,,referral,BR-A,',
+      ].join('\n');
+      const preview = await uploadLeads(IMPORTER_A, csv).expect(201);
+      expect(codes(preview)).toEqual([
+        '3:primary_phone:DUPLICATE_IN_FILE',
+        '4:branch_code:UNKNOWN_BRANCH',
+        '5:primary_phone:PHONE_EXPECTED',
+      ]);
+      await commit(IMPORTER_A, preview.body.batchId as string).expect(409);
+      expect(await importedCount()).toBe(0);
+    });
+
+    it('marks a phone an open lead already holds, and commits every row owned by the importer', async () => {
+      const csv = [
+        leadsHeader,
+        'Amal Sister,+20 100 000 0000,,amal@example.test,walkIn,BR-A,met at the site office',
+        'Hany,+20 122 555 0201,,,phoneCall,BR-A,',
+      ].join('\n');
+      const preview = await uploadLeads(IMPORTER_A, csv).expect(201);
+      expect(preview.body.issues).toEqual([]);
+      expect(
+        (preview.body.preview as { possible_duplicate: string }[]).map(
+          (row) => row.possible_duplicate,
+        ),
+      ).toEqual(['yes', 'no']);
+      await commit(IMPORTER_A, preview.body.batchId as string).expect(200);
+      const stored = await connection
+        .collection(LEADS_COLLECTION)
+        .find({ assignedToAccountId: IMPORTER_A })
+        .toArray();
+      expect(stored).toHaveLength(2);
+      for (const lead of stored) {
+        expect(lead).toMatchObject({
+          stage: 'new',
+          branchId: BRANCH_A,
+          legalEntityId: `le_${RUN}`,
+        });
+      }
+      expect(
+        await connection
+          .collection(AUDIT_COLLECTION)
+          .countDocuments({ action: 'crm.lead.created', 'actor.accountId': IMPORTER_A }),
+      ).toBe(2);
+    });
+
+    it("refuses the whole file when a row's branch is outside the importer's scope", async () => {
+      const before = await importedCount();
+      const csv = [
+        leadsHeader,
+        'Rami,+20 122 555 0301,,,referral,BR-A,',
+        'Sara,+20 122 555 0302,,,referral,BR-B,',
+      ].join('\n');
+      const preview = await uploadLeads(IMPORTER_A, csv).expect(201);
+      expect(preview.body.issues).toEqual([]);
+      const refused = await commit(IMPORTER_A, preview.body.batchId as string).expect(409);
+      expect(refused.body.error.issues[0].code).toBe('BRANCH_OUTSIDE_SCOPE');
+      expect(await importedCount()).toBe(before);
+    });
+
+    it('refuses the leads importer to someone without crm.lead.import', async () => {
+      await uploadLeads(ADMIN, `${leadsHeader}\nX Y,+20 122 555 0401,,,referral,BR-A,`).expect(403);
+    });
   });
 
   /* ======================================================= CORE-IMPORT-001 */

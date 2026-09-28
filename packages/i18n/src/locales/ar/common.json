@@ -298,7 +298,14 @@
     "followUpScheduled": "متابعة مجدولة",
     "stageChanged": "تغيير المرحلة",
     "assignmentChanged": "تغيير المسؤول",
-    "converted": "تحويل إلى عميل"
+    "converted": "تحويل إلى عميل",
+    "email": "بريد إلكتروني",
+    "sms": "رسالة نصية",
+    "qualified": "تأهيل العميل المحتمل",
+    "sourceChanged": "تغيير المصدر",
+    "customerCorrected": "تصحيح بيانات العميل",
+    "ownerChanged": "نقل ملكية العميل",
+    "consentRecorded": "تسجيل موافقة التواصل"
   },
   "inventory": {
     "title": "المخزون العقاري",
@@ -804,7 +811,7 @@
     "TOO_LONG": "طويل جدًا",
     "BOTH_LANGUAGES_REQUIRED": "اكتب النص بالعربية والإنجليزية معًا",
     "SORT_ORDER_EXPECTED": "يجب أن يكون الترتيب رقمًا صحيحًا من 0 إلى 10000",
-    "DUPLICATE_IN_FILE": "هذا الرمز ورد في صف سابق من الملف",
+    "DUPLICATE_IN_FILE": "هذه القيمة مكررة في سطر سابق من الملف",
     "CODE_TAKEN": "هذا الرمز موجود بالفعل",
     "FILE_EMPTY": "الملف فارغ",
     "FILE_TOO_LARGE": "حجم الملف أكبر من 5 ميجابايت",
@@ -818,7 +825,13 @@
     "IMPORT_NOT_PENDING": "تم استيراد هذا الملف أو تجاهله من قبل",
     "STALE_VERSION": "غيّر شخص آخر هذا في الأثناء؛ أعد التحميل وحاول مرة أخرى",
     "FEATURE_DISABLED": "هذه الخاصية غير مفعّلة في هذا النظام",
-    "EXPORT_TOO_LARGE": "عدد الصفوف أكبر من أن يُصدَّر مرة واحدة"
+    "EXPORT_TOO_LARGE": "عدد الصفوف أكبر من أن يُصدَّر مرة واحدة",
+    "NAME_EXPECTED": "أدخل اسمًا من حرفين على الأقل",
+    "PHONE_EXPECTED": "رقم الهاتف غير صحيح",
+    "EMAIL_EXPECTED": "البريد الإلكتروني غير صحيح",
+    "UNKNOWN_SOURCE": "مصدر غير معروف",
+    "UNKNOWN_BRANCH": "لا يوجد فرع نشط بهذا الرمز",
+    "BRANCH_OUTSIDE_SCOPE": "يحتوي الملف على فرع خارج نطاق صلاحياتك"
   },
   "people": {
     "system": "النظام",
@@ -953,5 +966,56 @@
     "contract": "عقد",
     "confirmed": "تم التأكيد",
     "cancelled": "تم الإلغاء"
+  },
+  "customerKind": {
+    "individual": "فرد",
+    "company": "شركة"
+  },
+  "identityType": {
+    "nationalId": "الرقم القومي",
+    "passport": "جواز السفر",
+    "commercialRegistration": "السجل التجاري",
+    "taxNumber": "الرقم الضريبي"
+  },
+  "contactChannel": {
+    "phone": "مكالمة هاتفية",
+    "whatsapp": "واتساب",
+    "sms": "رسالة نصية",
+    "email": "بريد إلكتروني"
+  },
+  "consentSource": {
+    "verbal": "موافقة شفهية مسجلة",
+    "writtenForm": "نموذج مكتوب",
+    "onlineForm": "نموذج إلكتروني",
+    "import": "مستوردة"
+  },
+  "qualificationTimeframe": {
+    "immediate": "فوري",
+    "withinThreeMonths": "خلال ثلاثة أشهر",
+    "withinSixMonths": "خلال ستة أشهر",
+    "later": "لاحقًا",
+    "unknown": "غير معروف"
+  },
+  "qualificationPurpose": {
+    "residence": "سكن",
+    "investment": "استثمار",
+    "business": "نشاط تجاري",
+    "unknown": "غير معروف"
+  },
+  "decisionRole": {
+    "decisionMaker": "صاحب القرار",
+    "influencer": "مؤثر في القرار",
+    "unknown": "غير معروف"
+  },
+  "leadAgeBand": {
+    "upTo7": "حتى 7 أيام",
+    "upTo30": "من 8 إلى 30 يومًا",
+    "upTo90": "من 31 إلى 90 يومًا",
+    "over90": "أكثر من 90 يومًا"
+  },
+  "duplicateMatch": {
+    "phone": "الهاتف",
+    "email": "البريد الإلكتروني",
+    "identity": "رقم الهوية"
   }
 }

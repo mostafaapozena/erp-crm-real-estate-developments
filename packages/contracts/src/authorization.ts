@@ -156,9 +156,17 @@ export const PERMISSIONS = [
   // CRM (`CRM-*`)
   'crm.customer.view',
   'crm.customer.manage',
+  /** Reveals identity document numbers (CRM-PERSON-002). Absent without it, never masked. */
+  'crm.customer.viewIdentity',
+  /** Hand a customer to another owner, or name the owner when creating one (CRM-OWNER-001). */
+  'crm.customer.transfer',
   'crm.lead.view',
+  /** Turn a lead into a customer — the one path by which a representative creates a customer (CRM-LEAD-005). */
+  'crm.lead.convert',
   /** Take leads — names and phone numbers — out of the system as a file (CORE-IMPORT-003). */
   'crm.lead.export',
+  /** Bring leads in from a file, previewed and committed as one transaction (CRM-LEAD-006). */
+  'crm.lead.import',
   'crm.lead.create',
   'crm.lead.edit',
   /** Hand a lead to another sales owner — a manager's action, not an owner's. */
@@ -382,6 +390,7 @@ export const RESTRICTED_RESOURCES = [
   'accountGrant',
   'approvalRequest',
   'unit',
+  'customer',
 ] as const;
 export type RestrictedResource = (typeof RESTRICTED_RESOURCES)[number];
 
@@ -422,5 +431,12 @@ export const FIELD_RESTRICTIONS: Readonly<
     basePrice: 'inventory.unit.viewPricing',
     currentPrice: 'inventory.unit.viewPricing',
     pricePerSquareMeter: 'inventory.unit.viewPricing',
+  },
+  customer: {
+    /**
+     * Master Mapping §6 names identity among the protected classes. A representative confirming an
+     * appointment needs the phone number, not the national ID (CRM-PERSON-002).
+     */
+    identity: 'crm.customer.viewIdentity',
   },
 };

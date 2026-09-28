@@ -15,7 +15,7 @@ import { REDACTED } from '../logging';
 
 /** Key names whose values never appear in an audit record, at any depth. */
 const SENSITIVE_KEY_PATTERN =
-  /(password|passphrase|secret|token|apikey|api_key|credential|cookie|authorization|otp|mfa|cvv|card|iban|accountnumber|nationalid|salary|commission|balance|connectionstring|privatekey)/i;
+  /(password|passphrase|secret|token|apikey|api_key|credential|cookie|authorization|otp|mfa|cvv|card|iban|accountnumber|nationalid|identitynumber|passport|salary|commission|balance|connectionstring|privatekey)/i;
 
 const MAX_VALUE_LENGTH = 64;
 const MAX_PATHS = 200;

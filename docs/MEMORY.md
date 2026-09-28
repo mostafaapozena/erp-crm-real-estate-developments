@@ -85,7 +85,7 @@ idempotent seed extensions.
 | Package | State | Commit |
 |---|---|---|
 | 1 Scope consolidation, ADR-0032, discovery IDs, decisions, Arabic questionnaire | **complete** | the commit containing this row |
-| 2 CRM and customer completion | not started | — |
+| 2 CRM and customer completion | **complete** | `feat(crm): …` (package 2 commit) |
 | 3 Opportunities and ownership | not started | — |
 | 4 Inventory and pricing | not started | — |
 | 5 Reservations and approvals | not started | — |
@@ -112,6 +112,35 @@ idempotent seed extensions.
   `contracted` unit to `available` while its reservation or contract is live (package 4); reservation
   `holdDays` defaults to an invented 14 days although validity is BD-01 (package 5); lead creation,
   its first activity and its audit record are three separate writes (package 2).
+
+### Package 2 — CRM and customers
+
+- Contracts `packages/contracts/src/crm.ts`: customer `kind`, `alternateName`, `identity` (type,
+  number, country), `city`, preferred language and channel, `consents`, team/department, `version`;
+  correction, consent, transfer, duplicate-check and paged customer query schemas; lead
+  `currentSource`, `qualification`, `lostReasonCode`, `nurture`, `convertedAt`, `lastActivityAt`;
+  activities may belong to a lead, a customer or an opportunity; dashboard `openByAge` and
+  `untouchedOpenLeads`. New permissions `crm.customer.viewIdentity`, `crm.customer.transfer`,
+  `crm.lead.convert`, `crm.lead.import`; new field restriction `customer.identity`.
+- Module `apps/api/src/modules/crm/`: new append-only collections `crmConsents`,
+  `crmOwnershipChanges`; `importer.ts` (leads importer on CORE-IMPORT). Every new stored field is
+  optional, so demonstration records read unchanged (no kind → individual, no version → 1, legacy
+  `nationalId` → identity). **No migration was needed and none ran.**
+- Service rules worth keeping: lead create/stage/qualify/assign/convert/activity each run in one
+  transaction with their audit; an owner is refused unless active, holding the read permission, placed,
+  in the actor's scope and in the record's branch (`ASSIGNEE_*` issue codes, audited as
+  `crm.owner.assignmentRefused`); duplicate checks describe in-scope matches and only count the rest;
+  conversion refuses to link an out-of-scope customer (`CUSTOMER_OUTSIDE_SCOPE`).
+- Composition root: `describeAccount` (identity state + effective permissions + CORE-ORG placement)
+  wired into CRM; `isActiveReason` wired to settings `activeCodes`; `hasConsent` wired from
+  notifications to CRM; `OrganizationService.findBranchByCode` added for the importer.
+- Web: `useErrorMessage` now prefers `errors:issue.<CODE>` when the API names an issue; `errors.json`
+  gained an `issue` object. `scripts/i18n-merge.mjs` merges keys into both locales at once and refuses
+  one-sided keys; `scripts/set-requirement-status.mjs` sets enumerated requirement statuses.
+- Measured: typecheck (all workspaces), lint (changed areas), i18n, **unit 610 passed** (46 files),
+  CRM + imports integration **70 passed**; full integration gate **534 passed / 0 failed / 0 skipped**, 27 files (501 before).
+- Not yet done here, by design: screens (package 8), opportunities (package 3), seed extension for the
+  new permissions (the demonstration roles do not yet hold `crm.lead.convert` etc.).
 
 ## Foundation completion (post-demo master prompt) — COMPLETE, stopped at the foundation gate
 

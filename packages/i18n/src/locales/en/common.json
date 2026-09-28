@@ -298,7 +298,14 @@
     "followUpScheduled": "Follow-up scheduled",
     "stageChanged": "Stage changed",
     "assignmentChanged": "Owner changed",
-    "converted": "Converted to customer"
+    "converted": "Converted to customer",
+    "email": "E-mail",
+    "sms": "Text message",
+    "qualified": "Lead qualified",
+    "sourceChanged": "Source changed",
+    "customerCorrected": "Customer details corrected",
+    "ownerChanged": "Customer owner changed",
+    "consentRecorded": "Contact consent recorded"
   },
   "inventory": {
     "title": "Inventory",
@@ -796,7 +803,7 @@
     "TOO_LONG": "Too long",
     "BOTH_LANGUAGES_REQUIRED": "Give the text in both Arabic and English",
     "SORT_ORDER_EXPECTED": "Sort order must be a whole number from 0 to 10000",
-    "DUPLICATE_IN_FILE": "This code appears earlier in the file",
+    "DUPLICATE_IN_FILE": "This value appears earlier in the file",
     "CODE_TAKEN": "This code already exists",
     "FILE_EMPTY": "The file is empty",
     "FILE_TOO_LARGE": "The file is larger than 5 MB",
@@ -810,7 +817,13 @@
     "IMPORT_NOT_PENDING": "This file was already imported or discarded",
     "STALE_VERSION": "Someone changed this in the meantime; reload and try again",
     "FEATURE_DISABLED": "This feature is turned off for this deployment",
-    "EXPORT_TOO_LARGE": "Too many rows to export at once"
+    "EXPORT_TOO_LARGE": "Too many rows to export at once",
+    "NAME_EXPECTED": "Enter a name of at least two characters",
+    "PHONE_EXPECTED": "The phone number is not valid",
+    "EMAIL_EXPECTED": "The e-mail address is not valid",
+    "UNKNOWN_SOURCE": "Unknown source",
+    "UNKNOWN_BRANCH": "No active branch has this code",
+    "BRANCH_OUTSIDE_SCOPE": "The file names a branch outside your scope"
   },
   "people": {
     "system": "System",
@@ -945,5 +958,56 @@
     "contract": "Contract",
     "confirmed": "confirmed",
     "cancelled": "cancelled"
+  },
+  "customerKind": {
+    "individual": "Individual",
+    "company": "Company"
+  },
+  "identityType": {
+    "nationalId": "National ID",
+    "passport": "Passport",
+    "commercialRegistration": "Commercial registration",
+    "taxNumber": "Tax number"
+  },
+  "contactChannel": {
+    "phone": "Phone call",
+    "whatsapp": "WhatsApp",
+    "sms": "Text message",
+    "email": "E-mail"
+  },
+  "consentSource": {
+    "verbal": "Recorded verbal consent",
+    "writtenForm": "Written form",
+    "onlineForm": "Online form",
+    "import": "Imported"
+  },
+  "qualificationTimeframe": {
+    "immediate": "Immediate",
+    "withinThreeMonths": "Within three months",
+    "withinSixMonths": "Within six months",
+    "later": "Later",
+    "unknown": "Unknown"
+  },
+  "qualificationPurpose": {
+    "residence": "Residence",
+    "investment": "Investment",
+    "business": "Business",
+    "unknown": "Unknown"
+  },
+  "decisionRole": {
+    "decisionMaker": "Decision maker",
+    "influencer": "Influencer",
+    "unknown": "Unknown"
+  },
+  "leadAgeBand": {
+    "upTo7": "Up to 7 days",
+    "upTo30": "8 to 30 days",
+    "upTo90": "31 to 90 days",
+    "over90": "More than 90 days"
+  },
+  "duplicateMatch": {
+    "phone": "Phone",
+    "email": "E-mail",
+    "identity": "Identity number"
   }
 }

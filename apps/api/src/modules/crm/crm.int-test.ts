@@ -5,7 +5,7 @@ import {
   type Permission,
   type ScopeAssignment,
 } from '@alola/contracts';
-import { createLogger } from '@alola/security';
+import { createLogger, effectivePermissions } from '@alola/security';
 import { serviceGate } from '@alola/testing';
 import type { Express } from 'express';
 import mongoose, { type Connection } from 'mongoose';
@@ -27,10 +27,14 @@ import {
 } from '../security';
 import {
   ACTIVITIES_COLLECTION,
+  CONSENTS_COLLECTION,
   CUSTOMERS_COLLECTION,
   LEADS_COLLECTION,
+  OWNERSHIP_CHANGES_COLLECTION,
   activityModel,
+  customerModel,
   leadModel,
+  ownershipChangeModel,
 } from './model';
 import { crmRouter } from './router';
 import { CrmService } from './service';
@@ -56,6 +60,8 @@ const LEGAL_ENTITY = 'le_crmtestlegalentity00000000000001';
 const BRANCH_A = 'br_crmtestbranchaaaaaaaaaaaaaaaa001';
 const BRANCH_B = 'br_crmtestbranchbbbbbbbbbbbbbbbb002';
 const TEAM_A = 'team_crmtestteamaaaaaaaaaaaaaaa0001';
+const TEAM_B = 'team_crmtestteambbbbbbbbbbbbbbb0002';
+const DEPT_A = 'dept_crmtestdepartmentaaaaaaaaa0001';
 const PROJECT_A = 'prj_crmtestprojectaaaaaaaaaaaaa0001';
 
 /** A fixed "today", so a follow-up test does not depend on when it runs. */
@@ -77,6 +83,20 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
   const REP_ONE = `${RUN}-rep-one`;
   const REP_TWO = `${RUN}-rep-two`;
   const NO_GRANT = `${RUN}-no-grant`;
+  /** A team leader: may assign, but only inside team A. */
+  const TEAM_LEADER = `${RUN}-team-leader`;
+  const REP_TEAM_B = `${RUN}-rep-team-b`;
+  const REP_OTHER_BRANCH = `${RUN}-rep-other-branch`;
+  const REP_INACTIVE = `${RUN}-rep-inactive`;
+  const REP_UNPLACED = `${RUN}-rep-unplaced`;
+
+  /** Placements as CORE-ORG would report them; an account missing here has none. */
+  const PLACEMENTS: Record<
+    string,
+    { legalEntityId: string; branchId: string; departmentId?: string; teamId?: string }
+  > = {};
+  const INACTIVE = new Set<string>();
+  const ACTIVE_LOSS_REASONS = new Set(['priceTooHigh']);
 
   const api = () => request(app);
   const as = (accountId?: string) => {
@@ -141,6 +161,17 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
             : undefined,
         ),
       today: () => TODAY,
+      describeAccount: async (accountId) => {
+        const grants = await security.resolveActor(accountId);
+        if (!grants) return undefined;
+        const placement = PLACEMENTS[accountId];
+        return {
+          active: !INACTIVE.has(accountId),
+          permissions: effectivePermissions(grants),
+          ...(placement ? { placement } : {}),
+        };
+      },
+      isActiveReason: (_list, code) => Promise.resolve(ACTIVE_LOSS_REASONS.has(code)),
     });
 
     const managerPermissions: Permission[] = [
@@ -151,6 +182,9 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
       'crm.lead.edit',
       'crm.lead.assign',
       'crm.activity.create',
+      'crm.customer.transfer',
+      'crm.customer.viewIdentity',
+      'crm.lead.convert',
     ];
     const repPermissions: Permission[] = [
       'crm.customer.view',
@@ -158,6 +192,7 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
       'crm.lead.create',
       'crm.lead.edit',
       'crm.activity.create',
+      'crm.lead.convert',
     ];
     await bootstrapRole(connection, {
       key: R_MANAGER,
@@ -176,7 +211,14 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
       updatedBy: 'test',
     });
     // Representatives see **their own** leads: the `assigned` scope resolves to assignedToAccountId.
-    for (const accountId of [REP_ONE, REP_TWO]) {
+    for (const accountId of [
+      REP_ONE,
+      REP_TWO,
+      REP_TEAM_B,
+      REP_OTHER_BRANCH,
+      REP_INACTIVE,
+      REP_UNPLACED,
+    ]) {
       await bootstrapGrant(connection, {
         accountId,
         roleKeys: [R_REP],
@@ -184,6 +226,27 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
         updatedBy: 'test',
       });
     }
+    // The team leader holds the manager's permissions over team A only.
+    await bootstrapGrant(connection, {
+      accountId: TEAM_LEADER,
+      roleKeys: [R_MANAGER],
+      scope: scope('team', { teamIds: [TEAM_A] }),
+      updatedBy: 'test',
+    });
+    const placed = (branchId: string, teamId?: string) => ({
+      legalEntityId: LEGAL_ENTITY,
+      branchId,
+      departmentId: DEPT_A,
+      ...(teamId ? { teamId } : {}),
+    });
+    PLACEMENTS[MANAGER] = placed(BRANCH_A);
+    PLACEMENTS[TEAM_LEADER] = placed(BRANCH_A, TEAM_A);
+    PLACEMENTS[REP_ONE] = placed(BRANCH_A, TEAM_A);
+    PLACEMENTS[REP_TWO] = placed(BRANCH_A, TEAM_A);
+    PLACEMENTS[REP_TEAM_B] = placed(BRANCH_A, TEAM_B);
+    PLACEMENTS[REP_OTHER_BRANCH] = placed(BRANCH_B, TEAM_B);
+    PLACEMENTS[REP_INACTIVE] = placed(BRANCH_A, TEAM_A);
+    INACTIVE.add(REP_INACTIVE);
 
     const actorResolver: ActorResolver = async (req) => {
       const accountId = req.get(ACCOUNT_HEADER);
@@ -206,7 +269,13 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
 
   afterAll(async () => {
     if (!connection) return;
-    for (const name of [ACTIVITIES_COLLECTION, LEADS_COLLECTION, CUSTOMERS_COLLECTION]) {
+    for (const name of [
+      ACTIVITIES_COLLECTION,
+      LEADS_COLLECTION,
+      CUSTOMERS_COLLECTION,
+      CONSENTS_COLLECTION,
+      OWNERSHIP_CHANGES_COLLECTION,
+    ]) {
       await connection.collection(name).deleteMany({});
     }
     await connection.collection(ROLES_COLLECTION).deleteMany({ key: { $regex: `^${RUN}` } });
@@ -220,7 +289,13 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
   });
 
   beforeEach(async () => {
-    for (const name of [ACTIVITIES_COLLECTION, LEADS_COLLECTION, CUSTOMERS_COLLECTION]) {
+    for (const name of [
+      ACTIVITIES_COLLECTION,
+      LEADS_COLLECTION,
+      CUSTOMERS_COLLECTION,
+      CONSENTS_COLLECTION,
+      OWNERSHIP_CHANGES_COLLECTION,
+    ]) {
       await connection.collection(name).deleteMany({});
     }
   });
@@ -533,6 +608,500 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
 
       const literal = await as(MANAGER).get('/api/v1/crm/leads?search=.%2A').expect(200);
       expect(literal.body.total).toBe(0);
+    });
+  });
+
+  /* ------------------------------------------------------------ BMP-1 additions */
+
+  const context = { correlationId: `${RUN}-direct` };
+
+  async function createCustomer(
+    accountId: string,
+    overrides: Record<string, unknown> = {},
+  ): Promise<{ customerId: string; version: number; identity?: unknown }> {
+    const response = await as(accountId)
+      .post('/api/v1/crm/customers')
+      .send({ name: 'عميلة تجريبية', primaryPhone: nextPhone(), branchId: BRANCH_A, ...overrides })
+      .expect(201);
+    return response.body as { customerId: string; version: number; identity?: unknown };
+  }
+
+  describe('lead creation is one transaction (CRM-LEAD-001)', () => {
+    it('stores no lead and no activity when the audit write fails', async () => {
+      const failing = new CrmService({
+        connection,
+        audit: { record: () => Promise.reject(new Error('audit store down')) },
+        resolveBranch: () => Promise.resolve({ legalEntityId: LEGAL_ENTITY }),
+        today: () => TODAY,
+      });
+      const manager = await security.resolveActor(MANAGER);
+      const phone = nextPhone();
+      await expect(
+        failing.createLead(
+          manager!,
+          { name: 'لن تُحفظ', primaryPhone: phone, source: 'walkIn', branchId: BRANCH_A },
+          context,
+          { mayAssign: false },
+        ),
+      ).rejects.toThrow(/audit store down/);
+      expect(await leadModel(connection).countDocuments({ primaryPhone: phone })).toBe(0);
+      expect(await activityModel(connection).countDocuments({})).toBe(0);
+    });
+  });
+
+  describe('assignment eligibility (CRM-ASSIGN-001)', () => {
+    const refusals: [string, string][] = [
+      ['an inactive account', 'ASSIGNEE_INACTIVE'],
+      ['an account that cannot read leads', 'ASSIGNEE_CANNOT_SEE_RECORD'],
+      ['an account with no placement', 'ASSIGNEE_NOT_PLACED'],
+      ['a colleague in another branch', 'ASSIGNEE_OUTSIDE_BRANCH'],
+    ];
+    const target = (issue: string) =>
+      ({
+        ASSIGNEE_INACTIVE: REP_INACTIVE,
+        ASSIGNEE_CANNOT_SEE_RECORD: NO_GRANT,
+        ASSIGNEE_NOT_PLACED: REP_UNPLACED,
+        ASSIGNEE_OUTSIDE_BRANCH: REP_OTHER_BRANCH,
+      })[issue] as string;
+
+    it.each(refusals)(
+      'refuses to hand a lead to %s, audits it, and leaves the lead alone',
+      async (_label, issue) => {
+        if (issue === 'ASSIGNEE_CANNOT_SEE_RECORD') {
+          PLACEMENTS[NO_GRANT] = { legalEntityId: LEGAL_ENTITY, branchId: BRANCH_A };
+          await bootstrapGrant(connection, {
+            accountId: NO_GRANT,
+            roleKeys: [],
+            scope: scope('all'),
+            updatedBy: 'test',
+          });
+        }
+        const { lead } = await createLead(MANAGER, { assignedToAccountId: REP_ONE });
+        const refused = await as(MANAGER)
+          .post(`/api/v1/crm/leads/${lead.leadId}/assign`)
+          .send({ assignedToAccountId: target(issue), reason: 'rebalancing the queue' })
+          .expect(409);
+        expect(refused.body.error.issues[0].code).toBe(issue);
+        const stored = await leadModel(connection).findOne({ leadId: lead.leadId }).lean().exec();
+        expect(stored?.assignedToAccountId).toBe(REP_ONE);
+        const denied = await connection.collection(AUDIT_COLLECTION).countDocuments({
+          action: CRM_AUDIT_ACTIONS.ownerAssignmentRefused,
+          'target.id': lead.leadId,
+        });
+        expect(denied).toBe(1);
+      },
+    );
+
+    it('refuses to name an ineligible owner on creation, storing nothing', async () => {
+      const phone = nextPhone();
+      const response = await as(MANAGER)
+        .post('/api/v1/crm/leads')
+        .send({
+          name: 'عميل محتمل',
+          primaryPhone: phone,
+          source: 'walkIn',
+          branchId: BRANCH_A,
+          assignedToAccountId: REP_INACTIVE,
+        })
+        .expect(409);
+      expect(response.body.error.issues[0].code).toBe('ASSIGNEE_INACTIVE');
+      expect(await leadModel(connection).countDocuments({ primaryPhone: phone })).toBe(0);
+    });
+
+    it("keeps a team leader's hand-offs inside the team", async () => {
+      const { lead } = await createLead(TEAM_LEADER, { assignedToAccountId: REP_ONE });
+      const refused = await as(TEAM_LEADER)
+        .post(`/api/v1/crm/leads/${lead.leadId}/assign`)
+        .send({ assignedToAccountId: REP_TEAM_B, reason: 'moving it to team B' })
+        .expect(409);
+      expect(refused.body.error.issues[0].code).toBe('ASSIGNEE_OUTSIDE_SCOPE');
+      await as(TEAM_LEADER)
+        .post(`/api/v1/crm/leads/${lead.leadId}/assign`)
+        .send({ assignedToAccountId: REP_TWO, reason: 'REP_ONE is on leave' })
+        .expect(200);
+    });
+
+    it('moves the lead to the new owner’s team and keeps the ownership history', async () => {
+      const { lead } = await createLead(MANAGER, { assignedToAccountId: REP_ONE });
+      const moved = await as(MANAGER)
+        .post(`/api/v1/crm/leads/${lead.leadId}/assign`)
+        .send({ assignedToAccountId: REP_TEAM_B, reason: 'team B covers this project' })
+        .expect(200);
+      expect(moved.body.teamId).toBe(TEAM_B);
+      const history = await as(MANAGER)
+        .get(`/api/v1/crm/leads/${lead.leadId}/ownership`)
+        .expect(200);
+      const changes = history.body.items as { fromAccountId?: string; toAccountId: string }[];
+      expect(changes[0]).toMatchObject({ fromAccountId: REP_ONE, toAccountId: REP_TEAM_B });
+      expect(changes.at(-1)).toMatchObject({ toAccountId: REP_ONE });
+      await expect(
+        ownershipChangeModel(connection).updateMany({}, { $set: { reason: 'x' } }),
+      ).rejects.toThrow(/append-only/);
+    });
+  });
+
+  describe('duplicate reporting stays inside the scope (CRM-LEAD-003)', () => {
+    it("counts a colleague's lead with the same phone without describing it", async () => {
+      const phone = nextPhone();
+      await createLead(MANAGER, { primaryPhone: phone, assignedToAccountId: REP_TWO });
+      const mine = await createLead(REP_ONE, { primaryPhone: phone });
+      expect(mine.possibleDuplicate).toBeUndefined();
+      expect((mine as unknown as { outOfScopeMatches: number }).outOfScopeMatches).toBe(1);
+    });
+
+    it('matches a lead by e-mail regardless of letter case', async () => {
+      await createLead(MANAGER, { email: 'Buyer.One@example.test' });
+      const second = (await createLead(MANAGER, {
+        email: 'buyer.one@EXAMPLE.test',
+      })) as unknown as {
+        possibleDuplicate?: { matchedOn: string[] };
+      };
+      expect(second.possibleDuplicate?.matchedOn).toEqual(['email']);
+    });
+
+    it('reports an existing customer with the same phone', async () => {
+      const phone = nextPhone();
+      const customer = await createCustomer(MANAGER, { primaryPhone: phone });
+      const lead = (await createLead(MANAGER, { primaryPhone: phone })) as unknown as {
+        existingCustomer?: { customerId: string };
+      };
+      expect(lead.existingCustomer?.customerId).toBe(customer.customerId);
+    });
+  });
+
+  describe('customers (CRM-PERSON-001 … 006)', () => {
+    it('hides the identity from anyone without crm.customer.viewIdentity, on read and list', async () => {
+      const created = await createCustomer(MANAGER, {
+        ownerAccountId: REP_ONE,
+        identity: { type: 'nationalId', number: '29001011234567' },
+      });
+      expect(created.identity).toEqual({ type: 'nationalId', number: '29001011234567' });
+      const repRead = await as(REP_ONE)
+        .get(`/api/v1/crm/customers/${created.customerId}`)
+        .expect(200);
+      expect(repRead.body).not.toHaveProperty('identity');
+      const repList = await as(REP_ONE).get('/api/v1/crm/customers').expect(200);
+      for (const item of repList.body.items as Record<string, unknown>[]) {
+        expect(item).not.toHaveProperty('identity');
+      }
+    });
+
+    it('refuses to let someone write an identity they may not read', async () => {
+      await bootstrapRole(connection, {
+        key: `${RUN}-r-clerk`,
+        name: label('customer clerk'),
+        permissions: ['crm.customer.view', 'crm.customer.manage'],
+      });
+      const CLERK = `${RUN}-clerk`;
+      await bootstrapGrant(connection, {
+        accountId: CLERK,
+        roleKeys: [`${RUN}-r-clerk`],
+        scope: scope('all'),
+        updatedBy: 'test',
+      });
+      const phone = nextPhone();
+      await as(CLERK)
+        .post('/api/v1/crm/customers')
+        .send({
+          name: 'عميل',
+          primaryPhone: phone,
+          branchId: BRANCH_A,
+          identity: { type: 'passport', number: 'A1234567', issuingCountry: 'EG' },
+        })
+        .expect(403);
+      expect(await customerModel(connection).countDocuments({ primaryPhone: phone })).toBe(0);
+    });
+
+    it('never writes a phone number or identity into the audit record of a correction', async () => {
+      const created = await createCustomer(MANAGER, {
+        identity: { type: 'nationalId', number: '29001011234567' },
+      });
+      const newPhone = '+20 111 222 3334';
+      await as(MANAGER)
+        .patch(`/api/v1/crm/customers/${created.customerId}`)
+        .send({
+          primaryPhone: newPhone,
+          identity: { type: 'nationalId', number: '29001017654321' },
+          reason: 'customer brought a new card',
+          expectedVersion: created.version,
+        })
+        .expect(200);
+      const events = await connection
+        .collection(AUDIT_COLLECTION)
+        .find({ action: CRM_AUDIT_ACTIONS.customerCorrected, 'target.id': created.customerId })
+        .toArray();
+      expect(events).toHaveLength(1);
+      const text = JSON.stringify(events[0]);
+      expect(text).not.toContain('2223334');
+      expect(text).not.toContain('29001017654321');
+      expect(text).not.toContain('29001011234567');
+    });
+
+    it('refuses a correction built on a stale version, and one with nothing to change', async () => {
+      const created = await createCustomer(MANAGER);
+      await as(MANAGER)
+        .patch(`/api/v1/crm/customers/${created.customerId}`)
+        .send({ city: 'الجيزة', reason: 'moved', expectedVersion: created.version })
+        .expect(200);
+      const stale = await as(MANAGER)
+        .patch(`/api/v1/crm/customers/${created.customerId}`)
+        .send({ city: 'طنطا', reason: 'moved again', expectedVersion: created.version })
+        .expect(409);
+      expect(stale.body.error.issues[0].code).toBe('STALE_VERSION');
+      await as(MANAGER)
+        .patch(`/api/v1/crm/customers/${created.customerId}`)
+        .send({ city: 'الجيزة', reason: 'no change', expectedVersion: created.version + 1 })
+        .expect(400);
+    });
+
+    it('corrects a record written before BMP-1 (no version, legacy national ID)', async () => {
+      const legacyId = 'cus_legacycustomerwithnoversion01';
+      await connection.collection(CUSTOMERS_COLLECTION).insertOne({
+        customerId: legacyId,
+        name: 'عميل قديم',
+        primaryPhone: nextPhone(),
+        primaryPhoneDigits: `9${Date.now()}`,
+        nationalId: 'DEMO-NID-0001',
+        legalEntityId: LEGAL_ENTITY,
+        branchId: BRANCH_A,
+        ownerAccountId: MANAGER,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const read = await as(MANAGER).get(`/api/v1/crm/customers/${legacyId}`).expect(200);
+      expect(read.body).toMatchObject({
+        kind: 'individual',
+        version: 1,
+        identity: { type: 'nationalId', number: 'DEMO-NID-0001' },
+      });
+      const corrected = await as(MANAGER)
+        .patch(`/api/v1/crm/customers/${legacyId}`)
+        .send({ kind: 'company', reason: 'registered as a company', expectedVersion: 1 })
+        .expect(200);
+      expect(corrected.body.version).toBe(2);
+    });
+
+    it('keeps consent as a history and reports the latest statement per channel', async () => {
+      const created = await createCustomer(MANAGER);
+      await as(MANAGER)
+        .post(`/api/v1/crm/customers/${created.customerId}/consents`)
+        .send({ channel: 'whatsapp', granted: true, source: 'writtenForm' })
+        .expect(201);
+      expect(await crm.hasConsent(created.customerId, 'whatsapp')).toBe(true);
+      const withdrawn = await as(MANAGER)
+        .post(`/api/v1/crm/customers/${created.customerId}/consents`)
+        .send({ channel: 'whatsapp', granted: false, source: 'verbal' })
+        .expect(201);
+      expect(withdrawn.body.consents).toEqual([
+        expect.objectContaining({ channel: 'whatsapp', granted: false, source: 'verbal' }),
+      ]);
+      expect(await crm.hasConsent(created.customerId, 'whatsapp')).toBe(false);
+      expect(await crm.hasConsent(created.customerId, 'sms')).toBe(false);
+    });
+
+    it('transfers a customer to an eligible colleague and refuses an ineligible one', async () => {
+      const created = await createCustomer(MANAGER, { ownerAccountId: REP_ONE });
+      const refused = await as(MANAGER)
+        .post(`/api/v1/crm/customers/${created.customerId}/transfer`)
+        .send({ toAccountId: REP_OTHER_BRANCH, reason: 'moving branches' })
+        .expect(409);
+      expect(refused.body.error.issues[0].code).toBe('ASSIGNEE_OUTSIDE_BRANCH');
+      const moved = await as(MANAGER)
+        .post(`/api/v1/crm/customers/${created.customerId}/transfer`)
+        .send({ toAccountId: REP_TEAM_B, reason: 'REP_ONE left the company' })
+        .expect(200);
+      expect(moved.body).toMatchObject({ ownerAccountId: REP_TEAM_B, teamId: TEAM_B });
+      // The previous owner no longer sees the customer; the new one does.
+      await as(REP_ONE).get(`/api/v1/crm/customers/${created.customerId}`).expect(404);
+      await as(REP_TEAM_B).get(`/api/v1/crm/customers/${created.customerId}`).expect(200);
+      const history = await as(MANAGER)
+        .get(`/api/v1/crm/customers/${created.customerId}/ownership`)
+        .expect(200);
+      expect(history.body.items[0]).toMatchObject({
+        fromAccountId: REP_ONE,
+        toAccountId: REP_TEAM_B,
+      });
+    });
+
+    it('lists duplicates inside the scope and only counts those outside it', async () => {
+      const email = `shared-${Date.now()}@example.test`;
+      await createCustomer(MANAGER, { ownerAccountId: REP_ONE, email });
+      await createCustomer(MANAGER, { ownerAccountId: REP_TWO, email });
+      const check = await as(REP_ONE)
+        .post('/api/v1/crm/customers/duplicate-check')
+        .send({ email: email.toUpperCase(), branchId: BRANCH_A })
+        .expect(200);
+      expect(check.body.candidates).toHaveLength(1);
+      expect(check.body.outOfScopeMatches).toBe(1);
+      const managerCheck = await as(MANAGER)
+        .post('/api/v1/crm/customers/duplicate-check')
+        .send({ email, branchId: BRANCH_A })
+        .expect(200);
+      expect(managerCheck.body.candidates).toHaveLength(2);
+      expect(managerCheck.body.candidates[0].matchedOn).toEqual(['email']);
+    });
+
+    it('pages customers by name with a total that obeys the scope', async () => {
+      for (const name of ['أحمد', 'باسم', 'تامر']) {
+        await createCustomer(MANAGER, { name: `${name} عميل`, ownerAccountId: REP_ONE });
+      }
+      await createCustomer(MANAGER, {
+        name: 'ثابت عميل',
+        ownerAccountId: REP_TWO,
+        kind: 'company',
+      });
+      const first = await as(REP_ONE).get('/api/v1/crm/customers?limit=2').expect(200);
+      expect(first.body.total).toBe(3);
+      expect(first.body.items).toHaveLength(2);
+      const second = await as(REP_ONE)
+        .get(`/api/v1/crm/customers?limit=2&cursor=${first.body.nextCursor as string}`)
+        .expect(200);
+      expect(second.body.items).toHaveLength(1);
+      expect(second.body.nextCursor).toBeUndefined();
+      const companies = await as(MANAGER).get('/api/v1/crm/customers?kind=company').expect(200);
+      expect(companies.body.total).toBe(1);
+    });
+  });
+
+  describe('qualification and loss (CRM-LEAD-004, CRM-LOSS-001)', () => {
+    it('records a qualification and moves a new lead to qualified', async () => {
+      const { lead } = await createLead(REP_ONE);
+      const qualified = await as(REP_ONE)
+        .post(`/api/v1/crm/leads/${lead.leadId}/qualify`)
+        .send({
+          budgetConfirmed: true,
+          timeframe: 'withinThreeMonths',
+          purpose: 'residence',
+          decisionRole: 'decisionMaker',
+        })
+        .expect(200);
+      expect(qualified.body.stage).toBe('qualified');
+      expect(qualified.body.qualification).toMatchObject({
+        budgetConfirmed: true,
+        qualifiedBy: REP_ONE,
+      });
+    });
+
+    it('accepts an active loss reason, refuses an unknown one, and keeps a nurture flag', async () => {
+      const { lead } = await createLead(REP_ONE);
+      const refused = await as(REP_ONE)
+        .post(`/api/v1/crm/leads/${lead.leadId}/stage`)
+        .send({ stage: 'lost', reason: 'too expensive', reasonCode: 'invented' })
+        .expect(400);
+      expect(refused.body.error.issues[0].code).toBe('REASON_CODE_UNKNOWN');
+      const lost = await as(REP_ONE)
+        .post(`/api/v1/crm/leads/${lead.leadId}/stage`)
+        .send({ stage: 'lost', reason: 'too expensive', reasonCode: 'priceTooHigh', nurture: true })
+        .expect(200);
+      expect(lost.body).toMatchObject({ lostReasonCode: 'priceTooHigh', nurture: true });
+      const nurture = await as(REP_ONE).get('/api/v1/crm/leads?nurture=true').expect(200);
+      expect(nurture.body.total).toBe(1);
+    });
+
+    it('keeps the original source and records a re-credit on the timeline', async () => {
+      const { lead } = await createLead(REP_ONE, { source: 'facebook' });
+      const updated = await as(REP_ONE)
+        .patch(`/api/v1/crm/leads/${lead.leadId}`)
+        .send({ currentSource: 'referral' })
+        .expect(200);
+      expect(updated.body).toMatchObject({ source: 'facebook', currentSource: 'referral' });
+      const activities = await as(REP_ONE)
+        .get(`/api/v1/crm/leads/${lead.leadId}/activities`)
+        .expect(200);
+      expect(activities.body.items[0]).toMatchObject({
+        kind: 'sourceChanged',
+        fromStage: 'facebook',
+        toStage: 'referral',
+      });
+    });
+  });
+
+  describe('conversion (CRM-LEAD-005)', () => {
+    it('lets a representative make their lead a customer they own, idempotently', async () => {
+      const { lead } = await createLead(REP_ONE);
+      const first = await as(REP_ONE).post(`/api/v1/crm/leads/${lead.leadId}/convert`).expect(200);
+      expect(first.body.customerCreated).toBe(true);
+      expect(first.body.customer.ownerAccountId).toBe(REP_ONE);
+      expect(first.body.lead.customerId).toBe(first.body.customer.customerId);
+      const again = await as(REP_ONE).post(`/api/v1/crm/leads/${lead.leadId}/convert`).expect(200);
+      expect(again.body.customerCreated).toBe(false);
+      expect(again.body.customer.customerId).toBe(first.body.customer.customerId);
+      expect(await customerModel(connection).countDocuments({})).toBe(1);
+    });
+
+    it('links a lead to the visible customer who already has its phone', async () => {
+      const phone = nextPhone();
+      const customer = await createCustomer(MANAGER, {
+        primaryPhone: phone,
+        ownerAccountId: REP_ONE,
+      });
+      const { lead } = await createLead(REP_ONE, { primaryPhone: phone });
+      const converted = await as(REP_ONE)
+        .post(`/api/v1/crm/leads/${lead.leadId}/convert`)
+        .expect(200);
+      expect(converted.body).toMatchObject({ customerCreated: false });
+      expect(converted.body.customer.customerId).toBe(customer.customerId);
+    });
+
+    it("refuses to link a lead to a customer outside the representative's scope, describing nothing", async () => {
+      const phone = nextPhone();
+      await createCustomer(MANAGER, { primaryPhone: phone, ownerAccountId: REP_TWO, name: 'سر' });
+      const { lead } = await createLead(REP_ONE, { primaryPhone: phone });
+      const refused = await as(REP_ONE)
+        .post(`/api/v1/crm/leads/${lead.leadId}/convert`)
+        .expect(409);
+      expect(refused.body.error.issues[0].code).toBe('CUSTOMER_OUTSIDE_SCOPE');
+      expect(JSON.stringify(refused.body)).not.toContain('سر');
+      const stored = await leadModel(connection).findOne({ leadId: lead.leadId }).lean().exec();
+      expect(stored?.customerId).toBeUndefined();
+    });
+
+    it('refuses to convert a lost lead', async () => {
+      const { lead } = await createLead(REP_ONE);
+      await as(REP_ONE)
+        .post(`/api/v1/crm/leads/${lead.leadId}/stage`)
+        .send({ stage: 'lost', reason: 'bought elsewhere' })
+        .expect(200);
+      await as(REP_ONE).post(`/api/v1/crm/leads/${lead.leadId}/convert`).expect(409);
+    });
+  });
+
+  describe('customer timeline and dashboard ageing (CRM-ACTIVITY-001, CRM-REPORT-001)', () => {
+    it('records activities on a customer and keeps them to those who can see it', async () => {
+      const created = await createCustomer(MANAGER, { ownerAccountId: REP_ONE });
+      await as(REP_ONE)
+        .post(`/api/v1/crm/customers/${created.customerId}/activities`)
+        .send({ kind: 'call', body: 'مكالمة متابعة' })
+        .expect(201);
+      const timeline = await as(REP_ONE)
+        .get(`/api/v1/crm/customers/${created.customerId}/activities`)
+        .expect(200);
+      expect(timeline.body.items[0]).toMatchObject({
+        kind: 'call',
+        customerId: created.customerId,
+      });
+      await as(REP_TWO).get(`/api/v1/crm/customers/${created.customerId}/activities`).expect(404);
+    });
+
+    it('bands open leads by age and counts those never touched', async () => {
+      const { lead: fresh } = await createLead(REP_ONE);
+      const { lead: old } = await createLead(REP_ONE);
+      await leadModel(connection).collection.updateOne(
+        { leadId: old.leadId },
+        {
+          $set: {
+            createdAt: new Date(Date.now() - 45 * 86_400_000),
+            lastActivityAt: new Date(Date.now() - 45 * 86_400_000),
+          },
+        },
+      );
+      await as(REP_ONE)
+        .post(`/api/v1/crm/leads/${fresh.leadId}/activities`)
+        .send({ kind: 'call' })
+        .expect(201);
+      const dashboard = await as(REP_ONE).get('/api/v1/crm/dashboard').expect(200);
+      expect(dashboard.body.openByAge).toEqual({ upTo7: 1, upTo30: 0, upTo90: 1, over90: 0 });
+      expect(dashboard.body.untouchedOpenLeads).toBe(1);
     });
   });
 });

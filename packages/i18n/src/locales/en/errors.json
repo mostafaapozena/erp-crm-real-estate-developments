@@ -13,5 +13,25 @@
   "SERVICE_NOT_CONFIGURED": "This service is not configured in the current environment.",
   "SERVICE_UNAVAILABLE": "The service is temporarily unavailable.",
   "INTERNAL_ERROR": "An unexpected error occurred.",
-  "NETWORK_ERROR": "Could not reach the server. Check the connection and try again."
+  "NETWORK_ERROR": "Could not reach the server. Check the connection and try again.",
+  "issue": {
+    "STALE_VERSION": "This data changed after it was loaded. Reload and try again.",
+    "NOTHING_TO_CHANGE": "Nothing changed to save.",
+    "ALREADY_OWNER": "This person is already the owner.",
+    "ASSIGNEE_UNKNOWN": "Work cannot be assigned to this account.",
+    "ASSIGNEE_INACTIVE": "This colleague's account is not active.",
+    "ASSIGNEE_CANNOT_SEE_RECORD": "This colleague is not permitted to see this record.",
+    "ASSIGNEE_NOT_PLACED": "This colleague has no place in the organization structure.",
+    "ASSIGNEE_OUTSIDE_SCOPE": "This colleague is outside your scope.",
+    "ASSIGNEE_OUTSIDE_BRANCH": "This colleague works in another branch.",
+    "DUPLICATE_CUSTOMER_PHONE": "A customer with this phone number already exists.",
+    "CUSTOMER_OUTSIDE_SCOPE": "A matching customer exists outside your scope. Ask your manager for help.",
+    "LEAD_LOST": "A lead closed as lost cannot be converted.",
+    "LEAD_CONCLUDED": "This lead is closed.",
+    "REASON_CODE_UNKNOWN": "The selected loss reason is not available.",
+    "REASON_CODE_ONLY_FOR_LOST": "A loss reason is used only when closing a lead as lost.",
+    "NOTHING_TO_CHECK": "Enter a phone number, e-mail or identity number to check.",
+    "BRANCH_OUTSIDE_SCOPE": "The file names a branch outside your scope.",
+    "UNKNOWN_BRANCH": "No active branch has this code."
+  }
 }

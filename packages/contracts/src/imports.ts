@@ -16,9 +16,23 @@ import { InstantSchema } from './time';
  */
 
 /** What can be imported. Each kind is an importer registered at the composition root. */
-export const IMPORT_KINDS = ['referenceItems'] as const;
+export const IMPORT_KINDS = ['referenceItems', 'leads'] as const;
 export const ImportKindSchema = z.enum(IMPORT_KINDS);
 export type ImportKind = z.infer<typeof ImportKindSchema>;
+
+/**
+ * The leads file's columns, in order (CRM-LEAD-006). Every imported lead is owned by the person who
+ * imports it; handing leads out is a separate, audited assignment.
+ */
+export const LEAD_IMPORT_COLUMNS = [
+  { name: 'name', required: true },
+  { name: 'primary_phone', required: true },
+  { name: 'secondary_phone', required: false },
+  { name: 'email', required: false },
+  { name: 'source', required: true },
+  { name: 'branch_code', required: true },
+  { name: 'notes', required: false },
+] as const;
 
 /** The reference-items file's columns, in order. Header names match case-insensitively. */
 export const REFERENCE_IMPORT_COLUMNS = [

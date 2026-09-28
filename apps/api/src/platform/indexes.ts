@@ -14,7 +14,13 @@ import {
   companyProfileModel,
   companyProfileRevisionModel,
 } from '../modules/company/model';
-import { activityModel, customerModel, leadModel } from '../modules/crm/model';
+import {
+  activityModel,
+  consentModel,
+  customerModel,
+  leadModel,
+  ownershipChangeModel,
+} from '../modules/crm/model';
 import {
   accountModel,
   accountTokenModel,
@@ -93,6 +99,8 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     customerModel(connection),
     leadModel(connection),
     activityModel(connection),
+    consentModel(connection),
+    ownershipChangeModel(connection),
     reservationModel(connection),
     contractModel(connection),
     installmentModel(connection),

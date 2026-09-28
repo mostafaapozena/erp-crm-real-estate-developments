@@ -703,27 +703,27 @@ one: it builds the configurable policy, stores *not configured* by default, and 
 | INV-SEARCH-001 | Scoped unit search and filtering by project, building, type, usage, status, floor, area and price (price filters only with price visibility) | BMP-1 | — | approved |
 | INV-SEARCH-002 | Availability matrix: building × floor grid of unit statuses, scoped | BMP-1 | — | approved |
 | INV-SEARCH-003 | Unit comparison of up to four units, field-restricted | BMP-1 | — | approved |
-| CRM-PERSON-001 | Customer as individual or company; entered name with optional name in the other script; normalized phones and e-mail | BMP-1 | — | approved |
-| CRM-PERSON-002 | Identity (national ID, passport, commercial registration, tax number) held as a field restriction: absent from every payload without the permission, never logged, redacted in audit | BMP-1 | `BD-34` | approved |
-| CRM-PERSON-003 | Address, preferred language and channel, and per-channel consent with its source and date | BMP-1 | `SD-09` | approved |
-| CRM-PERSON-004 | Customer detail: leads, opportunities, reservations, contracts, instalment and receipt summaries, documents, activities, owner, history — each part under its own permission and scope | BMP-1 | — | approved |
-| CRM-PERSON-005 | Correction workflow: an edit states a reason and the version it read, and is audited with a redacted change summary | BMP-1 | — | approved |
-| CRM-PERSON-006 | Duplicate candidates by normalized phone, e-mail and identifier; merge is recorded as a request and **not executed** until its rule is decided | BMP-1 | `BD-26` | approved |
-| CRM-LEAD-001 | Manual lead entry: lead, first activity and audit record in one transaction | BMP-1 | — | approved |
-| CRM-LEAD-002 | Source and campaign attribution: the original source is immutable; the current source may change and is recorded | BMP-1 | — | approved |
-| CRM-LEAD-003 | Duplicate detection on lead entry by normalized phone, e-mail and identifier, reported as a warning | BMP-1 | `BD-26` | approved |
-| CRM-LEAD-004 | Qualification record (budget, timeframe, need, decision role) and disqualification with a reason from reference data | BMP-1 | — | approved |
-| CRM-LEAD-005 | Conversion of a lead to a customer and to an opportunity, idempotent, keeping the lead as history | BMP-1 | — | approved |
-| CRM-LEAD-006 | Lead import through `CORE-IMPORT` with preview, per-row errors and duplicate warnings | BMP-1 | — | approved |
+| CRM-PERSON-001 | Customer as individual or company; entered name with optional name in the other script; normalized phones and e-mail | BMP-1 | — | implemented |
+| CRM-PERSON-002 | Identity (national ID, passport, commercial registration, tax number) held as a field restriction: absent from every payload without the permission, never logged, redacted in audit | BMP-1 | `BD-34` | implemented |
+| CRM-PERSON-003 | Address, preferred language and channel, and per-channel consent with its source and date | BMP-1 | `SD-09` | implemented |
+| CRM-PERSON-004 | Customer detail: leads, opportunities, reservations, contracts, instalment and receipt summaries, documents, activities, owner, history — each part under its own permission and scope | BMP-1 | — | in-progress |
+| CRM-PERSON-005 | Correction workflow: an edit states a reason and the version it read, and is audited with a redacted change summary | BMP-1 | — | implemented |
+| CRM-PERSON-006 | Duplicate candidates by normalized phone, e-mail and identifier, described inside the actor's scope and only counted outside it; merge is **not executed** until its rule is decided | BMP-1 | `BD-26` | implemented |
+| CRM-LEAD-001 | Manual lead entry: lead, first activity and audit record in one transaction | BMP-1 | — | implemented |
+| CRM-LEAD-002 | Source and campaign attribution: the original source is immutable; the current source may change and is recorded | BMP-1 | — | implemented |
+| CRM-LEAD-003 | Duplicate detection on lead entry by normalized phone and e-mail, against open leads and existing customers, reported as a warning inside the creator's scope and counted outside it | BMP-1 | `BD-26` | implemented |
+| CRM-LEAD-004 | Qualification record (budget, timeframe, need, decision role) and disqualification with a reason from reference data | BMP-1 | — | implemented |
+| CRM-LEAD-005 | Conversion of a lead to a customer and to an opportunity, idempotent, keeping the lead as history | BMP-1 | — | in-progress |
+| CRM-LEAD-006 | Lead import through `CORE-IMPORT` with preview, per-row errors and duplicate warnings | BMP-1 | — | in-progress |
 | CRM-PIPE-001 | Controlled stage transitions for leads and opportunities with append-only stage history; terminal stages require a reason | BMP-1 | `BD-27` | approved |
-| CRM-ASSIGN-001 | Manual assignment only to an active account holding the relevant permission and inside the assigner's scope, with reason and history | BMP-1 | `BD-25` | approved |
+| CRM-ASSIGN-001 | Manual assignment only to an active account holding the relevant permission and inside the assigner's scope, with reason and history | BMP-1 | `BD-25` | implemented |
 | CRM-ASSIGN-002 | Round-robin and rule-based assignment with absence handling | BMP-1 | `SD-04`, `BD-25` | blocked |
-| CRM-OWNER-001 | Ownership transfer of customers and opportunities with reason, append-only history and audit | BMP-1 | — | approved |
+| CRM-OWNER-001 | Ownership transfer of customers and opportunities with reason, append-only history and audit | BMP-1 | — | in-progress |
 | CRM-OWNER-002 | Ownership retention by meaningful activity, and ownership disputes | BMP-1 | `SD-04`, `BD-28` | blocked |
-| CRM-ACTIVITY-001 | Calls, messages, meetings, visits and notes on leads, customers and opportunities; follow-ups; tasks linked through `CORE-TASK` | BMP-1 | — | approved |
+| CRM-ACTIVITY-001 | Calls, messages, meetings, visits and notes on leads, customers and opportunities; follow-ups; tasks linked through `CORE-TASK` | BMP-1 | — | in-progress |
 | CRM-MATCH-001 | Requirement-to-unit matching: available units in scope matching project, type and budget (budget matching only with price visibility) | BMP-1 | — | approved |
-| CRM-LOSS-001 | Lost, disqualified and on-hold reasons from reference data; a nurture flag | BMP-1 | — | approved |
-| CRM-REPORT-001 | Pipeline, conversion, ageing and owner performance computed inside the actor's scope | BMP-1 | — | approved |
+| CRM-LOSS-001 | Lost, disqualified and on-hold reasons from reference data; a nurture flag | BMP-1 | — | implemented |
+| CRM-REPORT-001 | Pipeline, conversion, ageing and owner performance computed inside the actor's scope | BMP-1 | — | in-progress |
 | CRM-OPP-001 | Opportunity as its own aggregate — several per customer — with target project, unit type, budget, expected value, expected close date and owner; probability only when configured per stage | BMP-1 | `BD-27` | approved |
 | CRM-OPP-002 | Opportunity won/lost outcome with reason, stage history, and conversion into a reservation | BMP-1 | — | approved |
 | SALE-QUOTE-001 | Quotation versions from the unit's effective price and a plan, with validity; a quotation never reserves inventory | BMP-1 | `BD-36` | approved |
@@ -750,6 +750,32 @@ one: it builds the configurable policy, stores *not configured* by default, and 
 `CORE-DOC-003` and `CORE-DOC-005` (Phase 1 rows above) are delivered inside BMP-1 with this scope:
 reservation form, quotation, contract, payment schedule, amendment, cancellation form and approval
 record, in Arabic and English, with QR verification by an opaque reference.
+
+### Implementation evidence — BMP-1 package 2, CRM and customers (2026-09-29)
+
+Tests: `apps/api/src/modules/crm/crm.int-test.ts` (real MongoDB), `crm/eligibility.test.ts`,
+`imports/imports.int-test.ts` §"leads import". A row marked `in-progress` has its API built and tested
+and waits for its screen (package 8) or for opportunities (package 3).
+
+| ID | Evidence |
+|---|---|
+| CRM-PERSON-001 | Customer `kind`, `alternateName`, normalized phone and e-mail; records without a kind read as individuals |
+| CRM-PERSON-002 | `customer.identity` field restriction (`crm.customer.viewIdentity`): absent on read and list; writing it without the permission is 403 and stores nothing; identity numbers redacted from logs and audit summaries |
+| CRM-PERSON-003 | `crmConsents` append-only; latest per channel in force; wired to `CORE-NOTIFY`'s `hasConsent` |
+| CRM-PERSON-004 | in progress — related reads exist (leads by customer, reservations/contracts by customer, customer financial summary, documents by owner, customer timeline, ownership history); the detail screen is package 8 |
+| CRM-PERSON-005 | Correction needs a reason and the version read; stale → `STALE_VERSION`; audit records that phone/identity changed, never the values; a legacy record (no version, legacy national ID) is corrected at version 1 |
+| CRM-PERSON-006 | Candidates in scope listed, out of scope counted; e-mail matched case-insensitively |
+| CRM-LEAD-001 | Lead, first activity and audit in one transaction: a failing audit store leaves no lead and no activity |
+| CRM-LEAD-002 | `source` immutable; `currentSource` re-credit recorded as a `sourceChanged` activity |
+| CRM-LEAD-003 | A colleague's matching lead is counted, not described; e-mail and existing-customer matches reported |
+| CRM-LEAD-004 | `POST /crm/leads/{id}/qualify`; moves to `qualified` where the pipeline permits |
+| CRM-LEAD-005 | in progress — conversion to a customer is idempotent, links a visible customer by phone, and refuses an out-of-scope one (`CUSTOMER_OUTSIDE_SCOPE`) without describing it; conversion to an opportunity is package 3 |
+| CRM-LEAD-006 | in progress — the `leads` importer: duplicate phone in the file and unknown branch are row errors, an existing lead's phone is marked `possible_duplicate`, a branch outside the importer's scope refuses the whole file; the Imports screen offers only reference items until package 8 |
+| CRM-ASSIGN-001 | Six refusal codes (`ASSIGNEE_*`), each audited as `crm.owner.assignmentRefused` with the lead unchanged; a team leader cannot assign outside the team; the lead moves to the new owner's team |
+| CRM-OWNER-001 | in progress — customer transfer and lead reassignment with append-only `crmOwnershipChanges`; opportunities are package 3 |
+| CRM-ACTIVITY-001 | in progress — email and SMS kinds; customer timeline; opportunity timeline store in place; task linking screen in package 8 |
+| CRM-LOSS-001 | `lostReasonCode` checked against active `lossReasons`; nurture flag and `nurture` list filter |
+| CRM-REPORT-001 | in progress — open leads by age band and untouched open leads, scoped; pipeline value arrives with opportunities |
 
 ---
 

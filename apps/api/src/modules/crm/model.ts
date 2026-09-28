@@ -1,14 +1,32 @@
-import { ACTIVITY_KINDS, LEAD_SOURCES, LEAD_STAGES } from '@alola/contracts';
+import {
+  ACTIVITY_KINDS,
+  CONSENT_SOURCES,
+  CONTACT_CHANNELS,
+  CUSTOMER_KINDS,
+  DECISION_ROLES,
+  IDENTITY_TYPES,
+  LEAD_SOURCES,
+  LEAD_STAGES,
+  QUALIFICATION_PURPOSES,
+  QUALIFICATION_TIMEFRAMES,
+  SUPPORTED_LOCALES,
+} from '@alola/contracts';
 import { Schema, type Connection, type Model, type Types } from 'mongoose';
 
 /**
- * CRM storage — `CRM-*` demonstration slice (ADR-0025).
+ * CRM storage (`CRM-*`).
  *
- * Three collections: customers, leads, and an append-only lead timeline.
+ * Customers, leads, and an append-only timeline; since BMP-1 also an append-only consent history and
+ * an append-only ownership history.
  *
  * A phone number is stored twice: `primaryPhone` exactly as the person typed it, and
  * `primaryPhoneDigits` normalized for duplicate detection and search. The normalized form is never
- * displayed and never replaces the entered one (ADR-0003).
+ * displayed and never replaces the entered one (ADR-0003). E-mail addresses and identity numbers
+ * follow the same rule.
+ *
+ * Every field added in BMP-1 is optional in storage, so a record written by the demonstration slice
+ * reads unchanged: a customer with no `kind` is an individual, one with no `version` is at version 1,
+ * and a legacy `nationalId` is presented as its identity.
  *
  * Leads and customers are **never deleted**. A lead that goes nowhere is `lost` with a reason, which
  * is information; deleting it destroys the only record that the enquiry ever happened (ADR-0009).
@@ -16,6 +34,8 @@ import { Schema, type Connection, type Model, type Types } from 'mongoose';
 export const CUSTOMERS_COLLECTION = 'crmCustomers';
 export const LEADS_COLLECTION = 'crmLeads';
 export const ACTIVITIES_COLLECTION = 'crmActivities';
+export const CONSENTS_COLLECTION = 'crmConsents';
+export const OWNERSHIP_CHANGES_COLLECTION = 'crmOwnershipChanges';
 
 export class CrmRecordUndeletableError extends Error {
   readonly code = 'CONFLICT';
@@ -28,7 +48,7 @@ export class CrmRecordUndeletableError extends Error {
 export class ActivityImmutableError extends Error {
   readonly code = 'CONFLICT';
   constructor(readonly operation: string) {
-    super(`A lead's timeline is append-only: "${operation}" is refused.`);
+    super(`A CRM history is append-only: "${operation}" is refused.`);
     this.name = 'ActivityImmutableError';
   }
 }
@@ -38,20 +58,49 @@ export interface StoredMoney {
   currency: string;
 }
 
+export interface StoredIdentity {
+  type: (typeof IDENTITY_TYPES)[number];
+  number: string;
+  /** Letters and digits, upper-cased: what duplicates are matched on. Never displayed. */
+  numberNormalized: string;
+  issuingCountry?: string;
+}
+
 export interface CustomerDocument {
   customerId: string;
+  kind?: (typeof CUSTOMER_KINDS)[number];
   name: string;
+  alternateName?: string;
   primaryPhone: string;
   primaryPhoneDigits: string;
   secondaryPhone?: string;
   email?: string;
+  emailNormalized?: string;
+  identity?: StoredIdentity;
+  /** Written by the demonstration slice; read as a national-ID identity. Never written since BMP-1. */
   nationalId?: string;
   address?: string;
+  city?: string;
+  preferredLanguage?: (typeof SUPPORTED_LOCALES)[number];
+  preferredChannel?: (typeof CONTACT_CHANNELS)[number];
   legalEntityId: string;
   branchId: string;
+  departmentId?: string;
+  teamId?: string;
   ownerAccountId: string;
+  version?: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface StoredQualification {
+  budgetConfirmed: boolean;
+  timeframe: (typeof QUALIFICATION_TIMEFRAMES)[number];
+  purpose: (typeof QUALIFICATION_PURPOSES)[number];
+  decisionRole: (typeof DECISION_ROLES)[number];
+  notes?: string;
+  qualifiedAt: Date;
+  qualifiedBy: string;
 }
 
 export interface LeadDocument {
@@ -61,7 +110,9 @@ export interface LeadDocument {
   primaryPhoneDigits: string;
   secondaryPhone?: string;
   email?: string;
+  emailNormalized?: string;
   source: (typeof LEAD_SOURCES)[number];
+  currentSource?: (typeof LEAD_SOURCES)[number];
   campaignId?: string;
   interestedProjectId?: string;
   preferredPropertyType?: string;
@@ -78,7 +129,12 @@ export interface LeadDocument {
   nextFollowUpOn?: string;
   stage: (typeof LEAD_STAGES)[number];
   lostReason?: string;
+  lostReasonCode?: string;
+  nurture?: boolean;
+  qualification?: StoredQualification;
   customerId?: string;
+  convertedAt?: Date;
+  lastActivityAt?: Date;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -86,13 +142,38 @@ export interface LeadDocument {
 
 export interface ActivityDocument {
   activityId: string;
-  leadId: string;
+  leadId?: string;
+  customerId?: string;
+  opportunityId?: string;
   kind: (typeof ACTIVITY_KINDS)[number];
   body?: string;
   fromStage?: string;
   toStage?: string;
   dueOn?: string;
   actorAccountId?: string;
+  occurredAt: Date;
+}
+
+/** One consent statement for one channel. The latest per channel is the consent in force. */
+export interface ConsentDocument {
+  consentId: string;
+  customerId: string;
+  channel: (typeof CONTACT_CHANNELS)[number];
+  granted: boolean;
+  source: (typeof CONSENT_SOURCES)[number];
+  note?: string;
+  recordedBy: string;
+  recordedAt: Date;
+}
+
+export interface OwnershipChangeDocument {
+  changeId: string;
+  subjectType: 'customer' | 'lead' | 'opportunity';
+  subjectId: string;
+  fromAccountId?: string;
+  toAccountId: string;
+  reason: string;
+  actorAccountId: string;
   occurredAt: Date;
 }
 
@@ -117,20 +198,66 @@ const money = new Schema(
   { _id: false },
 );
 
+const identity = new Schema(
+  {
+    type: { type: String, required: true, enum: [...IDENTITY_TYPES] },
+    number: { type: String, required: true },
+    numberNormalized: { type: String, required: true },
+    issuingCountry: { type: String },
+  },
+  { _id: false },
+);
+
+const qualification = new Schema(
+  {
+    budgetConfirmed: { type: Boolean, required: true },
+    timeframe: { type: String, required: true, enum: [...QUALIFICATION_TIMEFRAMES] },
+    purpose: { type: String, required: true, enum: [...QUALIFICATION_PURPOSES] },
+    decisionRole: { type: String, required: true, enum: [...DECISION_ROLES] },
+    notes: { type: String },
+    qualifiedAt: { type: Date, required: true },
+    qualifiedBy: { type: String, required: true },
+  },
+  { _id: false },
+);
+
+/** Refuse every update, replace and delete, and a re-save of a loaded document. */
+function appendOnly<T>(schema: Schema<T>): Schema<T> {
+  for (const operation of MUTATING_QUERY_OPS) {
+    schema.pre(operation, function rejectMutation() {
+      throw new ActivityImmutableError(operation);
+    });
+  }
+  schema.pre('save', function rejectResave() {
+    if (!this.isNew) throw new ActivityImmutableError('save (existing document)');
+  });
+  return schema;
+}
+
 function customerSchema(): Schema<CustomerDocument> {
   const schema = new Schema<CustomerDocument>(
     {
       customerId: { type: String, required: true, immutable: true },
+      kind: { type: String, enum: [...CUSTOMER_KINDS] },
       name: { type: String, required: true },
+      alternateName: { type: String },
       primaryPhone: { type: String, required: true },
       primaryPhoneDigits: { type: String, required: true },
       secondaryPhone: { type: String },
       email: { type: String },
+      emailNormalized: { type: String },
+      identity: { type: identity },
       nationalId: { type: String },
       address: { type: String },
+      city: { type: String },
+      preferredLanguage: { type: String, enum: [...SUPPORTED_LOCALES] },
+      preferredChannel: { type: String, enum: [...CONTACT_CHANNELS] },
       legalEntityId: { type: String, required: true, immutable: true },
       branchId: { type: String, required: true, immutable: true },
+      departmentId: { type: String },
+      teamId: { type: String },
       ownerAccountId: { type: String, required: true },
+      version: { type: Number },
       createdAt: { type: Date, required: true, immutable: true },
       updatedAt: { type: Date, required: true },
     },
@@ -144,15 +271,23 @@ function customerSchema(): Schema<CustomerDocument> {
   schema.index({ customerId: 1 }, { unique: true, name: 'crmCustomers_id_unique' });
   /**
    * One customer per phone number **within a legal entity**. Not globally: two companies under the
-   * same group legitimately hold the same person as a customer, and merging them is a Phase 3
-   * decision (`CRM-OWNER`), not something to force here.
+   * same group legitimately hold the same person as a customer. Merging is `BD-26`.
    */
   schema.index(
     { legalEntityId: 1, primaryPhoneDigits: 1 },
     { unique: true, name: 'crmCustomers_entity_phone_unique' },
   );
+  // Duplicate candidates (CRM-PERSON-006): deliberately **not** unique.
+  schema.index({ legalEntityId: 1, emailNormalized: 1 }, { name: 'crmCustomers_entity_email' });
+  schema.index(
+    { legalEntityId: 1, 'identity.numberNormalized': 1 },
+    { name: 'crmCustomers_entity_identity' },
+  );
   schema.index({ ownerAccountId: 1, createdAt: -1 }, { name: 'crmCustomers_owner_created' });
   schema.index({ branchId: 1, name: 1 }, { name: 'crmCustomers_branch_name' });
+  schema.index({ teamId: 1, name: 1 }, { name: 'crmCustomers_scope_team' });
+  schema.index({ departmentId: 1, name: 1 }, { name: 'crmCustomers_scope_department' });
+  schema.index({ name: 1, customerId: 1 }, { name: 'crmCustomers_name_keyset' });
   return schema;
 }
 
@@ -165,7 +300,10 @@ function leadSchema(): Schema<LeadDocument> {
       primaryPhoneDigits: { type: String, required: true },
       secondaryPhone: { type: String },
       email: { type: String },
+      emailNormalized: { type: String },
+      // The original source is attribution evidence: it never changes (CRM-LEAD-002).
       source: { type: String, required: true, immutable: true, enum: [...LEAD_SOURCES] },
+      currentSource: { type: String, enum: [...LEAD_SOURCES] },
       campaignId: { type: String, immutable: true },
       interestedProjectId: { type: String },
       preferredPropertyType: { type: String },
@@ -181,7 +319,12 @@ function leadSchema(): Schema<LeadDocument> {
       nextFollowUpOn: { type: String },
       stage: { type: String, required: true, enum: [...LEAD_STAGES] },
       lostReason: { type: String },
+      lostReasonCode: { type: String },
+      nurture: { type: Boolean },
+      qualification: { type: qualification },
       customerId: { type: String },
+      convertedAt: { type: Date },
+      lastActivityAt: { type: Date },
       version: { type: Number, required: true },
       createdAt: { type: Date, required: true, immutable: true },
       updatedAt: { type: Date, required: true },
@@ -196,6 +339,7 @@ function leadSchema(): Schema<LeadDocument> {
   schema.index({ leadId: 1 }, { unique: true, name: 'crmLeads_id_unique' });
   // Duplicate detection: deliberately **not** unique — the same number may legitimately appear twice.
   schema.index({ legalEntityId: 1, primaryPhoneDigits: 1 }, { name: 'crmLeads_entity_phone' });
+  schema.index({ legalEntityId: 1, emailNormalized: 1 }, { name: 'crmLeads_entity_email' });
   // The pipeline board and the owner's own queue.
   schema.index({ stage: 1, createdAt: -1, leadId: -1 }, { name: 'crmLeads_stage_keyset' });
   schema.index(
@@ -219,7 +363,9 @@ function activitySchema(): Schema<ActivityDocument> {
   const schema = new Schema<ActivityDocument>(
     {
       activityId: { type: String, required: true, immutable: true },
-      leadId: { type: String, required: true, immutable: true },
+      leadId: { type: String, immutable: true },
+      customerId: { type: String, immutable: true },
+      opportunityId: { type: String, immutable: true },
       kind: { type: String, required: true, immutable: true, enum: [...ACTIVITY_KINDS] },
       body: { type: String, immutable: true },
       fromStage: { type: String, immutable: true },
@@ -230,17 +376,76 @@ function activitySchema(): Schema<ActivityDocument> {
     },
     { collection: ACTIVITIES_COLLECTION, strict: 'throw', versionKey: false, timestamps: false },
   );
-  for (const operation of MUTATING_QUERY_OPS) {
-    schema.pre(operation, function rejectMutation() {
-      throw new ActivityImmutableError(operation);
-    });
-  }
-  schema.pre('save', function rejectResave() {
-    if (!this.isNew) throw new ActivityImmutableError('save (existing document)');
+  // An activity belongs to something. The contract says so; the storage refuses the orphan too.
+  schema.pre('validate', function requireSubject() {
+    if (!this.leadId && !this.customerId && !this.opportunityId) {
+      throw new Error('ACTIVITY_SUBJECT_REQUIRED');
+    }
   });
+  appendOnly(schema);
   schema.index({ activityId: 1 }, { unique: true, name: 'crmActivities_id_unique' });
   schema.index({ leadId: 1, occurredAt: -1 }, { name: 'crmActivities_lead_time' });
+  schema.index({ customerId: 1, occurredAt: -1 }, { name: 'crmActivities_customer_time' });
+  schema.index({ opportunityId: 1, occurredAt: -1 }, { name: 'crmActivities_opportunity_time' });
   schema.index({ actorAccountId: 1, occurredAt: -1 }, { name: 'crmActivities_actor_time' });
+  return schema;
+}
+
+function consentSchema(): Schema<ConsentDocument> {
+  const schema = new Schema<ConsentDocument>(
+    {
+      consentId: { type: String, required: true, immutable: true },
+      customerId: { type: String, required: true, immutable: true },
+      channel: { type: String, required: true, immutable: true, enum: [...CONTACT_CHANNELS] },
+      granted: { type: Boolean, required: true, immutable: true },
+      source: { type: String, required: true, immutable: true, enum: [...CONSENT_SOURCES] },
+      note: { type: String, immutable: true },
+      recordedBy: { type: String, required: true, immutable: true },
+      recordedAt: { type: Date, required: true, immutable: true },
+    },
+    { collection: CONSENTS_COLLECTION, strict: 'throw', versionKey: false, timestamps: false },
+  );
+  appendOnly(schema);
+  schema.index({ consentId: 1 }, { unique: true, name: 'crmConsents_id_unique' });
+  // The consent in force is the latest per channel.
+  schema.index(
+    { customerId: 1, channel: 1, recordedAt: -1, consentId: -1 },
+    { name: 'crmConsents_customer_channel_latest' },
+  );
+  return schema;
+}
+
+function ownershipChangeSchema(): Schema<OwnershipChangeDocument> {
+  const schema = new Schema<OwnershipChangeDocument>(
+    {
+      changeId: { type: String, required: true, immutable: true },
+      subjectType: {
+        type: String,
+        required: true,
+        immutable: true,
+        enum: ['customer', 'lead', 'opportunity'],
+      },
+      subjectId: { type: String, required: true, immutable: true },
+      fromAccountId: { type: String, immutable: true },
+      toAccountId: { type: String, required: true, immutable: true },
+      reason: { type: String, required: true, immutable: true },
+      actorAccountId: { type: String, required: true, immutable: true },
+      occurredAt: { type: Date, required: true, immutable: true },
+    },
+    {
+      collection: OWNERSHIP_CHANGES_COLLECTION,
+      strict: 'throw',
+      versionKey: false,
+      timestamps: false,
+    },
+  );
+  appendOnly(schema);
+  schema.index({ changeId: 1 }, { unique: true, name: 'crmOwnershipChanges_id_unique' });
+  schema.index(
+    { subjectType: 1, subjectId: 1, occurredAt: -1 },
+    { name: 'crmOwnershipChanges_subject_time' },
+  );
+  schema.index({ toAccountId: 1, occurredAt: -1 }, { name: 'crmOwnershipChanges_to_time' });
   return schema;
 }
 
@@ -258,4 +463,12 @@ export function leadModel(connection: Connection): Model<LeadDocument> {
 
 export function activityModel(connection: Connection): Model<ActivityDocument> {
   return model(connection, ACTIVITIES_COLLECTION, activitySchema);
+}
+
+export function consentModel(connection: Connection): Model<ConsentDocument> {
+  return model(connection, CONSENTS_COLLECTION, consentSchema);
+}
+
+export function ownershipChangeModel(connection: Connection): Model<OwnershipChangeDocument> {
+  return model(connection, OWNERSHIP_CHANGES_COLLECTION, ownershipChangeSchema);
 }

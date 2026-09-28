@@ -29,6 +29,8 @@ const SENSITIVE_KEYS = [
   'iban',
   'accountNumber',
   'nationalId',
+  'identityNumber',
+  'passportNumber',
   'connectionString',
 ] as const;
 

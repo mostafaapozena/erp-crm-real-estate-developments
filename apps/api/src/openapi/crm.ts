@@ -2,7 +2,11 @@ import {
   ActivityListSchema,
   ActivitySchema,
   AssignLeadSchema,
+  CUSTOMER_KINDS,
+  CUSTOMER_PAGE_SIZE_DEFAULT,
+  CUSTOMER_PAGE_SIZE_MAX,
   ChangeLeadStageSchema,
+  ConvertLeadResultSchema,
   CreateActivitySchema,
   CreateCustomerSchema,
   CreateLeadResultSchema,
@@ -10,12 +14,19 @@ import {
   CrmDashboardSchema,
   CustomerListSchema,
   CustomerSchema,
+  DuplicateCheckSchema,
+  DuplicateReportSchema,
   LEAD_PAGE_SIZE_DEFAULT,
   LEAD_PAGE_SIZE_MAX,
   LEAD_SOURCES,
   LEAD_STAGES,
   LeadPageSchema,
   LeadSchema,
+  OwnershipHistorySchema,
+  QualifyLeadSchema,
+  RecordConsentSchema,
+  TransferOwnershipSchema,
+  UpdateCustomerSchema,
   UpdateLeadSchema,
 } from '@alola/contracts';
 import {
@@ -30,6 +41,14 @@ export const crmComponents = {
   Customer: CustomerSchema,
   CustomerList: CustomerListSchema,
   CreateCustomerRequest: CreateCustomerSchema,
+  CorrectCustomerRequest: UpdateCustomerSchema,
+  RecordConsentRequest: RecordConsentSchema,
+  TransferOwnershipRequest: TransferOwnershipSchema,
+  OwnershipHistory: OwnershipHistorySchema,
+  DuplicateCheckRequest: DuplicateCheckSchema,
+  DuplicateReport: DuplicateReportSchema,
+  QualifyLeadRequest: QualifyLeadSchema,
+  ConvertLeadResult: ConvertLeadResultSchema,
   Lead: LeadSchema,
   LeadPage: LeadPageSchema,
   CreateLeadRequest: CreateLeadSchema,
@@ -53,28 +72,130 @@ export function crmPaths(h: OpenApiHelpers): PathMap {
           "Requires crm.customer.view. Constrained by the actor's data scope inside the query; the " +
           'search is an anchored prefix match on the name or on the phone digits, never a regular ' +
           'expression.',
-        parameters: [queryParameter('search', { type: 'string' })],
-        responses: { '200': h.json('CustomerList', 'Customers'), ...h.authorizedErrors },
+        parameters: [
+          queryParameter('limit', {
+            type: 'integer',
+            minimum: 1,
+            maximum: CUSTOMER_PAGE_SIZE_MAX,
+            default: CUSTOMER_PAGE_SIZE_DEFAULT,
+          }),
+          queryParameter('cursor', { type: 'string' }),
+          queryParameter('search', { type: 'string' }),
+          queryParameter('kind', { type: 'string', enum: [...CUSTOMER_KINDS] }),
+          queryParameter('branchId', { type: 'string' }),
+          queryParameter('ownerAccountId', { type: 'string' }),
+        ],
+        responses: {
+          '200': h.json('CustomerList', 'A page of customers ordered by name'),
+          ...h.authorizedErrors,
+        },
       },
       post: {
         operationId: 'createCustomer',
         summary: 'Create a customer',
         description:
           'Requires crm.customer.manage. A second customer with the same phone number inside one ' +
-          'legal entity is refused: two records would split their contracts and payment history ' +
-          'across two identities. The phone number is stored exactly as entered and normalized ' +
-          'separately for matching.',
+          'legal entity is refused (DUPLICATE_CUSTOMER_PHONE): two records would split their ' +
+          'contracts and payment history across two identities. Naming another owner needs ' +
+          'crm.customer.transfer and an eligible colleague; writing an identity needs ' +
+          'crm.customer.viewIdentity (SEC-029).',
         requestBody: requestBody(h.ref('CreateCustomerRequest')),
         responses: { '201': h.json('Customer', 'The customer'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/crm/customers/duplicate-check': {
+      post: {
+        operationId: 'checkCustomerDuplicates',
+        summary: 'Find customers matching a phone, e-mail or identity number',
+        description:
+          'Requires crm.customer.view. A read sent as POST so contact details stay out of URLs; ' +
+          "nothing is stored. Matches inside the actor's scope are listed; matches outside it are " +
+          'only counted (CRM-PERSON-006).',
+        requestBody: requestBody(h.ref('DuplicateCheckRequest')),
+        responses: { '200': h.json('DuplicateReport', 'The matches'), ...h.authorizedErrors },
       },
     },
     '/api/v1/crm/customers/{customerId}': {
       get: {
         operationId: 'getCustomer',
         summary: 'Read one customer',
-        description: 'Requires crm.customer.view. Out of scope answers 404, not 403 (SEC-030).',
+        description:
+          'Requires crm.customer.view. Out of scope answers 404, not 403 (SEC-030). The identity is ' +
+          'absent without crm.customer.viewIdentity (SEC-029).',
         parameters: [pathParameter('customerId', 'Opaque customer identifier')],
         responses: { '200': h.json('Customer', 'The customer'), ...h.notFoundErrors },
+      },
+      patch: {
+        operationId: 'correctCustomer',
+        summary: "Correct a customer's details",
+        description:
+          'Requires crm.customer.manage. States a reason and the version read; a stale version is ' +
+          'STALE_VERSION. Contact and identity values never enter the audit record — only the fact ' +
+          'that they changed (CRM-PERSON-005).',
+        parameters: [pathParameter('customerId', 'Opaque customer identifier')],
+        requestBody: requestBody(h.ref('CorrectCustomerRequest')),
+        responses: { '200': h.json('Customer', 'The corrected customer'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/crm/customers/{customerId}/consents': {
+      post: {
+        operationId: 'recordCustomerConsent',
+        summary: 'Record a consent or its withdrawal for one channel',
+        description:
+          'Requires crm.customer.manage. Appended, never edited; the latest statement per channel is ' +
+          'in force and is what the notification foundation checks before any external message.',
+        parameters: [pathParameter('customerId', 'Opaque customer identifier')],
+        requestBody: requestBody(h.ref('RecordConsentRequest')),
+        responses: { '201': h.json('Customer', 'The customer'), ...h.notFoundErrors },
+      },
+    },
+    '/api/v1/crm/customers/{customerId}/transfer': {
+      post: {
+        operationId: 'transferCustomer',
+        summary: 'Hand a customer to another owner',
+        description:
+          'Requires crm.customer.transfer. The new owner must be active, able to read customers, ' +
+          "placed in the customer's branch and inside the actor's scope; otherwise an ASSIGNEE_* " +
+          'conflict is returned and the refusal is audited (CRM-OWNER-001).',
+        parameters: [pathParameter('customerId', 'Opaque customer identifier')],
+        requestBody: requestBody(h.ref('TransferOwnershipRequest')),
+        responses: { '200': h.json('Customer', 'The customer'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/crm/customers/{customerId}/duplicates': {
+      get: {
+        operationId: 'listCustomerDuplicates',
+        summary: 'Other customers sharing this e-mail or identity number',
+        description:
+          'Requires crm.customer.view. Scoped as the duplicate check. Nothing is merged (BD-26).',
+        parameters: [pathParameter('customerId', 'Opaque customer identifier')],
+        responses: { '200': h.json('DuplicateReport', 'The matches'), ...h.notFoundErrors },
+      },
+    },
+    '/api/v1/crm/customers/{customerId}/ownership': {
+      get: {
+        operationId: 'getCustomerOwnershipHistory',
+        summary: "A customer's ownership history",
+        description: 'Requires crm.customer.view. Append-only.',
+        parameters: [pathParameter('customerId', 'Opaque customer identifier')],
+        responses: { '200': h.json('OwnershipHistory', 'The history'), ...h.notFoundErrors },
+      },
+    },
+    '/api/v1/crm/customers/{customerId}/activities': {
+      get: {
+        operationId: 'listCustomerActivities',
+        summary: "A customer's timeline",
+        description: 'Requires crm.customer.view, and the customer itself must be visible.',
+        parameters: [pathParameter('customerId', 'Opaque customer identifier')],
+        responses: { '200': h.json('ActivityList', 'The timeline'), ...h.notFoundErrors },
+      },
+      post: {
+        operationId: 'addCustomerActivity',
+        summary: 'Record a call, message, meeting, visit or note on a customer',
+        description: 'Requires crm.activity.create.',
+        parameters: [pathParameter('customerId', 'Opaque customer identifier')],
+        requestBody: requestBody(h.ref('CreateActivityRequest')),
+        responses: { '201': h.json('Activity', 'The activity'), ...h.notFoundErrors },
       },
     },
     '/api/v1/crm/leads': {
@@ -105,6 +226,8 @@ export function crmPaths(h: OpenApiHelpers): PathMap {
             'Anchored prefix on the name or phone digits',
           ),
           queryParameter('followUp', { type: 'string', enum: ['due', 'overdue'] }),
+          queryParameter('customerId', { type: 'string' }),
+          queryParameter('nurture', { type: 'string', enum: ['true', 'false'] }),
         ],
         responses: { '200': h.json('LeadPage', 'A page of leads'), ...h.authorizedErrors },
       },
@@ -173,11 +296,51 @@ export function crmPaths(h: OpenApiHelpers): PathMap {
         operationId: 'assignLead',
         summary: 'Hand a lead to another sales owner',
         description:
-          'Requires crm.lead.assign, which a representative does not hold. The reassignment is ' +
-          'audited and appears on the lead timeline.',
+          'Requires crm.lead.assign, which a representative does not hold. The new owner must be ' +
+          "active, hold crm.lead.view, be placed in the lead's branch and inside the actor's scope " +
+          '(ASSIGNEE_UNKNOWN, ASSIGNEE_INACTIVE, ASSIGNEE_CANNOT_SEE_RECORD, ASSIGNEE_NOT_PLACED, ' +
+          "ASSIGNEE_OUTSIDE_SCOPE, ASSIGNEE_OUTSIDE_BRANCH). The lead moves to the new owner's team; " +
+          'the change is audited, kept in the ownership history and shown on the timeline.',
         parameters: [pathParameter('leadId', 'Opaque lead identifier')],
         requestBody: requestBody(h.ref('AssignLeadRequest')),
         responses: { '200': h.json('Lead', 'The reassigned lead'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/crm/leads/{leadId}/qualify': {
+      post: {
+        operationId: 'qualifyLead',
+        summary: 'Record a qualification',
+        description:
+          'Requires crm.lead.edit. Records budget confirmation, timeframe, purpose and decision role, ' +
+          'and moves the lead to qualified when the pipeline permits it (CRM-LEAD-004). A concluded ' +
+          'lead is LEAD_CONCLUDED.',
+        parameters: [pathParameter('leadId', 'Opaque lead identifier')],
+        requestBody: requestBody(h.ref('QualifyLeadRequest')),
+        responses: { '200': h.json('Lead', 'The lead'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/crm/leads/{leadId}/convert': {
+      post: {
+        operationId: 'convertLead',
+        summary: 'Make the lead a customer',
+        description:
+          "Requires crm.lead.convert. Idempotent. A customer already holding the lead's phone in the " +
+          "legal entity is linked rather than duplicated — unless it is outside the actor's scope, " +
+          'which is CUSTOMER_OUTSIDE_SCOPE without describing it. A lost lead is LEAD_LOST.',
+        parameters: [pathParameter('leadId', 'Opaque lead identifier')],
+        responses: {
+          '200': h.json('ConvertLeadResult', 'The lead and its customer'),
+          ...h.conflictErrors,
+        },
+      },
+    },
+    '/api/v1/crm/leads/{leadId}/ownership': {
+      get: {
+        operationId: 'getLeadOwnershipHistory',
+        summary: "A lead's ownership history",
+        description: 'Requires crm.lead.view. Append-only.',
+        parameters: [pathParameter('leadId', 'Opaque lead identifier')],
+        responses: { '200': h.json('OwnershipHistory', 'The history'), ...h.notFoundErrors },
       },
     },
     '/api/v1/crm/leads/{leadId}/activities': {

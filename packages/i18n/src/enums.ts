@@ -1,5 +1,14 @@
 import {
   ACTIVITY_KINDS,
+  CONSENT_SOURCES,
+  CONTACT_CHANNELS,
+  CUSTOMER_KINDS,
+  DECISION_ROLES,
+  DUPLICATE_MATCHES,
+  IDENTITY_TYPES,
+  LEAD_AGE_BANDS,
+  QUALIFICATION_PURPOSES,
+  QUALIFICATION_TIMEFRAMES,
   CAMPAIGN_OBJECTIVES,
   CAMPAIGN_PLATFORMS,
   CAMPAIGN_STATES,
@@ -73,6 +82,15 @@ export const DISPLAYED_ENUMS: Readonly<Record<string, readonly string[]>> = {
   taskState: TASK_STATES,
   importState: IMPORT_STATES,
   taskPriority: TASK_PRIORITIES,
+  customerKind: CUSTOMER_KINDS,
+  identityType: IDENTITY_TYPES,
+  contactChannel: CONTACT_CHANNELS,
+  consentSource: CONSENT_SOURCES,
+  qualificationTimeframe: QUALIFICATION_TIMEFRAMES,
+  qualificationPurpose: QUALIFICATION_PURPOSES,
+  decisionRole: DECISION_ROLES,
+  leadAgeBand: LEAD_AGE_BANDS,
+  duplicateMatch: DUPLICATE_MATCHES,
 };
 
 export interface EnumLabelProblem {

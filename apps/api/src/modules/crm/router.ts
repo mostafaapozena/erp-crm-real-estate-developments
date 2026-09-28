@@ -4,8 +4,14 @@ import {
   CreateActivitySchema,
   CreateCustomerSchema,
   CreateLeadSchema,
+  CustomerQuerySchema,
+  DuplicateCheckSchema,
   LeadQuerySchema,
+  QualifyLeadSchema,
+  RecordConsentSchema,
   RecordIdSchema,
+  TransferOwnershipSchema,
+  UpdateCustomerSchema,
   UpdateLeadSchema,
   type ActorContext,
 } from '@alola/contracts';
@@ -14,17 +20,19 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { AppError } from '../../errors';
 import { currentActor, requirePermission, type GuardOptions } from '../../http/actor';
+import { markAuditExempt } from '../../http/audit-context';
 import { correlationIdOf } from '../../http/correlation';
 import { validate, validated } from '../../http/validate';
 import type { CrmService, RequestContext } from './service';
 
 /**
- * CRM HTTP surface — `CRM-*` demonstration slice.
+ * CRM HTTP surface (`CRM-*`).
  *
  * Creating a lead needs `crm.lead.create`; **assigning it to someone else** additionally needs
  * `crm.lead.assign`, and without that permission the body's `assignedToAccountId` is ignored rather
  * than rejected. Ignoring it is deliberate: a representative's client may send the field, and the
- * right answer is "the lead is yours", not an error they cannot act on.
+ * right answer is "the lead is yours", not an error they cannot act on. The same rule applies to a
+ * customer's `ownerAccountId` and `crm.customer.transfer`.
  */
 export interface CrmRouterOptions {
   getService: () => CrmService;
@@ -33,7 +41,6 @@ export interface CrmRouterOptions {
 
 const LeadParamsSchema = z.strictObject({ leadId: RecordIdSchema });
 const CustomerParamsSchema = z.strictObject({ customerId: RecordIdSchema });
-const CustomerQuerySchema = z.strictObject({ search: z.string().trim().max(80).optional() });
 
 function requestContext(req: Request, res: Response, route: string): RequestContext {
   return {
@@ -62,7 +69,7 @@ export function crmRouter(options: CrmRouterOptions): Router {
     validate({ query: CustomerQuerySchema }),
     async (_req, res) => {
       const query = validated<typeof CustomerQuerySchema._output>(res, 'query');
-      res.json({ items: await options.getService().listCustomers(actorOf(res), query.search) });
+      res.json(await options.getService().listCustomers(actorOf(res), query));
     },
   );
 
@@ -79,6 +86,18 @@ export function crmRouter(options: CrmRouterOptions): Router {
     },
   );
 
+  /** A read expressed as POST so contact details never travel in a URL; nothing is stored. */
+  router.post(
+    '/customers/duplicate-check',
+    requirePermission('crm.customer.view', options.guard),
+    validate({ body: DuplicateCheckSchema }),
+    async (_req, res) => {
+      const body = validated<typeof DuplicateCheckSchema._output>(res, 'body');
+      markAuditExempt(res);
+      res.json(await options.getService().checkDuplicates(actorOf(res), body));
+    },
+  );
+
   router.get(
     '/customers/:customerId',
     requirePermission('crm.customer.view', options.guard),
@@ -86,6 +105,124 @@ export function crmRouter(options: CrmRouterOptions): Router {
     async (_req, res) => {
       const { customerId } = validated<typeof CustomerParamsSchema._output>(res, 'params');
       res.json(await options.getService().getCustomer(actorOf(res), customerId));
+    },
+  );
+
+  router.patch(
+    '/customers/:customerId',
+    requirePermission('crm.customer.manage', options.guard),
+    validate({ params: CustomerParamsSchema, body: UpdateCustomerSchema }),
+    async (req, res) => {
+      const { customerId } = validated<typeof CustomerParamsSchema._output>(res, 'params');
+      const body = validated<typeof UpdateCustomerSchema._output>(res, 'body');
+      res.json(
+        await options
+          .getService()
+          .correctCustomer(
+            actorOf(res),
+            customerId,
+            body,
+            requestContext(req, res, `${base}/customers/:customerId`),
+          ),
+      );
+    },
+  );
+
+  router.post(
+    '/customers/:customerId/consents',
+    requirePermission('crm.customer.manage', options.guard),
+    validate({ params: CustomerParamsSchema, body: RecordConsentSchema }),
+    async (req, res) => {
+      const { customerId } = validated<typeof CustomerParamsSchema._output>(res, 'params');
+      const body = validated<typeof RecordConsentSchema._output>(res, 'body');
+      res
+        .status(201)
+        .json(
+          await options
+            .getService()
+            .recordConsent(
+              actorOf(res),
+              customerId,
+              body,
+              requestContext(req, res, `${base}/customers/:customerId/consents`),
+            ),
+        );
+    },
+  );
+
+  router.post(
+    '/customers/:customerId/transfer',
+    requirePermission('crm.customer.transfer', options.guard),
+    validate({ params: CustomerParamsSchema, body: TransferOwnershipSchema }),
+    async (req, res) => {
+      const { customerId } = validated<typeof CustomerParamsSchema._output>(res, 'params');
+      const body = validated<typeof TransferOwnershipSchema._output>(res, 'body');
+      res.json(
+        await options
+          .getService()
+          .transferCustomer(
+            actorOf(res),
+            customerId,
+            body,
+            requestContext(req, res, `${base}/customers/:customerId/transfer`),
+          ),
+      );
+    },
+  );
+
+  router.get(
+    '/customers/:customerId/duplicates',
+    requirePermission('crm.customer.view', options.guard),
+    validate({ params: CustomerParamsSchema }),
+    async (_req, res) => {
+      const { customerId } = validated<typeof CustomerParamsSchema._output>(res, 'params');
+      res.json(await options.getService().customerDuplicates(actorOf(res), customerId));
+    },
+  );
+
+  router.get(
+    '/customers/:customerId/ownership',
+    requirePermission('crm.customer.view', options.guard),
+    validate({ params: CustomerParamsSchema }),
+    async (_req, res) => {
+      const { customerId } = validated<typeof CustomerParamsSchema._output>(res, 'params');
+      res.json({
+        items: await options.getService().customerOwnershipHistory(actorOf(res), customerId),
+      });
+    },
+  );
+
+  router.get(
+    '/customers/:customerId/activities',
+    requirePermission('crm.customer.view', options.guard),
+    validate({ params: CustomerParamsSchema }),
+    async (_req, res) => {
+      const { customerId } = validated<typeof CustomerParamsSchema._output>(res, 'params');
+      res.json({
+        items: await options.getService().listCustomerActivities(actorOf(res), customerId),
+      });
+    },
+  );
+
+  router.post(
+    '/customers/:customerId/activities',
+    requirePermission('crm.activity.create', options.guard),
+    validate({ params: CustomerParamsSchema, body: CreateActivitySchema }),
+    async (req, res) => {
+      const { customerId } = validated<typeof CustomerParamsSchema._output>(res, 'params');
+      const body = validated<typeof CreateActivitySchema._output>(res, 'body');
+      res
+        .status(201)
+        .json(
+          await options
+            .getService()
+            .addCustomerActivity(
+              actorOf(res),
+              customerId,
+              body,
+              requestContext(req, res, `${base}/customers/:customerId/activities`),
+            ),
+        );
     },
   );
 
@@ -172,6 +309,45 @@ export function crmRouter(options: CrmRouterOptions): Router {
   );
 
   router.post(
+    '/leads/:leadId/qualify',
+    requirePermission('crm.lead.edit', options.guard),
+    validate({ params: LeadParamsSchema, body: QualifyLeadSchema }),
+    async (req, res) => {
+      const { leadId } = validated<typeof LeadParamsSchema._output>(res, 'params');
+      const body = validated<typeof QualifyLeadSchema._output>(res, 'body');
+      res.json(
+        await options
+          .getService()
+          .qualifyLead(
+            actorOf(res),
+            leadId,
+            body,
+            requestContext(req, res, `${base}/leads/:leadId/qualify`),
+          ),
+      );
+    },
+  );
+
+  router.post(
+    '/leads/:leadId/convert',
+    requirePermission('crm.lead.convert', options.guard),
+    validate({ params: LeadParamsSchema }),
+    async (req, res) => {
+      const { leadId } = validated<typeof LeadParamsSchema._output>(res, 'params');
+      const { replayed, ...result } = await options
+        .getService()
+        .convertLead(
+          actorOf(res),
+          leadId,
+          requestContext(req, res, `${base}/leads/:leadId/convert`),
+        );
+      // Converting a converted lead is a replay: it stored nothing and recorded nothing.
+      if (replayed) markAuditExempt(res);
+      res.json(result);
+    },
+  );
+
+  router.post(
     '/leads/:leadId/assign',
     requirePermission('crm.lead.assign', options.guard),
     validate({ params: LeadParamsSchema, body: AssignLeadSchema }),
@@ -188,6 +364,16 @@ export function crmRouter(options: CrmRouterOptions): Router {
             requestContext(req, res, `${base}/leads/:leadId/assign`),
           ),
       );
+    },
+  );
+
+  router.get(
+    '/leads/:leadId/ownership',
+    requirePermission('crm.lead.view', options.guard),
+    validate({ params: LeadParamsSchema }),
+    async (_req, res) => {
+      const { leadId } = validated<typeof LeadParamsSchema._output>(res, 'params');
+      res.json({ items: await options.getService().leadOwnershipHistory(actorOf(res), leadId) });
     },
   );
 

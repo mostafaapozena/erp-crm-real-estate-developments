@@ -27,7 +27,8 @@ describe('translation resources (I18N-001, I18N-002)', () => {
 
   it('define a localized message for every API error code (I18N-008)', () => {
     for (const locale of ['ar', 'en'] as const) {
-      const errors: Record<string, string> = resources[locale].errors;
+      // Issue codes sit under `issue`; the top level holds one message per error code.
+      const errors: Record<string, unknown> = resources[locale].errors;
       for (const code of ERROR_CODES) expect(errors[code], `${locale}.${code}`).toBeTruthy();
     }
   });

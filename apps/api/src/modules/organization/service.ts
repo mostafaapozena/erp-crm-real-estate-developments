@@ -555,6 +555,23 @@ export class OrganizationService {
   }
 
   /**
+   * An active branch by its code — what a person types in an import file (CRM-LEAD-006). Unscoped,
+   * like `findBranch`: the caller decides whether the actor may write into that branch.
+   */
+  async findBranchByCode(
+    code: string,
+  ): Promise<{ branchId: string; legalEntityId: string } | undefined> {
+    assertSafeFilter({ code });
+    const document = await this.branches
+      .findOne({ code, status: 'active' })
+      .lean<BranchDocument>()
+      .exec();
+    return document
+      ? { branchId: document.branchId, legalEntityId: document.legalEntityId }
+      : undefined;
+  }
+
+  /**
    * Names for account references the caller already holds (ADR-0031).
    *
    * Deliberately **not** scope-filtered, and deliberately narrow. A sales representative must see who

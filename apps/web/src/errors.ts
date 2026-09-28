@@ -16,7 +16,15 @@ export function useErrorMessage(): (error: ApiError) => string {
   const { td } = useLocale();
   return useCallback(
     (error: ApiError) => {
-      // `errors` is a flat namespace keyed by the code itself, so an unknown code cannot be invented.
+      // A refusal that names its reason (`ASSIGNEE_INACTIVE`, `STALE_VERSION`) says so in the person's
+      // language; one the client has no sentence for falls back to the general code's message.
+      const issue = error.issues?.[0]?.code;
+      if (issue && /^[A-Z][A-Z0-9_]*$/.test(issue)) {
+        const issueKey = `errors:issue.${issue}`;
+        const issueMessage = td(issueKey);
+        if (issueMessage !== issueKey) return issueMessage;
+      }
+      // `errors` is keyed by the code itself, so an unknown code cannot be invented.
       const key = `errors:${error.code}`;
       const message = td(key);
       // i18next returns the key when nothing matches; fall back to the generic message rather than

@@ -7,6 +7,7 @@ import {
   UnconfiguredEncryptor,
   UnconfiguredFileStore,
   UnconfiguredMalwareScanner,
+  effectivePermissions,
   type Encryptor,
   type Logger,
   type PrivateFileStore,
@@ -21,7 +22,7 @@ import { AuditService } from '../modules/audit';
 import { CollectionService } from '../modules/collections';
 import { CompanyService } from '../modules/company';
 import { DocumentService, TemplateService, type OwnerResolver } from '../modules/documents';
-import { CrmService } from '../modules/crm';
+import { CrmService, leadImporter } from '../modules/crm';
 import { AuthThrottle, IdentityService } from '../modules/identity';
 import { InventoryService } from '../modules/inventory';
 import { MarketingService } from '../modules/marketing';
@@ -348,6 +349,8 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
       },
       externalDeliveryEnabled: () =>
         getSettingsService().isEnabled('feature.notifications.externalDelivery'),
+      // A customer's consent is the CRM's record (CRM-PERSON-003); without it nothing external is sent.
+      hasConsent: (customerId, channel) => getCrmService().hasConsent(customerId, channel),
       quietHours: () =>
         getSettingsService().valueOf<{ start: string; end: string }>('notifications.quietHours'),
     });
@@ -461,7 +464,10 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
       connection,
       audit: getAuditService(),
       store: fileStore,
-      importers: [referenceItemImporter(getSettingsService)],
+      importers: [
+        referenceItemImporter(getSettingsService),
+        leadImporter(getCrmService, (code) => getOrganizationService().findBranchByCode(code)),
+      ],
       exporters: [
         {
           kind: 'leads',
@@ -537,8 +543,43 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
       audit: getAuditService(),
       resolveBranch: (branchId) => getOrganizationService().findBranch(branchId),
       today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
+      describeAccount,
+      // Loss reasons are the deployment's own list (PLAT-025); an inactive code is refused.
+      isActiveReason: async (list, code) =>
+        (await getSettingsService().activeCodes(list)).includes(code),
     });
     return crmService;
+  }
+
+  /**
+   * What a module needs to know before handing work to a colleague (CRM-ASSIGN-001): whether the
+   * account is active (SEC), what it may do (SEC, effective permissions after denials), and where it
+   * sits (CORE-ORG). Each fact comes from its owner; none is stored twice.
+   */
+  async function describeAccount(accountId: string) {
+    let active: boolean;
+    try {
+      active = (await getIdentityService().getAccount(accountId)).state === 'active';
+    } catch {
+      // An unknown account, or no identity service configured: nobody to hand work to.
+      return undefined;
+    }
+    const grants = await getSecurityService().resolveActor(accountId);
+    const placement = await getOrganizationService().getPlacementByAccount(accountId);
+    return {
+      active,
+      permissions: grants ? effectivePermissions(grants) : [],
+      ...(placement
+        ? {
+            placement: {
+              legalEntityId: placement.legalEntityId,
+              branchId: placement.branchId,
+              departmentId: placement.departmentId,
+              ...(placement.teamId ? { teamId: placement.teamId } : {}),
+            },
+          }
+        : {}),
+    };
   }
 
   /**
