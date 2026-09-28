@@ -173,6 +173,11 @@ export const PublicBrandingSchema = z.strictObject({
   tradeName: CompanyNameSchema.optional(),
   defaultLocale: LocaleSchema,
   supportedLocales: z.array(LocaleSchema).min(1),
+  /**
+   * The timezone the browser displays instants in (ADR-0008): the company's, or the deployment's
+   * configured organization timezone before a profile exists. Never assumed by the client.
+   */
+  timeZone: z.string().min(1).max(64),
   primaryColor: BrandColorSchema.optional(),
   assets: z.strictObject({
     logo: PublicBrandAssetSchema.optional(),

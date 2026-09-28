@@ -88,6 +88,12 @@ export const PERMISSIONS = [
   /** Write, publish and retire templates — the wording documents are issued in. Administrative. */
   'template.manage',
 
+  // Notifications (CORE-NOTIFY). A person needs no permission for their own inbox.
+  /** See the delivery state of every notification — operations, not content. Administrative. */
+  'notification.viewDeliveries',
+  /** Run the delivery sweep by hand. Administrative. */
+  'notification.dispatch',
+
   // Security administration
   'security.role.view',
   'security.role.create',
@@ -197,6 +203,8 @@ export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
   'document.manageRetention',
   /** A published template is the legal wording of every document generated from it. */
   'template.manage',
+  'notification.viewDeliveries',
+  'notification.dispatch',
   /**
    * Organization structure is administrative because **every data scope resolves against it**
    * (SEC-026) and the reporting line decides where an overdue approval escalates (`APPROVAL-005`).

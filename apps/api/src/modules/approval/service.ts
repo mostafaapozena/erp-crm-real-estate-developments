@@ -115,6 +115,8 @@ export interface ApprovalEvent {
   stageOrder: number;
   /** Accounts that now owe a decision, so a notifier knows whom to tell. */
   pendingApproverAccountIds: readonly string[];
+  /** Who asked, so a notifier can tell them how it ended. */
+  requesterAccountId?: string;
   occurredAt: Date;
 }
 
@@ -758,6 +760,7 @@ export class ApprovalService {
       state: 'pending',
       stageOrder: firstStage.order,
       pendingApproverAccountIds: approvers,
+      requesterAccountId: document.requesterAccountId,
       occurredAt: now,
     });
 
@@ -1163,6 +1166,9 @@ export class ApprovalService {
       state: outcome.nextState,
       stageOrder: outcome.nextStageOrder,
       pendingApproverAccountIds: outcome.pending,
+      ...(outcome.updated?.requesterAccountId
+        ? { requesterAccountId: outcome.updated.requesterAccountId }
+        : {}),
       occurredAt: now,
     });
 
@@ -1472,7 +1478,19 @@ export class ApprovalService {
         );
         return true;
       });
-      if (changed) escalated += 1;
+      if (changed) {
+        escalated += 1;
+        // Tell the manager, after the commit — the escalation stands whether or not anyone listens.
+        await this.emit({
+          action: APPROVAL_AUDIT_ACTIONS.requestEscalated,
+          requestId: request.requestId,
+          state: 'pending',
+          stageOrder: stage.order,
+          pendingApproverAccountIds: [manager],
+          requesterAccountId: request.requesterAccountId,
+          occurredAt: now,
+        });
+      }
     }
     return { escalated, unresolved };
   }

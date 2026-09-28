@@ -557,5 +557,56 @@
     "actionLabel": "Primary action",
     "itemsCount_one": "{{count}} item",
     "itemsCount_other": "{{count}} items"
+  },
+  "notificationTitle": {
+    "approval": {
+      "pending": "An approval awaits you",
+      "escalated": "An overdue approval was escalated to you",
+      "decided": "An approval request was decided"
+    },
+    "task": {
+      "assigned": "A task was assigned to you",
+      "dueSoon": "A task is due soon",
+      "overdue": "A task is overdue",
+      "escalated": "An overdue task was escalated to you"
+    },
+    "reminder": {
+      "installmentDue": "Installment reminder"
+    }
+  },
+  "notificationBody": {
+    "approval": {
+      "pending": "Request {{requestId}} is waiting for your decision.",
+      "escalated": "Request {{requestId}} is past its deadline and was added to you.",
+      "decided": "Request {{requestId}} has been decided. Open it to see the outcome."
+    },
+    "task": {
+      "assigned": "The task “{{title}}” was assigned to you.",
+      "dueSoon": "The task “{{title}}” is due on {{dueOn}}.",
+      "overdue": "The task “{{title}}” is past its due date.",
+      "escalated": "The task “{{title}}” is overdue and was escalated to you."
+    },
+    "reminder": {
+      "installmentDue": "An installment reminder for a customer."
+    }
+  },
+  "notificationState": {
+    "pending": "Waiting to send",
+    "deferred": "Held for quiet hours",
+    "sending": "Sending",
+    "delivered": "Delivered",
+    "simulated": "Simulated — not sent",
+    "failed": "Failed",
+    "undeliverable": "No channel connected"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "subtitle": "What concerns you in the system",
+    "markRead": "Mark as read",
+    "markAllRead": "Mark all as read",
+    "unreadOnly": "Unread only",
+    "empty": "No notifications",
+    "unreadCount_one": "One unread notification",
+    "unreadCount_other": "{{count}} unread notifications"
   }
 }

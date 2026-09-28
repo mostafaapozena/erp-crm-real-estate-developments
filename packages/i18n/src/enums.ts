@@ -12,6 +12,8 @@ import {
   INSTRUMENT_STATES,
   LEAD_SOURCES,
   LEAD_STAGES,
+  NOTIFICATION_STATES,
+  NOTIFICATION_TYPES,
   PAYMENT_METHODS,
   PROJECT_STATUSES,
   PROPERTY_TYPES,
@@ -62,6 +64,9 @@ export const DISPLAYED_ENUMS: Readonly<Record<string, readonly string[]>> = {
   campaignPlatform: CAMPAIGN_PLATFORMS,
   campaignObjective: CAMPAIGN_OBJECTIVES,
   campaignState: CAMPAIGN_STATES,
+  notificationTitle: NOTIFICATION_TYPES,
+  notificationBody: NOTIFICATION_TYPES,
+  notificationState: NOTIFICATION_STATES,
 };
 
 export interface EnumLabelProblem {
@@ -80,9 +85,13 @@ export function checkEnumLabels(
   for (const locale of SUPPORTED_LOCALES) {
     const tree = all[locale][namespace] ?? {};
     for (const [group, values] of Object.entries(enums)) {
-      const labels = tree[group];
       for (const value of values) {
-        const label = typeof labels === 'object' ? labels[value] : undefined;
+        // A dotted value (`approval.pending`) is stored nested, because i18next reads `.` as a
+        // key separator; follow the path exactly as the runtime lookup will.
+        let label: string | ResourceTree | undefined = tree[group];
+        for (const part of value.split('.')) {
+          label = typeof label === 'object' ? label[part] : undefined;
+        }
         if (typeof label !== 'string' || label.trim() === '') {
           problems.push({ locale, key: `${group}.${value}`, problem: 'missing-enum-label' });
         }

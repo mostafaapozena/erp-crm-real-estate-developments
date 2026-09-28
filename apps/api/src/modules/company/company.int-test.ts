@@ -193,6 +193,7 @@ describe.skipIf(!gate.available)(`company profile — ${gate.reason}`, () => {
         demonstration: false,
         defaultLocale: 'ar',
         supportedLocales: ['ar', 'en'],
+        timeZone: 'UTC',
         assets: {},
         version: 0,
       });
@@ -220,6 +221,7 @@ describe.skipIf(!gate.available)(`company profile — ${gate.reason}`, () => {
           'primaryColor',
           'shortName',
           'supportedLocales',
+          'timeZone',
           'tradeName',
           'version',
         ].sort(),

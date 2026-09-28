@@ -182,6 +182,8 @@ storage/
 private/
 attachments/
 documents/
+# The rule above guards business papers, not code: the documents module is source (F6 fix).
+!apps/api/src/modules/documents/
 scans/
 contracts-signed/
 payroll-exports/

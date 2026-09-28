@@ -24,6 +24,11 @@ import {
 import { buildingModel, projectModel, unitEventModel, unitModel } from '../modules/inventory/model';
 import { campaignModel } from '../modules/marketing/model';
 import {
+  notificationAttemptModel,
+  notificationModel,
+  notificationPreferencesModel,
+} from '../modules/notifications/model';
+import {
   branchModel,
   departmentModel,
   jobTitleModel,
@@ -103,6 +108,9 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     documentModel(connection),
     documentVersionModel(connection),
     templateModel(connection),
+    notificationModel(connection),
+    notificationAttemptModel(connection),
+    notificationPreferencesModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {

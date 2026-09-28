@@ -18,6 +18,7 @@ export const NEUTRAL_BRANDING: PublicBranding = {
   demonstration: true,
   defaultLocale: 'ar',
   supportedLocales: [...SUPPORTED_LOCALES],
+  timeZone: 'UTC',
   assets: {},
   version: 0,
 };
@@ -33,6 +34,7 @@ function isBranding(value: unknown): value is PublicBranding {
   return (
     typeof candidate.configured === 'boolean' &&
     typeof candidate.demonstration === 'boolean' &&
+    typeof candidate.timeZone === 'string' &&
     typeof candidate.defaultLocale === 'string' &&
     SUPPORTED_LOCALES.includes(candidate.defaultLocale) &&
     Array.isArray(candidate.supportedLocales) &&

@@ -160,12 +160,29 @@ exist; the private object-storage adapter for staging and production does not). 
 `in-progress`. `CORE-DOC-003` (PDF generation with embedded Arabic fonts) and `CORE-DOC-005` (QR
 verification) are **not started** — outside this package.
 
+### Implementation evidence — F6 (2026-09-28)
+
+Tests: `apps/api/src/modules/notifications/notifications.int-test.ts` (14, real MongoDB) and
+`apps/api/src/modules/notifications/adapters.test.ts` (5).
+
+| ID | Evidence |
+|---|---|
+| CORE-NOTIFY-001 | An in-app notice is delivered at once and exactly once per event (a unique deduplication key); another person's notice is absent from the inbox, and marking it read is `404`; marking one or all read is a conditional, audited update; an inactive account receives nothing; the shell shows an unread badge and `/notifications` lists, filters and marks notices in either language |
+| CORE-NOTIFY-002 | Channels resolve through adapters: a channel with no provider marks the message `undeliverable` and keeps it; the simulated adapter exists only in development and test, reports `connected: false`, and produces the state `simulated` — never `delivered`; a connected provider still sends nothing while `feature.notifications.externalDelivery` is off, nor to a customer without recorded consent |
+| CORE-NOTIFY-003 | Only a type and its parameters are stored; the text is rendered at read or send time in the recipient's language (external) or the reader's current language (in-app) |
+| CORE-NOTIFY-004 | A non-urgent external message inside quiet hours is `deferred` until the window ends, computed in the organization timezone, including windows that wrap midnight; urgent messages and in-app notices are not held; with quiet hours unconfigured (`SD-21`) nothing is held |
+| CORE-NOTIFY-005 | Every attempt is an append-only row; a retryable failure backs off and retries with the **same idempotency key**, and the provider delivers once; after five attempts the message is `failed` and kept; a dispatcher that dies mid-send is recovered after its lease with the same key; parallel dispatchers attempt each message exactly once |
+
+**Consumers wired:** the approval engine's event port now notifies the pending approvers, the
+escalation target and the requester; the reminder centre delivers through the notification service
+(deduplicated per reminder) and still reaches only `simulated`, never `sent`.
+
 ## Current status summary
 
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
-| Status `implemented` (code and passing tests) | **79** — see per-row status in `docs/MEMORY.md` |
+| Status `implemented` (code and passing tests) | **89** of the original 113, plus 12 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
@@ -444,11 +461,11 @@ adapter exists ([ADR-0023](decisions/adr-0023-password-hashing-and-session-token
 
 | ID | Requirement | Source | Notes |
 |---|---|---|---|
-| CORE-NOTIFY-001 | Notification model with in-app delivery | MM §8 | |
-| CORE-NOTIFY-002 | Channel adapter registry for email, SMS, WhatsApp — functional with no live provider | ADR-0010, ADR-0012 | Providers arrive with `SD-20` (Phase 3) |
-| CORE-NOTIFY-003 | Per-recipient language selection | ADR-0003 | |
-| CORE-NOTIFY-004 | Quiet hours honoured in the organization timezone | ADR-0008 | Mechanism only; values arrive with `SD-21` |
-| CORE-NOTIFY-005 | Delivery status tracking with retry that does not duplicate | ADR-0010 | Arabic scope p17 |
+| CORE-NOTIFY-001 | Notification model with in-app delivery | MM §8 | **implemented** 2026-09-28 (F6) |
+| CORE-NOTIFY-002 | Channel adapter registry for email, SMS, WhatsApp — functional with no live provider | ADR-0010, ADR-0012 | **implemented** 2026-09-28 (F6). Providers arrive with `SD-20` (Phase 3) |
+| CORE-NOTIFY-003 | Per-recipient language selection | ADR-0003 | **implemented** 2026-09-28 (F6) |
+| CORE-NOTIFY-004 | Quiet hours honoured in the organization timezone | ADR-0008 | **implemented** 2026-09-28 (F6). Mechanism only; values arrive with `SD-21` |
+| CORE-NOTIFY-005 | Delivery status tracking with retry that does not duplicate | ADR-0010 | **implemented** 2026-09-28 (F6). Arabic scope p17 |
 
 ## CORE-TASK — Tasks and reminders
 

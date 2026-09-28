@@ -18,7 +18,7 @@ import type { Connection } from 'mongoose';
 import type { Redis } from 'ioredis';
 import { ApprovalService, NoApplicablePolicyError } from '../modules/approval';
 import { AuditService } from '../modules/audit';
-import { CollectionService, SimulatedReminderDelivery } from '../modules/collections';
+import { CollectionService } from '../modules/collections';
 import { CompanyService } from '../modules/company';
 import { DocumentService, TemplateService, type OwnerResolver } from '../modules/documents';
 import { CrmService } from '../modules/crm';
@@ -26,6 +26,13 @@ import { AuthThrottle, IdentityService } from '../modules/identity';
 import { InventoryService } from '../modules/inventory';
 import { MarketingService } from '../modules/marketing';
 import { NumberingService } from '../modules/numbering';
+import {
+  NotificationService,
+  SimulatedChannelAdapter,
+  type ChannelAdapter,
+} from '../modules/notifications';
+import { NotificationReminderDelivery } from './reminder-delivery';
+import { APPROVAL_AUDIT_ACTIONS } from '@alola/contracts';
 import { OrganizationService } from '../modules/organization';
 import { SalesService } from '../modules/sales';
 import { SecurityService } from '../modules/security';
@@ -80,6 +87,7 @@ export interface DomainServices {
   numbering: () => NumberingService;
   documents: () => DocumentService;
   templates: () => TemplateService;
+  notifications: () => NotificationService;
   /** The private file store; a `LocalDiskFileStore` only in development and test. */
   fileStore: PrivateFileStore;
 }
@@ -102,6 +110,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let numberingService: NumberingService | undefined;
   let documentService: DocumentService | undefined;
   let templateService: TemplateService | undefined;
+  let notificationService: NotificationService | undefined;
 
   /**
    * Encryption for MFA secrets (`SEC-017`).
@@ -165,6 +174,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
       audit: getAuditService(),
       defaultLocale: config.DEFAULT_LOCALE,
       demonstration: config.APP_ENV === 'development' || config.APP_ENV === 'test',
+      timeZone: config.ORG_TIMEZONE,
     });
     return companyService;
   }
@@ -291,6 +301,45 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     return templateService;
   }
 
+  /**
+   * External channels (CORE-NOTIFY-002). **None is connected** (`SD-20`): development and test
+   * simulate e-mail, SMS and WhatsApp — every message ends `simulated`, reaching nobody — and every
+   * other environment has no adapter at all, so a message there is `undeliverable`.
+   */
+  const channelAdapters: Partial<Record<'email' | 'sms' | 'whatsapp', ChannelAdapter>> =
+    config.APP_ENV === 'development' || config.APP_ENV === 'test'
+      ? {
+          email: new SimulatedChannelAdapter('email', config.APP_ENV),
+          sms: new SimulatedChannelAdapter('sms', config.APP_ENV),
+          whatsapp: new SimulatedChannelAdapter('whatsapp', config.APP_ENV),
+        }
+      : {};
+
+  /** Notifications (CORE-NOTIFY-001 … 005), configured from the deployment's settings. */
+  function getNotificationService(): NotificationService {
+    const connection = requireConnection();
+    notificationService ??= new NotificationService({
+      connection,
+      audit: getAuditService(),
+      logger,
+      timeZone: config.ORG_TIMEZONE,
+      defaultLocale: config.DEFAULT_LOCALE,
+      adapters: channelAdapters,
+      isActiveAccount: async (accountId) => {
+        try {
+          return (await getIdentityService().getAccount(accountId)).state === 'active';
+        } catch {
+          return false;
+        }
+      },
+      externalDeliveryEnabled: () =>
+        getSettingsService().isEnabled('feature.notifications.externalDelivery'),
+      quietHours: () =>
+        getSettingsService().valueOf<{ start: string; end: string }>('notifications.quietHours'),
+    });
+    return notificationService;
+  }
+
   function getOrganizationService(): OrganizationService {
     const connection = requireConnection();
     organizationService ??= new OrganizationService({
@@ -341,8 +390,8 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
    * not — no manager, an inactive manager, or a manager with no account — the sweep still reports the
    * stage as **unresolved** rather than inventing an approver (`APPROVAL-005`, ADR-0024).
    *
-   * `events` stays unconfigured: `CORE-NOTIFY` and `CORE-TASK` are separate groups, and the engine is
-   * correct with nothing listening, so there is no null implementation to pretend otherwise.
+   * `events` publishes to `CORE-NOTIFY` (F6). The engine is still correct with nothing listening: a
+   * publication failure is logged and swallowed after the decision has committed.
    */
   function getApprovalService(): ApprovalService {
     const connection = requireConnection();
@@ -354,6 +403,39 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
         getSecurityService().accountsWithPermission(permission),
       resolveActor: (accountId) => getSecurityService().resolveActor(accountId),
       resolveManager: (accountId) => getOrganizationService().resolveManagerAccount(accountId),
+      // CORE-NOTIFY: who owes a decision is told; an escalation tells the manager; the requester
+      // learns the outcome. Deduplicated per request and stage, so a replayed event notifies nobody twice.
+      events: {
+        publish: async (event) => {
+          const notifications = getNotificationService();
+          const params = { requestId: event.requestId };
+          if (event.action === APPROVAL_AUDIT_ACTIONS.requestEscalated) {
+            await notifications.notify({
+              type: 'approval.escalated',
+              recipients: { accountIds: event.pendingApproverAccountIds },
+              params,
+              source: { type: 'approvalRequest', id: event.requestId },
+              dedupeKey: `approval:${event.requestId}:${event.stageOrder}:escalated`,
+            });
+          } else if (event.state === 'pending') {
+            await notifications.notify({
+              type: 'approval.pending',
+              recipients: { accountIds: event.pendingApproverAccountIds },
+              params,
+              source: { type: 'approvalRequest', id: event.requestId },
+              dedupeKey: `approval:${event.requestId}:${event.stageOrder}:pending`,
+            });
+          } else if (event.requesterAccountId) {
+            await notifications.notify({
+              type: 'approval.decided',
+              recipients: { accountIds: [event.requesterAccountId] },
+              params,
+              source: { type: 'approvalRequest', id: event.requestId },
+              dedupeKey: `approval:${event.requestId}:decided:${event.state}`,
+            });
+          }
+        },
+      },
     });
     return approvalService;
   }
@@ -492,8 +574,15 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
           return unit ? { unitId: unit.unitId, code: unit.code } : undefined;
         },
       },
+      // Reminders are delivered through the notification foundation. In development and test its
+      // channels are simulated; elsewhere no delivery is configured, and a reminder stays `ready`.
       ...(config.APP_ENV === 'development' || config.APP_ENV === 'test'
-        ? { delivery: new SimulatedReminderDelivery(config.APP_ENV) }
+        ? {
+            delivery: new NotificationReminderDelivery(
+              getNotificationService,
+              (channel) => channelAdapters[channel]?.connected ?? false,
+            ),
+          }
         : {}),
       today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
       timeZone: config.ORG_TIMEZONE,
@@ -569,6 +658,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     numbering: getNumberingService,
     documents: getDocumentService,
     templates: getTemplateService,
+    notifications: getNotificationService,
     fileStore,
   };
 }

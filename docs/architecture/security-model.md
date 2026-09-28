@@ -354,6 +354,9 @@ anyone could consume numbers.
 | F5 | `documents` | `_id_unique`, `_owner`, `_keyset`, `_scope`, `_scope_assigned`, `_scope_self` | Scope fields copied from the owning record at upload; archived, never deleted |
 | F5 | `documentVersions` | `_unique` (document + version), `_storageKey_unique` | **Append-only** versions; only the scan status may change |
 | F5 | `documentTemplates` | `_key_version_unique`, `_selection` | Published content frozen by a model hook as well as by the service |
+| F6 | `notifications` | `_id_unique`, `_dedupe_unique`, `_inbox`, `_unread` (partial), `_due`, `_lease` | One row per recipient, channel and event; a type and parameters, never prose |
+| F6 | `notificationAttempts` | `_unique` (notification + attempt) | **Append-only** delivery attempts |
+| F6 | `notificationPreferences` | `_account_unique` | Per-account language and external-channel opt-in |
 
 **A document is as visible as the record it belongs to (F5).** The upload resolves the owning record
 through that module's *scoped* getter (wired at the composition root); a record outside the actor's

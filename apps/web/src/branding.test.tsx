@@ -33,6 +33,7 @@ const configured: PublicBranding = {
   tradeName: { ar: 'شركة المثال للتطوير', en: 'Example Homes Development' },
   defaultLocale: 'ar',
   supportedLocales: ['ar', 'en'],
+  timeZone: 'Africa/Cairo',
   primaryColor: '#0F766E',
   assets: {
     logo: { url: '/api/v1/branding/assets/logo?v=0123456789abcdef', contentType: 'image/png' },

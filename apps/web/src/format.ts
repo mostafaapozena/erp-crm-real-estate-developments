@@ -1,6 +1,7 @@
 import type { BusinessDate, Instant, Money } from '@alola/contracts';
 import { createFormatters } from '@alola/i18n';
 import { useMemo } from 'react';
+import { useBranding } from './branding';
 import { useLocale } from './locale';
 
 /**
@@ -10,15 +11,6 @@ import { useLocale } from './locale';
  * approved rule is Western digits in both languages. `createFormatters` forces `-u-nu-latn` and
  * assembles dates as `dd/MM/yyyy`, so a screen that uses this hook cannot get either wrong.
  */
-
-/**
- * The organization timezone used for display.
- *
- * A single value for the demonstration. It belongs to the legal entity, which already stores its own
- * `timeZone`; a multi-entity deployment resolves it per record rather than from a constant, and this
- * is the one place that would change.
- */
-export const DISPLAY_TIME_ZONE = 'Africa/Cairo';
 
 export interface Formatters {
   money: (value: Money | undefined, fractionDigits?: number) => string;
@@ -34,8 +26,10 @@ const ABSENT = '—';
 
 export function useFormatters(): Formatters {
   const { locale } = useLocale();
+  // The deployment's timezone, from its branding (ADR-0008, ADR-0027) — never assumed by the client.
+  const { timeZone } = useBranding();
   return useMemo(() => {
-    const base = createFormatters(locale, { timeZone: DISPLAY_TIME_ZONE });
+    const base = createFormatters(locale, { timeZone });
     return {
       money: (value, fractionDigits = 2) => (value ? base.money(value, fractionDigits) : ABSENT),
       number: (value, fractionDigits) =>
@@ -45,5 +39,5 @@ export function useFormatters(): Formatters {
       date: (value) => (value ? base.businessDate(value as BusinessDate) : ABSENT),
       dateTime: (value) => (value ? base.instant(value as Instant) : ABSENT),
     };
-  }, [locale]);
+  }, [locale, timeZone]);
 }

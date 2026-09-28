@@ -561,5 +561,60 @@
     "itemsCount_few": "{{count}} عناصر",
     "itemsCount_many": "{{count}} عنصرًا",
     "itemsCount_other": "{{count}} عنصر"
+  },
+  "notificationTitle": {
+    "approval": {
+      "pending": "طلب اعتماد بانتظارك",
+      "escalated": "طلب اعتماد متأخر صُعِّد إليك",
+      "decided": "تم البت في طلب الاعتماد"
+    },
+    "task": {
+      "assigned": "أُسندت إليك مهمة",
+      "dueSoon": "مهمة يقترب موعدها",
+      "overdue": "مهمة متأخرة",
+      "escalated": "مهمة متأخرة صُعِّدت إليك"
+    },
+    "reminder": {
+      "installmentDue": "تذكير بقسط مستحق"
+    }
+  },
+  "notificationBody": {
+    "approval": {
+      "pending": "الطلب {{requestId}} ينتظر قرارك.",
+      "escalated": "تجاوز الطلب {{requestId}} مهلته وأُضيف إليك للبت فيه.",
+      "decided": "تم البت في الطلب {{requestId}}. افتحه لمعرفة النتيجة."
+    },
+    "task": {
+      "assigned": "المهمة «{{title}}» أُسندت إليك.",
+      "dueSoon": "المهمة «{{title}}» مستحقة في {{dueOn}}.",
+      "overdue": "المهمة «{{title}}» تجاوزت موعدها.",
+      "escalated": "المهمة «{{title}}» متأخرة وصُعِّدت إليك."
+    },
+    "reminder": {
+      "installmentDue": "تذكير بقسط مستحق للعميل."
+    }
+  },
+  "notificationState": {
+    "pending": "بانتظار الإرسال",
+    "deferred": "مؤجل لساعات الهدوء",
+    "sending": "قيد الإرسال",
+    "delivered": "تم التسليم",
+    "simulated": "محاكاة — لم يُرسل",
+    "failed": "فشل",
+    "undeliverable": "لا توجد قناة متصلة"
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "subtitle": "ما يخصك داخل النظام",
+    "markRead": "تعليم كمقروء",
+    "markAllRead": "تعليم الكل كمقروء",
+    "unreadOnly": "غير المقروءة فقط",
+    "empty": "لا توجد إشعارات",
+    "unreadCount_zero": "لا إشعارات غير مقروءة",
+    "unreadCount_one": "إشعار واحد غير مقروء",
+    "unreadCount_two": "إشعاران غير مقروءين",
+    "unreadCount_few": "{{count}} إشعارات غير مقروءة",
+    "unreadCount_many": "{{count}} إشعارًا غير مقروء",
+    "unreadCount_other": "{{count}} إشعار غير مقروء"
   }
 }

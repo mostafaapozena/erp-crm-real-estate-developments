@@ -16,6 +16,7 @@ import { crmRouter } from './modules/crm';
 import { inventoryRouter } from './modules/inventory';
 import { marketingRouter } from './modules/marketing';
 import { numberingRouter } from './modules/numbering';
+import { notificationRouter } from './modules/notifications';
 import { organizationRouter } from './modules/organization';
 import { salesRouter } from './modules/sales';
 import { securityRouter } from './modules/security';
@@ -206,6 +207,10 @@ const modules: ApiModule[] = [
   { basePath: '/branding', router: brandingRouter({ getService: getCompanyService }) },
   { basePath: '/settings', router: settingsRouter({ getService: getSettingsService, guard }) },
   { basePath: '/numbering', router: numberingRouter({ getService: getNumberingService, guard }) },
+  {
+    basePath: '/notifications',
+    router: notificationRouter({ getService: services.notifications, guard }),
+  },
   {
     basePath: '/documents',
     router: documentRouter({

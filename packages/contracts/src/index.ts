@@ -13,6 +13,7 @@ export * from './inventory';
 export * from './localized';
 export * from './marketing';
 export * from './money';
+export * from './notifications';
 export * from './numbering';
 export * from './organization';
 export * from './sales';

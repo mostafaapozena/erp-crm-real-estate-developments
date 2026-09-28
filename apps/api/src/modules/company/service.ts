@@ -53,6 +53,8 @@ export interface CompanyServiceOptions {
   defaultLocale?: Locale;
   /** True on development and test deployments only (ADR-0026). */
   demonstration?: boolean;
+  /** The organization timezone, displayed before a profile sets its own (ADR-0008). */
+  timeZone?: string;
 }
 
 /** What a template needs to print the company on a document (consumed by `CORE-DOC`). */
@@ -223,6 +225,7 @@ export class CompanyService {
         demonstration: this.options.demonstration ?? false,
         defaultLocale: this.options.defaultLocale ?? DEFAULT_LOCALE,
         supportedLocales: [...SUPPORTED_LOCALES],
+        timeZone: this.options.timeZone ?? 'UTC',
         assets: {},
         version: 0,
       };
@@ -245,6 +248,7 @@ export class CompanyService {
       tradeName: profile.tradeName,
       defaultLocale: profile.defaultLocale,
       supportedLocales: profile.supportedLocales,
+      timeZone: profile.timeZone,
       ...(profile.primaryColor ? { primaryColor: profile.primaryColor } : {}),
       assets,
       version: profile.version,

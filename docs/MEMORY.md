@@ -54,11 +54,11 @@ implemented or verified requirement.
   ([ADR-0020](decisions/adr-0020-local-docker-development-services.md)). Integration tier: **59 passed,
   0 failed, 0 skipped** (191 tests).
 - Gate status: **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Every mandatory verification check passes, but
-  **24 of 113** Phase 1 requirements are not started (`INTEGRATION-001`–`005`, `CORE-NOTIFY`,
-  `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`), 10 are in progress, and the gate also requires a
+  **15 of 113** Phase 1 requirements are not started (`INTEGRATION-001`–`005`, `CORE-TASK`,
+  `CORE-DOC-003`/`005`, `CORE-SEARCH`, `CORE-IMPORT`), 9 are in progress, and the gate also requires a
   stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
-- Requirements `implemented` (code + passing tests): **79 of 113** · `in-progress`: 10 · not started: 24
+- Requirements `implemented` (code + passing tests): **89 of 113** · `in-progress`: 9 · not started: 15 (as of F6, 2026-09-28)
 
 ## Foundation completion (post-demo master prompt) — IN PROGRESS
 
@@ -93,8 +93,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 | F2 Organization foundation | **complete** | `748a8b6` |
 | F3 Settings, reference data, feature flags | **complete** | `d64ec0c` |
 | F4 Number sequences | **complete** | `85cf2ca` |
-| F5 Documents and templates | **complete** | the commit containing this row |
-| F6–F12 | not started | — |
+| F5 Documents and templates | **complete** | `92d3110` |
+| F6 Internal notifications | **complete** | the commit containing this row |
+| F7–F12 | not started | — |
 
 ### F0 — what changed
 
@@ -227,10 +228,51 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
   failed / 0 skipped**, **E2E 38 passed / 0 skipped**, secrets (367 files); 30 baseline demonstration
   collections unchanged.
 
+### F6 — what changed
+
+- `CORE-NOTIFY-001`–`005` implemented: module `apps/api/src/modules/notifications/` (model, adapters,
+  service, router), contracts `packages/contracts/src/notifications.ts`, routes under
+  `/api/v1/notifications` (inbox, unread count, read one/all, preferences for oneself; administrative
+  `notification.viewDeliveries` and `notification.dispatch`).
+- Stored as a **type plus parameters**, rendered in the recipient's language; deduplicated by a unique
+  key; external channels need opt-in, and customers need recorded consent; quiet hours defer
+  non-urgent external messages in the organization timezone.
+- Dispatch is a leased claim with an append-only attempt row, retries with the same idempotency key,
+  and `failed` after five attempts. `dispatchDue`/`sweep` is what the worker will call on a schedule
+  (F12); today it runs through the administrative dispatch route.
+- **No real message can leave:** channel adapters are simulated in development and test (state
+  `simulated`, `connected: false`) and absent elsewhere (`undeliverable`); even a connected provider
+  sends nothing while `feature.notifications.externalDelivery` is off.
+- Wired consumers: the approval engine's event port (pending approvers, escalation target, requester;
+  `ApprovalEvent` gained `requesterAccountId` and an escalation event), and the reminder centre through
+  `platform/reminder-delivery.ts` — reminders still reach `simulated`, never `sent`.
+- Web: `NotificationBell` in the shell (unread badge, replacing the disabled placeholder) and
+  `/notifications`.
+- **Defect fixed — hard-coded timezone:** `apps/web/src/format.ts` displayed every instant in a
+  constant `'Africa/Cairo'`. The branding answer now carries `timeZone` (the profile's, or
+  `ORG_TIMEZONE` before one exists) and the formatters use it.
+- **Serious defect found in F5's commit — the documents module was never committed.** The baseline
+  `.gitignore` rule `documents/` (meant for real business papers) matched
+  `apps/api/src/modules/documents/`, so `92d3110` contains its OpenAPI, wiring and contracts but **not
+  the module itself**: a clean checkout of `92d3110` does not build. The working tree always had it,
+  which is why every F5 check passed. Fixed here: a `!apps/api/src/modules/documents/` re-include
+  (the protective rule stays) and the module is committed in F6. New guard `npm run check:ignored`
+  (`scripts/check-ignored-source.mjs`, part of `verify`) fails whenever Git ignores a source file.
+- F5's record says lint passed, but the module had three lint errors (unsafe `any` calls in
+  `documents.int-test.ts`, an `import()` type in `templates.ts`); ESLint reports them with or without
+  the ignore rule, so the F5 lint result was not what it recorded. Fixed here. Prettier 3 honours
+  `.gitignore` by default, so `format:check` had skipped the module until the re-include.
+- E2E note: the shell's badge first rendered a hidden `0`, which the dashboard test's "first number"
+  locator picked up; the badge now renders no content when nothing is unread. Running the full E2E
+  suite several times within fifteen minutes spends the per-address sign-in budget (120) and fails
+  with "too many requests" — the throttle working, not a regression. Wait out the window.
+- Measured at the F6 commit: typecheck, lint, format, **unit 504**, **integration 429 passed / 0
+  failed / 0 skipped**, i18n; E2E and demonstration counts as recorded in the F6 commit message.
+
 ### Resume point
 
-Next package: **F6 — internal notifications** (`CORE-NOTIFY-001`–`005`), then wire the reminder
-centre and the approval engine's event port to it.
+Next package: **F7 — tasks and escalation** (`CORE-TASK-001`–`005`), notifying through F6
+(`task.assigned`, `task.dueSoon`, `task.overdue`, `task.escalated` are already typed and labelled).
 
 ## Phase status
 
@@ -676,11 +718,11 @@ untouched.
 
 ### Phase 1 registry (113 IDs)
 
-**`implemented` (84):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+**`implemented` (89):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
 **SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2) ·
-**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5)
+**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6)
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -708,7 +750,7 @@ nothing while both hold; it becomes necessary only if a cookie ever needs `SameS
 `APPROVAL-005` left `in-progress` on 2026-09-27: with the organization foundation (F2) an overdue
 approval escalates through the real reporting line, and an unresolvable one is still reported as such.
 
-**Not started (20):** INTEGRATION-001–005 · CORE-NOTIFY-001–005 · CORE-TASK-001–005 · CORE-DOC-003, 005 ·
+**Not started (15):** INTEGRATION-001–005 · CORE-TASK-001–005 · CORE-DOC-003, 005 ·
 CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 ### Foundation additions (registered 2026-09-27, 17 IDs)
@@ -944,7 +986,7 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 | ID | Blocker | Blocks |
 |---|---|---|
-| Phase 1 scope | 24 of 113 requirements not started; 10 in progress | **Phase 1 approval** (phase-gates §1) |
+| Phase 1 scope | 15 of 113 requirements not started; 9 in progress (F6) | **Phase 1 approval** (phase-gates §1) |
 | Stakeholder gate | Written approval outstanding. The demonstration is now **buildable and runnable** — `npm run seed:demo` — but has not been given | **Phase 1 approval** |
 | `SD-01`, `SD-02` | The real organization, roles, approval thresholds and segregation-of-duty rules. The demonstration seeds illustrative ones and closes neither | **Macro Phase 2** |
 | `SEC-033` | No KMS adapter, so staging and production cannot store an MFA secret | Any environment beyond development |
