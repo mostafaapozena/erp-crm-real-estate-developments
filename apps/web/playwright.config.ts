@@ -47,6 +47,10 @@ export default defineConfig({
       command: 'npm run build -w @alola/api && node apps/api/dist/main.js',
       cwd: '../../',
       url: 'http://localhost:4000/health/live',
+      // One address signs in about a hundred times per run and loads every screen: budgets sized for
+      // an office would make two runs within fifteen minutes fail. Test configuration only — the
+      // configuration loader refuses a raised sign-in budget in staging and production.
+      env: { AUTH_LOGIN_IP_MAX_ATTEMPTS: '2000', RATE_LIMIT_MAX_REQUESTS: '5000' },
       reuseExistingServer: true,
       timeout: 180_000,
     },

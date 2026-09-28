@@ -213,6 +213,25 @@ export class DocumentService {
 
   /* ------------------------------------------------------------------ reads */
 
+  /** Active documents by title prefix, inside the actor's scope (CORE-SEARCH-001). */
+  async searchDocuments(
+    actor: ActorContext,
+    term: string,
+    limit: number,
+  ): Promise<{ id: string; label: string }[]> {
+    const filter = withScope(buildScopeFilter(actor, DOCUMENT_SCOPE_FIELDS), {
+      state: 'active',
+      title: { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' },
+    });
+    const rows = await this.documents
+      .find(filter, { documentId: 1, title: 1 })
+      .sort({ title: 1 })
+      .limit(limit)
+      .lean<DocumentDocument[]>()
+      .exec();
+    return rows.map((row) => ({ id: row.documentId, label: row.title }));
+  }
+
   async getDocument(actor: ActorContext, documentId: string): Promise<BusinessDocument> {
     const document = await this.findScoped(actor, documentId);
     return toDocument(document, (await this.versionsOf([documentId])).get(documentId) ?? []);

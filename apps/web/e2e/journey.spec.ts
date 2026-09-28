@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { COLLECTOR, LABELS, SALES_MANAGER, open, signIn } from './demo';
+import { COLLECTOR, LABELS, SALES_MANAGER, mainNav, open, signIn } from './demo';
 
 /**
  * The demonstration journey, walked end to end in Arabic:
@@ -98,5 +98,23 @@ test.describe('tasks', () => {
     const grid = page.getByRole('grid');
     await expect(grid.getByRole('columnheader')).toHaveCount(7);
     await expect(grid.getByRole('gridcell')).toHaveCount(42);
+  });
+});
+
+test.describe('global search', () => {
+  test('finds a contract by its number and opens it, through the real API', async ({
+    page,
+    isMobile,
+  }) => {
+    await signIn(page, SALES_MANAGER);
+    // On a phone the search box sits at the top of the navigation drawer.
+    if (isMobile) await mainNav(page);
+    const box = page.getByRole('combobox', { name: 'بحث' });
+    await box.fill('CTR-');
+    const hit = page.getByRole('option', { name: /CTR-\d{4}-\d{5}/ }).first();
+    await expect(hit).toBeVisible();
+    await hit.click();
+    await expect(page).toHaveURL(/\/contracts\/[a-z]+_[A-Za-z0-9]+$/);
+    await expect(page.getByText(/^CTR-\d{4}-\d{5}$/).first()).toBeVisible();
   });
 });

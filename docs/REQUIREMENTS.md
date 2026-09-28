@@ -191,12 +191,21 @@ Tests: `apps/api/src/modules/tasks/tasks.int-test.ts` (15, real MongoDB),
 | CORE-TASK-004 | `GET /tasks/calendar` returns the visible tasks by organization-calendar day for up to 42 days; the web calendar shows a six-week, Saturday-first month grid with today marked, overdue tasks named in words |
 | CORE-TASK-005 | `POST /tasks/reassign` (administrative `task.reassign`) moves every open task assigned **or escalated** to a person, within the caller's scope, audits each move with its reason and tells the new assignee; finished tasks keep their history; an inactive target is refused |
 
+### Implementation evidence — F8 (2026-09-28)
+
+Tests: `apps/api/src/modules/search/search.int-test.ts` (6, real MongoDB),
+`apps/api/src/modules/search/search.test.ts` (4) and one end-to-end test through the shell's search box.
+
+| ID | Evidence |
+|---|---|
+| CORE-SEARCH-001 | The search service owns no index: each kind of record is searched by its owning module's scoped query, only when the caller holds that module's read permission (`searched` lists which); a branch-A caller finds branch-A leads and customers and never the branch-B record sharing the name; a phone number is matched but never echoed; a unit's restricted price is neither matched (searching the price finds nothing) nor returned; a caller without read permissions searches nothing; the term is escaped text (`.*` and `^P` match nothing); one failing provider never hides the others' answers; at most five hits per kind |
+
 ## Current status summary
 
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
-| Status `implemented` (code and passing tests) | **94** of the original 113, plus 12 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
+| Status `implemented` (code and passing tests) | **95** of the original 113, plus 12 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
@@ -506,7 +515,7 @@ adapter exists ([ADR-0023](decisions/adr-0023-password-hashing-and-session-token
 
 | ID | Requirement | Source | Notes |
 |---|---|---|---|
-| CORE-SEARCH-001 | Global search honouring data scope and field restrictions | ADR-0006 | Search is a common scope-leak path |
+| CORE-SEARCH-001 | Global search honouring data scope and field restrictions | ADR-0006 | **implemented** 2026-09-28 (F8). Search is a common scope-leak path |
 | CORE-IMPORT-001 | Validated Excel/CSV import with preview before commit | MM §8 | |
 | CORE-IMPORT-002 | Per-row error report; no partial silent import | MM §8 | |
 

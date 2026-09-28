@@ -108,6 +108,33 @@ describe('API configuration (OPS-001)', () => {
     }
   });
 
+  it('never lets staging or production raise the per-address sign-in budget', () => {
+    for (const APP_ENV of ['staging', 'production'] as const) {
+      const problems = problemsOf(() =>
+        loadApiConfig({
+          ...baseEnv,
+          APP_ENV,
+          MONGODB_URI: 'mongodb+srv://cluster.invalid/',
+          MONGODB_DB_NAME: 'alola_app',
+          REDIS_URL: 'rediss://cache.invalid:6379',
+          S3_BUCKET: 'bucket',
+          S3_REGION: 'me-south-1',
+          KMS_KEY_ID: 'arn:aws:kms:me-south-1:000000000000:key/placeholder',
+          AUTH_TOKEN_SIGNING_SECRET: 'x'.repeat(48),
+          AUTH_LOGIN_IP_MAX_ATTEMPTS: '121',
+        }),
+      );
+      expect(problems.map((p) => p.variable)).toEqual(['AUTH_LOGIN_IP_MAX_ATTEMPTS']);
+    }
+    const test = loadApiConfig({
+      ...baseEnv,
+      APP_ENV: 'test',
+      AUTH_TOKEN_SIGNING_SECRET: 'y'.repeat(48),
+      AUTH_LOGIN_IP_MAX_ATTEMPTS: '2000',
+    });
+    expect(test.AUTH_LOGIN_IP_MAX_ATTEMPTS).toBe(2000);
+  });
+
   it('accepts the authentication defaults in development', () => {
     const config = loadApiConfig({ ...baseEnv, AUTH_TOKEN_SIGNING_SECRET: 'y'.repeat(48) });
     expect(config.AUTH_ACCESS_TOKEN_TTL_SECONDS).toBe(600);

@@ -673,6 +673,24 @@ export class CollectionService {
     };
   }
 
+  /** Receipts by number prefix, inside the actor's scope (CORE-SEARCH-001). */
+  async searchReceipts(
+    actor: ActorContext,
+    term: string,
+    limit: number,
+  ): Promise<{ id: string; label: string; status: string }[]> {
+    const filter = withScope(buildScopeFilter(actor, COLLECTION_SCOPE_FIELDS), {
+      receiptNumber: { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' },
+    });
+    const rows = await this.receipts
+      .find(filter, { receiptId: 1, receiptNumber: 1, state: 1 })
+      .sort({ receiptNumber: 1 })
+      .limit(limit)
+      .lean<ReceiptDocument[]>()
+      .exec();
+    return rows.map((row) => ({ id: row.receiptId, label: row.receiptNumber, status: row.state }));
+  }
+
   async getReceipt(actor: ActorContext, receiptId: string): Promise<Receipt> {
     assertSafeFilter({ receiptId });
     const filter = withScope(buildScopeFilter(actor, COLLECTION_SCOPE_FIELDS), { receiptId });

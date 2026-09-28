@@ -18,6 +18,7 @@ import { marketingRouter } from './modules/marketing';
 import { numberingRouter } from './modules/numbering';
 import { notificationRouter } from './modules/notifications';
 import { taskRouter } from './modules/tasks';
+import { searchRouter } from './modules/search';
 import { organizationRouter } from './modules/organization';
 import { salesRouter } from './modules/sales';
 import { securityRouter } from './modules/security';
@@ -213,6 +214,7 @@ const modules: ApiModule[] = [
     router: notificationRouter({ getService: services.notifications, guard }),
   },
   { basePath: '/tasks', router: taskRouter({ getService: services.tasks, guard }) },
+  { basePath: '/search', router: searchRouter({ getService: services.search, guard }) },
   {
     basePath: '/documents',
     router: documentRouter({

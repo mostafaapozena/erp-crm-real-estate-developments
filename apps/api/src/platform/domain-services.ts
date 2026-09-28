@@ -38,6 +38,7 @@ import { SalesService } from '../modules/sales';
 import { SecurityService } from '../modules/security';
 import { SettingsService } from '../modules/settings';
 import { TaskService } from '../modules/tasks';
+import { SearchService, type SearchProvider } from '../modules/search';
 import { AppError } from '../errors';
 
 /**
@@ -90,6 +91,7 @@ export interface DomainServices {
   templates: () => TemplateService;
   notifications: () => NotificationService;
   tasks: () => TaskService;
+  search: () => SearchService;
   /** The private file store; a `LocalDiskFileStore` only in development and test. */
   fileStore: PrivateFileStore;
 }
@@ -114,6 +116,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let templateService: TemplateService | undefined;
   let notificationService: NotificationService | undefined;
   let taskService: TaskService | undefined;
+  let searchService: SearchService | undefined;
 
   /**
    * Encryption for MFA secrets (`SEC-017`).
@@ -134,7 +137,9 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     timeCost: config.ARGON2_TIME_COST,
     parallelism: config.ARGON2_PARALLELISM,
   });
-  const authThrottle = new AuthThrottle(options.redisClient ?? undefined);
+  const authThrottle = new AuthThrottle(options.redisClient ?? undefined, {
+    loginByIpPoints: config.AUTH_LOGIN_IP_MAX_ATTEMPTS,
+  });
 
   /**
    * Private file storage (PLAT-017). Development and test keep files on the local disk behind signed,
@@ -368,6 +373,75 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
       notifier: getNotificationService(),
     });
     return taskService;
+  }
+
+  /**
+   * Global search (CORE-SEARCH-001). Each provider is the owning module's own scoped search, called
+   * only when the actor holds that module's read permission; the search service holds no data.
+   */
+  function getSearchService(): SearchService {
+    const tag =
+      <T extends SearchProvider['type']>(type: T) =>
+      (hits: { id: string; label: string; name?: { ar: string; en: string }; status?: string }[]) =>
+        hits.map((hit) => ({ type, ...hit }));
+    const providers: SearchProvider[] = [
+      {
+        type: 'lead',
+        permission: 'crm.lead.view',
+        search: async (actor, term, limit) =>
+          tag('lead')(await getCrmService().searchLeads(actor, term, limit)),
+      },
+      {
+        type: 'customer',
+        permission: 'crm.customer.view',
+        search: async (actor, term, limit) =>
+          tag('customer')(await getCrmService().searchCustomers(actor, term, limit)),
+      },
+      {
+        type: 'project',
+        permission: 'inventory.project.view',
+        search: async (actor, term, limit) =>
+          tag('project')(await getInventoryService().searchProjects(actor, term, limit)),
+      },
+      {
+        type: 'unit',
+        permission: 'inventory.unit.view',
+        search: async (actor, term, limit) =>
+          tag('unit')(await getInventoryService().searchUnits(actor, term, limit)),
+      },
+      {
+        type: 'reservation',
+        permission: 'sales.reservation.view',
+        search: async (actor, term, limit) =>
+          tag('reservation')(await getSalesService().searchReservations(actor, term, limit)),
+      },
+      {
+        type: 'contract',
+        permission: 'sales.contract.view',
+        search: async (actor, term, limit) =>
+          tag('contract')(await getSalesService().searchContracts(actor, term, limit)),
+      },
+      {
+        type: 'receipt',
+        permission: 'collection.receipt.view',
+        search: async (actor, term, limit) =>
+          tag('receipt')(await getCollectionService().searchReceipts(actor, term, limit)),
+      },
+      {
+        type: 'document',
+        permission: 'document.view',
+        search: async (actor, term, limit) =>
+          tag('document')(await getDocumentService().searchDocuments(actor, term, limit)),
+      },
+      {
+        // One's own tasks need no permission; the task service widens to scope only with task.view.
+        type: 'task',
+        search: async (actor, term, limit) =>
+          tag('task')(await getTaskService().searchTasks(actor, term, limit)),
+      },
+    ];
+    searchService ??= new SearchService({ providers, logger });
+    return searchService;
   }
 
   function getOrganizationService(): OrganizationService {
@@ -690,6 +764,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     templates: getTemplateService,
     notifications: getNotificationService,
     tasks: getTaskService,
+    search: getSearchService,
     fileStore,
   };
 }

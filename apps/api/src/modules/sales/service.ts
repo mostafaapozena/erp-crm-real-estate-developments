@@ -885,6 +885,52 @@ export class SalesService {
     };
   }
 
+  /** Reservations and contracts by document-number prefix, inside the actor's scope (CORE-SEARCH-001). */
+  async searchReservations(
+    actor: ActorContext,
+    term: string,
+    limit: number,
+  ): Promise<{ id: string; label: string; status: string }[]> {
+    const filter = withScope(buildScopeFilter(actor, SALES_SCOPE_FIELDS), {
+      reservationNumber: {
+        $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        $options: 'i',
+      },
+    });
+    const rows = await this.reservations
+      .find(filter, { reservationId: 1, reservationNumber: 1, state: 1 })
+      .sort({ reservationNumber: 1 })
+      .limit(limit)
+      .lean<ReservationDocument[]>()
+      .exec();
+    return rows.map((row) => ({
+      id: row.reservationId,
+      label: row.reservationNumber,
+      status: row.state,
+    }));
+  }
+
+  async searchContracts(
+    actor: ActorContext,
+    term: string,
+    limit: number,
+  ): Promise<{ id: string; label: string; status: string }[]> {
+    const filter = withScope(buildScopeFilter(actor, SALES_SCOPE_FIELDS), {
+      contractNumber: { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' },
+    });
+    const rows = await this.contracts
+      .find(filter, { contractId: 1, contractNumber: 1, state: 1 })
+      .sort({ contractNumber: 1 })
+      .limit(limit)
+      .lean<ContractDocument[]>()
+      .exec();
+    return rows.map((row) => ({
+      id: row.contractId,
+      label: row.contractNumber,
+      status: row.state,
+    }));
+  }
+
   async getReservation(actor: ActorContext, reservationId: string): Promise<Reservation> {
     assertSafeFilter({ reservationId });
     const filter = withScope(buildScopeFilter(actor, SALES_SCOPE_FIELDS), { reservationId });

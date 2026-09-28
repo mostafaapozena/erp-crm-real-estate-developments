@@ -289,6 +289,33 @@ export class CrmService {
     return documents.map(toCustomer);
   }
 
+  /**
+   * Customers by name or phone prefix, inside the actor's scope (CORE-SEARCH-001). Only the name is
+   * returned: a phone number is matched, never echoed.
+   */
+  async searchCustomers(
+    actor: ActorContext,
+    term: string,
+    limit: number,
+  ): Promise<{ id: string; label: string }[]> {
+    const digits = normalizePhone(term);
+    const filter = withScope(buildScopeFilter(actor, CUSTOMER_SCOPE_FIELDS), {
+      $or: [
+        { name: { $regex: `^${escapeRegex(term)}`, $options: 'i' } },
+        ...(digits.length >= 3
+          ? [{ primaryPhoneDigits: { $regex: `^${escapeRegex(digits)}` } }]
+          : []),
+      ],
+    });
+    const rows = await this.customers
+      .find(filter, { customerId: 1, name: 1 })
+      .sort({ name: 1, customerId: 1 })
+      .limit(limit)
+      .lean<CustomerDocument[]>()
+      .exec();
+    return rows.map((row) => ({ id: row.customerId, label: row.name }));
+  }
+
   async getCustomer(actor: ActorContext, customerId: string): Promise<Customer> {
     assertSafeFilter({ customerId });
     const filter = withScope(buildScopeFilter(actor, CUSTOMER_SCOPE_FIELDS), { customerId });
@@ -488,6 +515,30 @@ export class CrmService {
         ? { nextCursor: encodeCursor(last.createdAt, last.leadId) }
         : {}),
     };
+  }
+
+  /** Leads by name or phone prefix, inside the actor's scope (CORE-SEARCH-001). */
+  async searchLeads(
+    actor: ActorContext,
+    term: string,
+    limit: number,
+  ): Promise<{ id: string; label: string; status: string }[]> {
+    const digits = normalizePhone(term);
+    const filter = withScope(buildScopeFilter(actor, LEAD_SCOPE_FIELDS), {
+      $or: [
+        { name: { $regex: `^${escapeRegex(term)}`, $options: 'i' } },
+        ...(digits.length >= 3
+          ? [{ primaryPhoneDigits: { $regex: `^${escapeRegex(digits)}` } }]
+          : []),
+      ],
+    });
+    const rows = await this.leads
+      .find(filter, { leadId: 1, name: 1, stage: 1 })
+      .sort({ name: 1, leadId: 1 })
+      .limit(limit)
+      .lean<LeadDocument[]>()
+      .exec();
+    return rows.map((row) => ({ id: row.leadId, label: row.name, status: row.stage }));
   }
 
   async getLead(actor: ActorContext, leadId: string): Promise<Lead> {

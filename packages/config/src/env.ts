@@ -130,6 +130,13 @@ export const apiEnvSchema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
   RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().min(1).default(300),
+  /**
+   * Sign-in attempts one address may make in fifteen minutes (SEC-003). The default, 120, is the
+   * reviewed production value (ADR-0023). Development and test may raise it — the end-to-end suite
+   * signs in about a hundred times per run from one address — but staging and production refuse
+   * anything above the default, so configuration can only tighten it there.
+   */
+  AUTH_LOGIN_IP_MAX_ATTEMPTS: z.coerce.number().int().min(10).max(10_000).default(120),
   S3_BUCKET: optionalString,
   S3_REGION: optionalString,
   /**
@@ -213,6 +220,18 @@ function crossFieldProblems(
     problems.push({
       variable: 'DEV_ENCRYPTION_KEY',
       problem: `must not be set when APP_ENV=${config.APP_ENV}; configure KMS_KEY_ID instead`,
+    });
+  }
+  // The per-address sign-in budget may be tightened anywhere, raised only where nothing is real.
+  const loginBudget = Number(env['AUTH_LOGIN_IP_MAX_ATTEMPTS'] ?? '120');
+  if (
+    (config.APP_ENV === 'production' || config.APP_ENV === 'staging') &&
+    Number.isFinite(loginBudget) &&
+    loginBudget > 120
+  ) {
+    problems.push({
+      variable: 'AUTH_LOGIN_IP_MAX_ATTEMPTS',
+      problem: `must not exceed 120 when APP_ENV=${config.APP_ENV}`,
     });
   }
   // ADR-0018 production guard: a non-production process must never point at a production database.

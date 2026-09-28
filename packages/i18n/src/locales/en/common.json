@@ -646,5 +646,22 @@
     "nextMonth": "Next month",
     "truncated": "Only the first 500 tasks in this range are shown.",
     "timeZoneNote": "Dates and times are in the organization’s timezone ({{timeZone}})."
+  },
+  "search": {
+    "label": "Search",
+    "placeholder": "Name, code, number or phone",
+    "hint": "Type at least two characters",
+    "empty": "Nothing found",
+    "types": {
+      "lead": "Leads",
+      "customer": "Customers",
+      "project": "Projects",
+      "unit": "Units",
+      "reservation": "Reservations",
+      "contract": "Contracts",
+      "receipt": "Receipts",
+      "document": "Documents",
+      "task": "Tasks"
+    }
   }
 }

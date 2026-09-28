@@ -22,6 +22,7 @@ import { useSession } from '../api/session';
 import { useLocale } from '../locale';
 import { BrandMark } from './BrandMark';
 import { NotificationBell } from './NotificationBell';
+import { SearchBox } from './SearchBox';
 import { breadcrumbFor, visibleGroups } from './navigation';
 
 const DRAWER_WIDTH = 268;
@@ -51,6 +52,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigation = (
     <Box component="nav" aria-label={t('shell.navigation')} id="app-navigation">
       <Toolbar />
+      {/* On a phone the top bar has no room for search; it opens with the navigation instead. */}
+      {isDesktop ? null : (
+        <Box sx={{ paddingInline: 2, paddingBlockEnd: 1 }}>
+          <SearchBox />
+        </Box>
+      )}
       {groups.map((group, index) => (
         <List
           key={group.labelKey}
@@ -137,6 +144,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
           <BrandMark variant="shell" />
           <Box sx={{ flexGrow: 1 }} />
+          {isDesktop ? <SearchBox /> : null}
 
           <NotificationBell />
 

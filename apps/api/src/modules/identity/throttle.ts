@@ -68,9 +68,20 @@ function build(name: string, rule: ThrottleRule, redis?: Redis): RateLimiterAbst
 export class AuthThrottle {
   private readonly limiters: Record<ThrottleName, RateLimiterAbstract>;
 
-  constructor(redis?: Redis) {
+  /**
+   * `loginByIpPoints` replaces the per-address sign-in budget; configuration validates it (it can
+   * only be raised in development and test). Every other rule is fixed.
+   */
+  constructor(redis?: Redis, overrides: { loginByIpPoints?: number } = {}) {
     this.limiters = {
-      loginByIp: build('login-ip', AUTH_THROTTLE_RULES.loginByIp, redis),
+      loginByIp: build(
+        'login-ip',
+        {
+          ...AUTH_THROTTLE_RULES.loginByIp,
+          points: overrides.loginByIpPoints ?? AUTH_THROTTLE_RULES.loginByIp.points,
+        },
+        redis,
+      ),
       loginByAccount: build('login-account', AUTH_THROTTLE_RULES.loginByAccount, redis),
       mfaByAccount: build('mfa-account', AUTH_THROTTLE_RULES.mfaByAccount, redis),
       passwordResetByIp: build('reset-ip', AUTH_THROTTLE_RULES.passwordResetByIp, redis),

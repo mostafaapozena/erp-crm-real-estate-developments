@@ -54,11 +54,11 @@ implemented or verified requirement.
   ([ADR-0020](decisions/adr-0020-local-docker-development-services.md)). Integration tier: **59 passed,
   0 failed, 0 skipped** (191 tests).
 - Gate status: **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Every mandatory verification check passes, but
-  **10 of 113** Phase 1 requirements are not started (`INTEGRATION-001`–`005`,
-  `CORE-DOC-003`/`005`, `CORE-SEARCH`, `CORE-IMPORT`), 9 are in progress, and the gate also requires a
+  **9 of 113** Phase 1 requirements are not started (`INTEGRATION-001`–`005`,
+  `CORE-DOC-003`/`005`, `CORE-IMPORT-001`/`002`), 9 are in progress, and the gate also requires a
   stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
-- Requirements `implemented` (code + passing tests): **94 of 113** · `in-progress`: 9 · not started: 10 (as of F7, 2026-09-28)
+- Requirements `implemented` (code + passing tests): **95 of 113** · `in-progress`: 9 · not started: 9 (as of F8, 2026-09-28)
 
 ## Foundation completion (post-demo master prompt) — IN PROGRESS
 
@@ -95,8 +95,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 | F4 Number sequences | **complete** | `85cf2ca` |
 | F5 Documents and templates | **complete** | `92d3110` |
 | F6 Internal notifications | **complete** | `8ee6271` |
-| F7 Tasks and escalation | **complete** | the commit containing this row |
-| F8–F12 | not started | — |
+| F7 Tasks and escalation | **complete** | `505b1e5` |
+| F8 Global search | **complete** | the commit containing this row |
+| F9–F12 | not started | — |
 
 ### F0 — what changed
 
@@ -303,16 +304,47 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
   failed / 0 skipped**, **E2E 40 passed / 0 skipped**, i18n, links, secrets, ignored-source, build,
   bundle; 30 baseline demonstration collections unchanged (new empty `tasks`).
 
+### F8 — what changed
+
+- `CORE-SEARCH-001` implemented: module `apps/api/src/modules/search/` (no data of its own),
+  contracts `packages/contracts/src/search.ts`, `GET /api/v1/search?q=&types=` (authentication only),
+  and a search box in the shell — the top bar on desktop, the top of the navigation drawer on a phone.
+- Providers are wired in `domain-services.ts` to one new scoped method per owning module:
+  `CrmService.searchLeads`/`searchCustomers`, `InventoryService.searchProjects`/`searchUnits`,
+  `SalesService.searchReservations`/`searchContracts`, `CollectionService.searchReceipts`,
+  `DocumentService.searchDocuments`, `TaskService.searchTasks`. Each matches an escaped, anchored,
+  case-insensitive prefix on unrestricted identifying fields only, and returns an identifier, a label,
+  an optional bilingual name and an optional status enumeration value.
+- A hit's label is shown in `<bdi>` (a name may be Arabic, a code Latin); its status is labelled
+  through the owning type's enumeration translations.
+- The validator reports Zod's own code (`too_small`) for a length rule; only a refinement's
+  UPPER_SNAKE message becomes a custom code. The search contract relies on that.
+- Prefix regular expressions scan an index only when anchored and case-sensitive; the
+  case-insensitive form scans the scoped set. Acceptable at demonstration volumes; a collated or
+  text index is Business Master Prompt work when volumes are known.
+- **E2E budgets fixed.** One E2E run signs in about a hundred times from one address, so two runs within
+  fifteen minutes crossed the 120 per-address sign-in budget, and busy screens neared the 300/min API
+  limit. New validated setting `AUTH_LOGIN_IP_MAX_ATTEMPTS` (default 120; **refused above 120 in
+  staging and production**, tested); `AuthThrottle` takes it as an override. Playwright starts the API
+  with 2000 sign-ins and 5000 requests per minute. Production budgets are unchanged.
+- Measured at the F8 commit: typecheck, lint, format, links, secrets (403 files), **unit 514**,
+  **integration 450 passed / 0 failed / 0 skipped**, build, bundle, OpenAPI 165 paths / 0 broken refs,
+  **E2E 42 passed / 0 skipped** (three consecutive runs: 42, 41 + one slow-load timeout during a run
+  that took 4.5 min instead of 1.2, 42); 30 baseline demonstration collections unchanged.
+
 ### Resume point
 
-Next package: **F8 — global search** (`CORE-SEARCH-001`): permission-aware search whose scope is
-applied inside each module's query, never filtered afterwards.
+Next package: **F9 — import and export** (`CORE-IMPORT-001`–`003`). Drafts already written and
+parked, uncommitted, in the ignored `scratch/hold-f9/` (contracts `imports.ts`, module
+`apps/api/src/modules/imports/` model and service, `platform/csv.ts` with tests): move them back to
+the same paths. Remaining: the reference-items importer, leads and units exporters, the XLSX reader
+(`read-excel-file`, pinned), router, OpenAPI, tests, screen.
 
 ## Phase status
 
 - [ ] Phase 1 — *in progress: scaffolding, audit, authorization, identity/authentication, and the
       approval engine done; foundation packages F0–F7 done (organization, settings, numbering, documents,
-      notifications, tasks); search, import, integration registry, PDF/QR not started*
+      notifications, tasks) and F8 (search) done; import, integration registry, PDF/QR not started*
 - [ ] Phases 2–9 — not started. **Do not start Phase 2.**
 
 ## Recently completed — 2026-09-19
@@ -752,11 +784,11 @@ untouched.
 
 ### Phase 1 registry (113 IDs)
 
-**`implemented` (94):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+**`implemented` (95):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
 **SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2) ·
-**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6) · **CORE-TASK-001–005** (F7)
+**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6) · **CORE-TASK-001–005** (F7) · **CORE-SEARCH-001** (F8)
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -784,8 +816,7 @@ nothing while both hold; it becomes necessary only if a cookie ever needs `SameS
 `APPROVAL-005` left `in-progress` on 2026-09-27: with the organization foundation (F2) an overdue
 approval escalates through the real reporting line, and an unresolvable one is still reported as such.
 
-**Not started (10):** INTEGRATION-001–005 · CORE-DOC-003, 005 ·
-CORE-SEARCH-001 · CORE-IMPORT-001–002
+**Not started (9):** INTEGRATION-001–005 · CORE-DOC-003, 005 · CORE-IMPORT-001–002
 
 ### Foundation additions (registered 2026-09-27, 17 IDs)
 
@@ -1020,7 +1051,7 @@ CORE-SEARCH-001 · CORE-IMPORT-001–002
 
 | ID | Blocker | Blocks |
 |---|---|---|
-| Phase 1 scope | 10 of 113 requirements not started; 9 in progress (F7) | **Phase 1 approval** (phase-gates §1) |
+| Phase 1 scope | 9 of 113 requirements not started; 9 in progress (F8) | **Phase 1 approval** (phase-gates §1) |
 | Stakeholder gate | Written approval outstanding. The demonstration is now **buildable and runnable** — `npm run seed:demo` — but has not been given | **Phase 1 approval** |
 | `SD-01`, `SD-02` | The real organization, roles, approval thresholds and segregation-of-duty rules. The demonstration seeds illustrative ones and closes neither | **Macro Phase 2** |
 | `SEC-033` | No KMS adapter, so staging and production cannot store an MFA secret | Any environment beyond development |

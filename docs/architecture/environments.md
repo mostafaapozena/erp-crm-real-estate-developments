@@ -52,7 +52,7 @@ Implemented variables (Phase 1 scaffolding, `packages/config/src/env.ts`):
 |---|---|---|
 | Runtime | `NODE_ENV`, `APP_ENV`, `LOG_LEVEL`, `TZ` (must be `UTC`) | `TZ` always |
 | Organization | `ORG_TIMEZONE` (IANA; placeholder `UTC` pending `SD-21`), `DEFAULT_LOCALE` (`ar`) | `ORG_TIMEZONE` always |
-| API | `PORT`, `CORS_ALLOWED_ORIGINS` (bare origins, no wildcard), `TRUST_PROXY_HOPS`, `RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_MAX_REQUESTS` | `CORS_ALLOWED_ORIGINS` for the API |
+| API | `PORT`, `CORS_ALLOWED_ORIGINS` (bare origins, no wildcard), `TRUST_PROXY_HOPS`, `RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_MAX_REQUESTS`, `AUTH_LOGIN_IP_MAX_ATTEMPTS` (default 120; may only be raised in development and test — the E2E API server uses 2000) | `CORS_ALLOWED_ORIGINS` for the API |
 | Database | `MONGODB_URI`, `MONGODB_DB_NAME` | staging and production; name containing `prod` refused elsewhere |
 | Redis | `REDIS_URL` | staging and production; always for the worker |
 | Worker | `WORKER_CONCURRENCY` | — |

@@ -247,6 +247,26 @@ export class TaskService {
 
   /* ------------------------------------------------------------------ reads */
 
+  /** Tasks the actor can see, by title prefix (CORE-SEARCH-001). */
+  async searchTasks(
+    actor: ActorContext,
+    term: string,
+    limit: number,
+  ): Promise<{ id: string; label: string; status: string }[]> {
+    const rows = await this.tasks
+      .find({
+        $and: [
+          this.visible(actor),
+          { title: { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' } },
+        ],
+      })
+      .sort({ dueAt: 1, taskId: 1 })
+      .limit(limit)
+      .lean<TaskDocument[]>()
+      .exec();
+    return rows.map((row) => ({ id: row.taskId, label: row.title, status: row.state }));
+  }
+
   async getTask(actor: ActorContext, taskId: string): Promise<Task> {
     return this.toTask(await this.findVisible(actor, taskId));
   }

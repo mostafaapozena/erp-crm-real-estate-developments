@@ -284,6 +284,52 @@ export class InventoryService {
     return documents.map(toProject);
   }
 
+  /** Projects by code or name prefix, inside the actor's scope (CORE-SEARCH-001). */
+  async searchProjects(
+    actor: ActorContext,
+    term: string,
+    limit: number,
+  ): Promise<{ id: string; label: string; name: { ar: string; en: string }; status: string }[]> {
+    const pattern = { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' };
+    const filter = withScope(buildScopeFilter(actor, INVENTORY_SCOPE_FIELDS), {
+      $or: [{ code: pattern }, { 'name.ar': pattern }, { 'name.en': pattern }],
+    });
+    const rows = await this.projects
+      .find(filter, { projectId: 1, code: 1, name: 1, status: 1 })
+      .sort({ code: 1 })
+      .limit(limit)
+      .lean<ProjectDocument[]>()
+      .exec();
+    return rows.map((row) => ({
+      id: row.projectId,
+      label: row.code,
+      name: { ar: row.name.ar, en: row.name.en },
+      status: row.status,
+    }));
+  }
+
+  /**
+   * Units by code prefix, inside the actor's scope (CORE-SEARCH-001). **Only the code is matched**:
+   * price fields are restricted (SEC-029), and a search that matched on them would answer questions
+   * about a value the actor may not see.
+   */
+  async searchUnits(
+    actor: ActorContext,
+    term: string,
+    limit: number,
+  ): Promise<{ id: string; label: string; status: string }[]> {
+    const filter = withScope(buildScopeFilter(actor, INVENTORY_SCOPE_FIELDS), {
+      code: { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' },
+    });
+    const rows = await this.units
+      .find(filter, { unitId: 1, code: 1, status: 1 })
+      .sort({ code: 1 })
+      .limit(limit)
+      .lean<UnitDocument[]>()
+      .exec();
+    return rows.map((row) => ({ id: row.unitId, label: row.code, status: row.status }));
+  }
+
   async getProject(actor: ActorContext, projectId: string): Promise<Project> {
     assertSafeFilter({ projectId });
     const filter = withScope(buildScopeFilter(actor, INVENTORY_SCOPE_FIELDS), { projectId });
