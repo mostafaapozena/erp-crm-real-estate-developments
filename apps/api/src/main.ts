@@ -21,6 +21,12 @@ import { taskRouter } from './modules/tasks';
 import { searchRouter } from './modules/search';
 import { exportRouter, importRouter } from './modules/imports';
 import { integrationRouter, webhookRouter } from './modules/integrations';
+import { OperationsService, operationsRouter } from './modules/operations';
+import { buildInfo, ENV_VARIABLES } from '@alola/config';
+import { WORKER_HEARTBEAT_KEY } from '@alola/contracts';
+import { MaintenanceScheduler, type SweepDefinition } from './platform/maintenance';
+import { MIGRATIONS } from './platform/migration-list';
+import { MigrationRunner } from './platform/migrations';
 import { organizationRouter } from './modules/organization';
 import { salesRouter } from './modules/sales';
 import { securityRouter } from './modules/security';
@@ -65,6 +71,7 @@ void mongo.connect().then(async () => {
   try {
     // ADR-0002: indexes are declared with their collections and created explicitly (autoIndex is off).
     await ensureIndexes(mongo.db, logger);
+    if (maintenanceEnabled) maintenance().start(config.MAINTENANCE_TICK_SECONDS);
   } catch (error) {
     logger.error(
       { err: error, code: 'INDEX_CREATION_FAILED' },
@@ -111,6 +118,77 @@ const services = createDomainServices({
   redisClient: redis.client ?? undefined,
   onAuditRecorded: noteAuditWrite,
   repositoryRoot,
+});
+
+/**
+ * Schema version against this build (OPS-004, OPS-006). An instance whose database has pending,
+ * edited or unknown migrations reports not ready rather than serving against a schema it does not
+ * expect.
+ */
+const startedAt = new Date();
+let migrationRunner: MigrationRunner | undefined;
+const migrations = () => (migrationRunner ??= new MigrationRunner(requireConnection(), MIGRATIONS));
+const migrationProbe = {
+  health: async () => {
+    const status = await migrations().status();
+    if (status.changed.length > 0 || status.unknown.length > 0)
+      return { status: 'mismatch' as const };
+    return { status: status.pending.length > 0 ? ('pending' as const) : ('current' as const) };
+  },
+};
+
+/**
+ * Scheduled maintenance (OPS-007, ADR-0028): each sweep single-runner under a database lease, idempotent
+ * in its own module. On by default only in staging and production.
+ */
+const maintenanceEnabled = config.MAINTENANCE_ENABLED
+  ? config.MAINTENANCE_ENABLED === 'true'
+  : config.APP_ENV === 'staging' || config.APP_ENV === 'production';
+const counts = (result: object) => result as Record<string, number>;
+const sweeps: SweepDefinition[] = [
+  {
+    name: 'notifications.dispatch',
+    intervalSeconds: 60,
+    run: async (actor, context) => counts(await services.notifications().sweep(actor, context)),
+  },
+  {
+    name: 'integrations.sweep',
+    intervalSeconds: 60,
+    run: async (actor, context) => counts(await services.integrations().sweep(actor, context)),
+  },
+  {
+    name: 'tasks.sweep',
+    intervalSeconds: 300,
+    run: async (actor, context) => counts(await services.tasks().sweep(actor, context)),
+  },
+  {
+    name: 'approvals.escalate',
+    intervalSeconds: 600,
+    run: async (actor, context) =>
+      counts(await services.approval().escalateOverdue(actor, context)),
+  },
+  {
+    name: 'installments.refresh',
+    intervalSeconds: 3600,
+    run: async (actor, context) =>
+      counts(await services.sales().refreshInstallmentStates(actor, context)),
+  },
+];
+let scheduler: MaintenanceScheduler | undefined;
+const maintenance = () =>
+  (scheduler ??= new MaintenanceScheduler(requireConnection(), sweeps, { logger }));
+
+const operations = new OperationsService({
+  build: buildInfo(),
+  appEnv: config.APP_ENV,
+  startedAt,
+  migrations: () => migrations().status(),
+  maintenance: { enabled: maintenanceEnabled, status: () => maintenance().status() },
+  readHeartbeat: () =>
+    redis.client ? redis.client.get(WORKER_HEARTBEAT_KEY) : Promise.resolve(null),
+  integrationStates: () => services.integrations().list(),
+  configurationNames: ENV_VARIABLES,
+  environment: process.env,
 });
 
 const getAuditService = services.audit;
@@ -225,6 +303,7 @@ const modules: ApiModule[] = [
   },
   // Public by nature: a webhook is authenticated by its signature, verified before anything else.
   { basePath: '/webhooks', router: webhookRouter({ getService: services.integrations }) },
+  { basePath: '/operations', router: operationsRouter({ getService: () => operations, guard }) },
   {
     basePath: '/documents',
     router: documentRouter({
@@ -256,10 +335,22 @@ const modules: ApiModule[] = [
   { basePath: '/security', router: accountAdminRouter(identityRouterOptions) },
 ];
 
-const app = createApp({ config, logger, mongo, redis, rateLimiter, modules, actorResolver });
+const app = createApp({
+  config,
+  logger,
+  mongo,
+  redis,
+  migrations: migrationProbe,
+  rateLimiter,
+  modules,
+  actorResolver,
+});
 
 const server = app.listen(config.PORT, () => {
-  logger.info({ port: config.PORT, env: config.APP_ENV }, 'API listening');
+  logger.info(
+    { port: config.PORT, env: config.APP_ENV, build: buildInfo(), maintenance: maintenanceEnabled },
+    'API listening',
+  );
 });
 
 let shuttingDown = false;
@@ -267,6 +358,7 @@ async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, 'Shutting down');
+  scheduler?.stop();
   server.close();
   await Promise.allSettled([mongo.close(), redis.close()]);
   process.exit(0);

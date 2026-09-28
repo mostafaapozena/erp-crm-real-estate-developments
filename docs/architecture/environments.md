@@ -292,6 +292,14 @@ except the signing secret, which has none: a default signing key is a shared key
 | Signing secret | generated locally into the ignored `.env` | required, from the environment or a secrets manager |
 | Throttle store | Redis, with an in-memory insurance limiter | same |
 
+### Scheduled maintenance and diagnostics (OPS-006, OPS-007)
+
+`MAINTENANCE_ENABLED` (`true`/`false`; unset means on in staging and production, off otherwise) and
+`MAINTENANCE_TICK_SECONDS` (default 30) control the sweeps the API runs on a timer
+([ADR-0028](../decisions/adr-0028-scheduled-maintenance-in-api.md)). `GET /health/ready` includes the
+schema check; `GET /api/v1/operations/diagnostics` (administrative) shows build, schema, sweeps, the
+worker heartbeat and integration states, with configuration reduced to set or not set.
+
 ### Migrations and client initialization (OPS-004, OPS-005)
 
 ```

@@ -7,6 +7,7 @@ import {
 import { createLogger } from '@alola/security';
 import { Redis } from 'ioredis';
 import { fileURLToPath } from 'node:url';
+import { startHeartbeat } from './heartbeat';
 import { startQueueWorker } from './runtime';
 
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
@@ -75,6 +76,7 @@ const system = startQueueWorker<{ kind: 'ping' }>({
   },
 });
 
+const heartbeat = startHeartbeat(connection, logger);
 logger.info({ concurrency: config.WORKER_CONCURRENCY }, 'Worker started');
 
 let shuttingDown = false;
@@ -82,6 +84,7 @@ async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, 'Shutting down');
+  await heartbeat.stop();
   await system.close();
   await connection.quit().catch(() => undefined);
   process.exit(0);

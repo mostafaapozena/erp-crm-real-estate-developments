@@ -114,6 +114,9 @@ export const PERMISSIONS = [
   /** Run the webhook-processing and outbox sweep by hand. */
   'integration.process',
 
+  // Operations (OPS-006). Administrative: it shows how the deployment is built and configured.
+  'operations.diagnostics',
+
   // Security administration
   'security.role.view',
   'security.role.create',
@@ -236,6 +239,7 @@ export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
   'integration.view',
   'integration.manage',
   'integration.process',
+  'operations.diagnostics',
   /**
    * Organization structure is administrative because **every data scope resolves against it**
    * (SEC-026) and the reporting line decides where an overdue approval escalates (`APPROVAL-005`).

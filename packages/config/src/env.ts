@@ -137,6 +137,18 @@ export const apiEnvSchema = z.object({
    * anything above the default, so configuration can only tighten it there.
    */
   AUTH_LOGIN_IP_MAX_ATTEMPTS: z.coerce.number().int().min(10).max(10_000).default(120),
+  /**
+   * Whether this API process runs the scheduled maintenance sweeps (OPS-007): notification delivery,
+   * task reminders and escalation, approval escalation, instalment states, integration processing.
+   * Unset: on in staging and production, off in development and test — so a developer's database is
+   * not changed behind their back. A lease makes the sweeps single-runner however many instances run.
+   */
+  MAINTENANCE_ENABLED: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.enum(['true', 'false']).optional(),
+  ),
+  /** Seconds between scheduler ticks; each sweep also has its own interval. */
+  MAINTENANCE_TICK_SECONDS: z.coerce.number().int().min(5).max(3600).default(30),
   S3_BUCKET: optionalString,
   S3_REGION: optionalString,
   /**

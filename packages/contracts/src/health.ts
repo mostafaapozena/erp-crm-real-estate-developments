@@ -34,6 +34,14 @@ export const ReadinessResponseSchema = z.strictObject({
   checks: z.strictObject({
     mongodb: MongoHealthSchema,
     redis: DependencyHealthSchema,
+    /**
+     * Whether the database schema matches this build (OPS-004, OPS-006). `pending` and `mismatch`
+     * make the instance not ready: serving requests against a schema the code does not expect is how
+     * data gets written in a shape nothing can read back.
+     */
+    migrations: z
+      .strictObject({ status: z.enum(['current', 'pending', 'mismatch', 'unknown']) })
+      .optional(),
   }),
 });
 export type ReadinessResponse = z.infer<typeof ReadinessResponseSchema>;

@@ -55,6 +55,7 @@ import { taskComponents, taskPaths } from './tasks';
 import { searchComponents, searchPaths } from './search';
 import { importComponents, importPaths } from './imports';
 import { integrationComponents, integrationPaths } from './integrations';
+import { operationsComponents, operationsPaths } from './operations';
 import { numberingComponents, numberingPaths } from './numbering';
 import { organizationComponents, organizationPaths } from './organization';
 import { salesComponents, salesPaths } from './sales';
@@ -125,6 +126,7 @@ const components = {
   ...searchComponents,
   ...importComponents,
   ...integrationComponents,
+  ...operationsComponents,
 } as const;
 
 type ComponentName = keyof typeof components;
@@ -288,6 +290,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     ...searchPaths(helpers),
     ...importPaths(helpers),
     ...integrationPaths(helpers),
+    ...operationsPaths(helpers),
   };
   const schemas = Object.fromEntries(
     Object.entries(components).map(([name, schema]) => {
@@ -319,7 +322,10 @@ export function buildOpenApiDocument(): Record<string, unknown> {
           summary: 'Per-dependency readiness',
           responses: {
             '200': json('ReadinessResponse', 'All required dependencies are up'),
-            '503': json('ReadinessResponse', 'At least one dependency is down or not configured'),
+            '503': json(
+              'ReadinessResponse',
+              'A dependency is down or not configured, or the database schema does not match this build',
+            ),
           },
         },
       },

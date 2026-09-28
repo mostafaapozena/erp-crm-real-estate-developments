@@ -79,8 +79,8 @@ real **values** (`SD-01`) remain a Phase 2 input, and no business policy is deci
 | CORE-IMPORT-003 | Export: permission-checked, scope- and field-restricted, bounded, formula-safe, audited, expiring | F9 | implemented |
 | OPS-004 | Explicit, versioned schema migrations with a recorded database version | F11 | implemented |
 | OPS-005 | Repeatable client-deployment initialization, idempotent, refusing destructive resets | F11 | implemented |
-| OPS-006 | Operational readiness: worker, queue, integration and migration health; build metadata; redacted diagnostics | F12 | approved |
-| OPS-007 | Scheduled maintenance sweeps run by the system, single-runner, idempotent | F12 | approved |
+| OPS-006 | Operational readiness: worker, queue, integration and migration health; build metadata; redacted diagnostics | F12 | implemented |
+| OPS-007 | Scheduled maintenance sweeps run by the system, single-runner, idempotent | F12 | implemented |
 
 Existing IDs the foundation packages implement or advance keep their original rows below:
 `CORE-DOC-001`–`006` (F4, F5), `CORE-NOTIFY-001`–`005` (F6), `CORE-TASK-001`–`005` (F7),
@@ -236,12 +236,24 @@ once and nothing on the second run; `client:init` refused the demonstration data
 | OPS-004 | Ordered, identified migrations recorded with a checksum in `schemaMigrations`; the database version is the last applied; a second run applies nothing; an applied migration edited afterwards (`MIGRATION_CHANGED`) and a database newer than the code (`MIGRATION_UNKNOWN`) are refused before anything changes; one run at a time under an expiring lock; a failing transactional migration rolls back and stops the run with the earlier ones kept; `db:migrate` needs `--confirm` in staging and production |
 | OPS-005 | `client:init` validates the client file (duplicate codes refused) and creates the company profile, legal entities and branches through the services as the documented system actor, audited; a second run reports every item `exists`; a differing item is reported `differs` and **not** overwritten; a demonstration database and pending migrations are refused; there is no reset or delete path |
 
+### Implementation evidence — F12 (2026-09-28)
+
+Tests: `apps/api/src/platform/maintenance.int-test.ts` (4, real MongoDB),
+`apps/worker/src/heartbeat.int-test.ts` (1, real Redis), `apps/api/src/health.test.ts` (4),
+`apps/api/src/modules/operations/service.test.ts` (2).
+
+| ID | Evidence |
+|---|---|
+| OPS-006 | Readiness adds the schema check: `current` is ready; `pending`, `mismatch` and an unreadable schema (`unknown`) are not ready. The worker writes a heartbeat to Redis every 30 s with a 90 s expiry, carrying its build and the dead-letter count, and removes it on shutdown. Builds carry version, commit (`+dirty` for uncommitted changes) and build time, compiled into the bundle. `GET /api/v1/operations/diagnostics` (administrative `operations.diagnostics`) reports build, schema versions, sweeps, worker, integration states and each configuration variable as set or not set — a value never appears (tested with a secret in the environment) |
+| OPS-007 | Five sweeps — notification delivery, integration processing, task reminders and escalation, approval escalation, instalment states — run on a timer in the API process as `system:maintenance` (ADR-0028). Two schedulers ticking together run each sweep once; a sweep waits for its interval; a failure is recorded by stable code only and the next run is still scheduled; a crashed runner's lease is taken over after it expires. On by default only in staging and production (`MAINTENANCE_ENABLED`) |
+| INTEGRATION-006 | Moved to `implemented`: the job framework (deterministic IDs, bounded backoff, payload-free dead letters, proven against Redis since 2026-09-21) now has the adapter registry it belongs to (F10), and dead letters are counted and visible in diagnostics |
+
 ## Current status summary
 
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
-| Status `implemented` (code and passing tests) | **102** of the original 113, plus 15 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
+| Status `implemented` (code and passing tests) | **103** of the original 113, plus all 17 foundation additions — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
@@ -514,7 +526,7 @@ adapter exists ([ADR-0023](decisions/adr-0023-password-hashing-and-session-token
 | INTEGRATION-003 | Health, token validity, last sync, last error, and data-freshness exposure | ADR-0010 | **implemented** 2026-09-28 (F10). Was `CORE-INTEGRATION-003` |
 | INTEGRATION-004 | Webhook signature verification framework, applied before any processing | ADR-0010 | **implemented** 2026-09-28 (F10). Was `CORE-INTEGRATION-004` |
 | INTEGRATION-005 | Provider event ID uniqueness; duplicates acknowledged and discarded | ADR-0010 | **implemented** 2026-09-28 (F10). Was `CORE-INTEGRATION-005` |
-| INTEGRATION-006 | Idempotent job framework with backoff and dead-letter queue | ADR-0010 | Was `CORE-INTEGRATION-006` |
+| INTEGRATION-006 | Idempotent job framework with backoff and dead-letter queue | ADR-0010 | **implemented** 2026-09-28 (F12). Was `CORE-INTEGRATION-006` |
 
 ## CORE-NOTIFY — Notifications
 

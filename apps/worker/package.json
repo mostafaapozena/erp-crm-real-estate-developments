@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@alola/config": "0.1.0",
+    "@alola/contracts": "0.1.0",
     "@alola/security": "0.1.0",
     "bullmq": "6.3.8",
     "ioredis": "6.0.0"

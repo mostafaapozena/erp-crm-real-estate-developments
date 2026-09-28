@@ -357,6 +357,9 @@ anyone could consume numbers.
 | F6 | `notifications` | `_id_unique`, `_dedupe_unique`, `_inbox`, `_unread` (partial), `_due`, `_lease` | One row per recipient, channel and event; a type and parameters, never prose |
 | F6 | `notificationAttempts` | `_unique` (notification + attempt) | **Append-only** delivery attempts |
 | F6 | `notificationPreferences` | `_account_unique` | Per-account language and external-channel opt-in |
+| F11 | `schemaMigrations` | `_id_unique` | Applied migrations with checksums; immutable fields |
+| F11 | `schemaMigrationLock` | `_expires` | At most one migration run at a time |
+| F12 | `maintenanceRuns` | `_next` | One row per sweep: lease, last outcome (stable code), counts |
 | F10 | `integrationConnections` | `_provider_unique` | Encrypted credentials (ciphertext only), recorded API version, health |
 | F10 | `webhookInbox` | `_id_unique`, `_provider_event_unique`, `_due`, `_purge` (TTL) | One row per provider event; processed rows expire after 30 days |
 | F10 | `integrationOutbox` | `_id_unique`, `_key_unique`, `_due` | One row per idempotency key; never deleted |

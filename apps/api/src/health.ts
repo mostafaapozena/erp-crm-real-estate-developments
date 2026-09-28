@@ -18,14 +18,26 @@ function withTimeout<T>(probe: Promise<T>, fallback: T): Promise<T> {
   return Promise.race([probe.catch(() => fallback), timeout]).finally(() => clearTimeout(timer));
 }
 
+export type MigrationHealth = NonNullable<ReadinessResponse['checks']['migrations']>;
+
 export async function readiness(
   mongo: HealthProbe<MongoHealth>,
   redis: HealthProbe<DependencyHealth>,
+  migrations?: HealthProbe<MigrationHealth>,
 ): Promise<ReadinessResponse> {
-  const [mongodb, redisHealth] = await Promise.all([
+  const [mongodb, redisHealth, schema] = await Promise.all([
     withTimeout<MongoHealth>(mongo.health(), { status: 'down', code: 'HEALTH_CHECK_TIMEOUT' }),
     withTimeout<DependencyHealth>(redis.health(), { status: 'down', code: 'HEALTH_CHECK_TIMEOUT' }),
+    migrations
+      ? withTimeout<MigrationHealth>(migrations.health(), { status: 'unknown' })
+      : Promise.resolve(undefined),
   ]);
-  const ready = mongodb.status === 'up' && redisHealth.status === 'up';
-  return { status: ready ? 'ready' : 'not_ready', checks: { mongodb, redis: redisHealth } };
+  const ready =
+    mongodb.status === 'up' &&
+    redisHealth.status === 'up' &&
+    (schema === undefined || schema.status === 'current');
+  return {
+    status: ready ? 'ready' : 'not_ready',
+    checks: { mongodb, redis: redisHealth, ...(schema ? { migrations: schema } : {}) },
+  };
 }

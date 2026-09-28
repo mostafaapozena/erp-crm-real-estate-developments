@@ -54,10 +54,10 @@ implemented or verified requirement.
   ([ADR-0020](decisions/adr-0020-local-docker-development-services.md)). Integration tier: **59 passed,
   0 failed, 0 skipped** (191 tests).
 - Gate status: **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Every mandatory verification check passes, but
-  **2 of 113** Phase 1 requirements are not started (`CORE-DOC-003`/`005`), 9 are in progress, and the gate also requires a
+  **2 of 113** Phase 1 requirements are not started (`CORE-DOC-003`/`005`), 8 are in progress, and the gate also requires a
   stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
-- Requirements `implemented` (code + passing tests): **102 of 113** · `in-progress`: 9 · not started: 2 (as of F10, 2026-09-28)
+- Requirements `implemented` (code + passing tests): **103 of 113** · `in-progress`: 8 · not started: 2 (as of F12, 2026-09-28)
 
 ## Foundation completion (post-demo master prompt) — IN PROGRESS
 
@@ -98,8 +98,8 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 | F8 Global search | **complete** | `e79b456` |
 | F9 Import and export | **complete** | `fe2127c` |
 | F10 Integration foundation | **complete** | `17b6fef` |
-| F11 Migrations, client initialization, operations docs | **complete** | the commit containing this row |
-| F12 | not started | — |
+| F11 Migrations, client initialization, operations docs | **complete** | `09dfb36` |
+| F12 Observability and operational readiness | **complete** | the commit containing this row |
 
 ### F0 — what changed
 
@@ -402,7 +402,37 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
   **unit 524**, **integration 485 passed / 0 failed / 0 skipped**, build, bundle, **E2E 42 passed / 0
   skipped**; 30 baseline demonstration collections unchanged (new: one `schemaMigrations` row).
 
+### F12 — what changed
+
+- `OPS-006`: readiness includes the schema check (`platform/migrations` via a probe in `main.ts`);
+  `packages/config/src/build-info.ts` + an esbuild `define` in `scripts/build-node-app.mjs` compile
+  version, commit and build time into the bundles; `apps/worker/src/heartbeat.ts` writes
+  `alola:worker:heartbeat` (90 s expiry) with the dead-letter count; module
+  `apps/api/src/modules/operations/` serves `GET /api/v1/operations/diagnostics` (administrative
+  `operations.diagnostics`), configuration as set/not set only.
+- `OPS-007`: `apps/api/src/platform/maintenance.ts` — five sweeps, single-runner under a
+  `maintenanceRuns` lease, as `system:maintenance`; [ADR-0028](decisions/adr-0028-scheduled-maintenance-in-api.md)
+  records why the API process and not the worker. Off by default in development and test.
+- `INTEGRATION-006` moved to `implemented` (registry exists; dead letters visible).
+- **`SEC-033` stays `in-progress`, by instruction.** The provider-neutral `Encryptor` interface is
+  the only thing domain code depends on; staging and production **fail closed** — the development key
+  is refused by the configuration loader, and `UnconfiguredEncryptor` rejects every call — so MFA
+  secrets and provider credentials cannot be stored there. It is not marked implemented while no real
+  KMS provider exists.
+- A test fixture shaped like a connection string was caught by the secret scan; replaced rather than
+  exempted.
+- Measured at the F12 commit: lint, format, typecheck, i18n, secrets (454 files), ignored-source, links,
+  0 vulnerabilities, **unit 530**, **integration 490 passed / 0 failed / 0 skipped**, build (bundles
+  carry version and commit), bundle budget, **E2E 42 passed / 0 skipped**; 30 baseline demonstration
+  collections unchanged.
+
 ### Resume point
+
+Foundation packages F0–F12 are complete. Remaining before the foundation gate: the five
+business-master-prompt planning documents and their ADR, the final 22-item verification, and the
+final report. **Business Master Prompts 1–5 must not be started.**
+
+### Superseded resume note (F12, kept for traceability)
 
 Next package: **F12 — observability and operational readiness** (`OPS-006`, `OPS-007`): readiness
 reporting worker, queue, integration and migration health, build metadata, redacted diagnostics; the
@@ -422,7 +452,8 @@ the same paths. Remaining: the reference-items importer, leads and units exporte
 
 - [ ] Phase 1 — *in progress: scaffolding, audit, authorization, identity/authentication, and the
       approval engine done; foundation packages F0–F7 done (organization, settings, numbering, documents,
-      notifications, tasks) F8 (search), F9 (import/export) and F10 (integration foundation) done; PDF/QR not started*
+      notifications, tasks) F8 (search), F9 (import/export) and F10 (integration foundation), F11 (migrations, client init) and F12 (operations) done; PDF/QR
+      (CORE-DOC-003, 005) not started*
 - [ ] Phases 2–9 — not started. **Do not start Phase 2.**
 
 ## Recently completed — 2026-09-19
@@ -862,11 +893,11 @@ untouched.
 
 ### Phase 1 registry (113 IDs)
 
-**`implemented` (102):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+**`implemented` (103):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
 **SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2) ·
-**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6) · **CORE-TASK-001–005** (F7) · **CORE-SEARCH-001** (F8) · **CORE-IMPORT-001–002** (F9) · **INTEGRATION-001–005** (F10)
+**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6) · **CORE-TASK-001–005** (F7) · **CORE-SEARCH-001** (F8) · **CORE-IMPORT-001–002** (F9) · **INTEGRATION-001–005** (F10) · **INTEGRATION-006** (F12)
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -879,13 +910,15 @@ duplicate enqueue creates one job. † Local `npm run verify`; hosted CI never r
 `INTEGRATION-006` moved from `in-progress` to integration-verified behaviour (idempotent enqueue proven
 against real Redis); it stays `in-progress` overall because the adapter registry it belongs to is not built.
 
-**`in-progress` (9):** PLAT-007 (request, logs, jobs, **and audit** done; provider correlation waits for
-adapters) · PLAT-017 (interface and policy; no S3 adapter) · SEC-003 (authentication endpoints now
-throttled per address and per identifier; export and provider-triggering endpoints not built) · SEC-005
-(validation + hook; no upload endpoint or scanner) · SEC-006 (env-only secrets; Secrets Manager not
-integrated) · SEC-008 (TTL policy only) · SEC-033 (interface + **configured** dev encryptor; **no KMS
-adapter**, so staging and production cannot store an MFA secret) · INTEGRATION-006 (job IDs, retries, DLQ;
-proven against real Redis, adapter registry not built) · THEME-009 (series order + test; no chart component)
+**`in-progress` (8):** PLAT-007 (request, logs, jobs, **and audit** done; provider correlation waits for
+adapters) · PLAT-017 (interface and policy; local development store; no S3 adapter) · SEC-003
+(authentication endpoints throttled per address and per identifier; exports permission-checked, bounded
+and audited since F9; no per-endpoint throttle on exports or provider-triggering endpoints) · SEC-005
+(upload endpoints validate by magic bytes since F5; no malware scanner selected, files stay
+`not_scanned`) · SEC-006 (env-only secrets; Secrets Manager not integrated) · SEC-008 (signed, expiring
+links for the local store; no object-storage adapter) · SEC-033 (provider-neutral `Encryptor`; staging and
+production **fail closed**; **no KMS adapter**, so they cannot store an MFA secret or a provider
+credential) · THEME-009 (series order + test; no chart component)
 
 `SEC-002` moved to `implemented`: cookie authentication now exists, and its protection is the
 `SameSite=Strict` `HttpOnly` path-scoped cookie plus the origin guard. A double-submit token would add
@@ -898,10 +931,10 @@ approval escalates through the real reporting line, and an unresolvable one is s
 
 ### Foundation additions (registered 2026-09-27, 17 IDs)
 
-**`implemented` (15):** PLAT-022, PLAT-023, THEME-013 (F1) · CORE-ORG-001–006 (F2) · PLAT-024–026 (F3) ·
-CORE-IMPORT-003 (F9) · OPS-004, OPS-005 (F11)
+**`implemented` (17):** PLAT-022, PLAT-023, THEME-013 (F1) · CORE-ORG-001–006 (F2) · PLAT-024–026 (F3) ·
+CORE-IMPORT-003 (F9) · OPS-004, OPS-005 (F11) · OPS-006, OPS-007 (F12)
 
-**`approved`, not started (2):** OPS-006, OPS-007 (F12)
+**`approved`, not started (0).**
 
 ## Next exact task
 
@@ -1130,7 +1163,7 @@ CORE-IMPORT-003 (F9) · OPS-004, OPS-005 (F11)
 
 | ID | Blocker | Blocks |
 |---|---|---|
-| Phase 1 scope | 2 of 113 requirements not started; 9 in progress (F10) | **Phase 1 approval** (phase-gates §1) |
+| Phase 1 scope | 2 of 113 requirements not started; 8 in progress (F12) | **Phase 1 approval** (phase-gates §1) |
 | Stakeholder gate | Written approval outstanding. The demonstration is now **buildable and runnable** — `npm run seed:demo` — but has not been given | **Phase 1 approval** |
 | `SD-01`, `SD-02` | The real organization, roles, approval thresholds and segregation-of-duty rules. The demonstration seeds illustrative ones and closes neither | **Macro Phase 2** |
 | `SEC-033` | No KMS adapter, so staging and production cannot store an MFA secret | Any environment beyond development |

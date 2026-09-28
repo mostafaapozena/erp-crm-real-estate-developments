@@ -6,7 +6,7 @@ import express, { Router, type Express } from 'express';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import type { RateLimiterAbstract } from 'rate-limiter-flexible';
-import { readiness, type HealthProbe } from './health';
+import { readiness, type HealthProbe, type MigrationHealth } from './health';
 import { attachActor, unauthenticatedResolver, type ActorResolver } from './http/actor';
 import { assertMutationAudited, auditRequestContext } from './http/audit-context';
 import { CORRELATION_HEADER, correlation, correlationIdOf } from './http/correlation';
@@ -30,6 +30,8 @@ export interface AppDependencies {
   logger: Logger;
   mongo: HealthProbe<MongoHealth>;
   redis: HealthProbe<DependencyHealth>;
+  /** Schema version against this build (OPS-006). Absent: not part of readiness. */
+  migrations?: HealthProbe<MigrationHealth>;
   rateLimiter: RateLimiterAbstract;
   modules?: readonly ApiModule[];
   /**
@@ -97,7 +99,7 @@ export function createApp(deps: AppDependencies): Express {
     res.json(body);
   });
   app.get('/health/ready', async (_req, res) => {
-    const report = await readiness(deps.mongo, deps.redis);
+    const report = await readiness(deps.mongo, deps.redis, deps.migrations);
     res.status(report.status === 'ready' ? 200 : 503).json(report);
   });
 
