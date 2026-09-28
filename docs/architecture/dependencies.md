@@ -66,6 +66,7 @@ Runtime: **Node.js 24** (`engines: >=24`, `.nvmrc`). Verified on Node 24.14.1 / 
 | stylis / stylis-plugin-rtl | 4.4.0 / 2.1.1 | Mirrors MUI's internal styles in RTL |
 | i18next | 26.4.2 | Translation runtime (I18N-001) |
 | @fontsource/alexandria / inter | 5.3.0 / 5.3.0 | Self-hosted fonts bundled with the app, weights 400/600/700 only (I18N-007) |
+| recharts / react-is | 3.10.1 / 19.3.0 | **Added 2026-09-28 (ADR-0030).** Charts: MIT, React 19 peer range, SVG, tooltips, responsive container. `react-is` is its peer, pinned to the React version. Never in a route chunk: `apps/web/src/charts/index.tsx` loads the chart components with `React.lazy`, so recharts and the libraries only it uses (victory-vendor/d3, redux toolkit, immer, reselect, es-toolkit) land in that lazy chunk, fetched when a chart first renders. It is deliberately **not** a Vite manual chunk: rolldown's manual groups capture shared dependencies recursively (react, clsx), which made the entry chunk import the chart chunk at start-up — measured and reverted. 0 audit findings at install. Chosen over `@mui/x-charts` (heavier; licence tiers to review) |
 | lucide-react | 1.48.0 | **Added 2026-09-28 (ADR-0030).** The one icon library: one outline style and stroke weight, ISC licence, ES modules with `sideEffects: false` so only imported glyphs are bundled. Imported by `@alola/ui` only; applications use the curated `@alola/ui/icons` entry, and lint refuses the package elsewhere. 0 audit findings at install |
 
 ## Deliberately not added

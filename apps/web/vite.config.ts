@@ -53,6 +53,10 @@ export default defineConfig({
             return 'vendor-react';
           }
           if (id.includes('i18next')) return 'vendor-i18n';
+          // Charts are deliberately **not** a manual chunk (ADR-0030). They are reached only
+          // through `React.lazy` in `src/charts/index.tsx`, so the bundler keeps recharts and its
+          // dependencies in that lazy chunk. A manual group here captures shared dependencies
+          // (react, clsx) recursively and makes the entry chunk import it at start-up.
           return undefined;
         },
       },

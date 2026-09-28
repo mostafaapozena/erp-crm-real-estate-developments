@@ -62,7 +62,7 @@ exist (I18N-007).
 - **Not chosen:** `@mui/x-charts` (substantially heavier, and its licence tiers need review for
   features a dashboard would soon want); a hand-built SVG set (the previous `BarChart` shows the
   limit: no columns, no donut, no tooltips, no axes).
-- **Bundle:** charts sit in a separate `vendor-charts` chunk requested only by the routes that draw a
+- **Bundle:** charts sit in a separate lazily loaded chunk (`React.lazy`), requested only when a screen draws a
   chart (dashboard, marketing). The shell, sign-in and every list screen download nothing more than
   before. The bundle budget (650 kB / 210 kB gzip per chunk) is unchanged and still enforced.
 - **Accessibility (THEME-009):** every chart is a `<figure>` with a caption and a visually hidden

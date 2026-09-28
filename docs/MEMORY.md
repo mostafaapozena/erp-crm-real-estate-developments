@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-28 (UI/UX redesign — UI-2)
+Last updated: 2026-09-28 (UI/UX redesign — UI-3)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -557,8 +557,8 @@ build + bundle ✅ (largest `vendor-mui` 389.4 kB / 117.2 kB gzip); **integratio
 | Group | State | Commit |
 |---|---|---|
 | UI-1 Tokens, icon library, shared primitives, ADR-0030 | **complete** | `c208e71` |
-| UI-2 Company identity, application shell, sign-in, people lookup | **complete** | the commit containing this row |
-| UI-3 Dashboard and charts | not started | — |
+| UI-2 Company identity, application shell, sign-in, people lookup | **complete** | `cbc5275` |
+| UI-3 Dashboard and charts | **complete** | the commit containing this row |
 | UI-4 Lists and tables | not started | — |
 | UI-5 Details, forms, marketing, organization, visual QA | not started | — |
 
@@ -630,6 +630,32 @@ build + bundle ✅ (largest `vendor-mui` 389.4 kB / 117.2 kB gzip); **integratio
 - Measured (working tree including the UI-3/UI-4 drafts): typecheck ✅, lint on changed areas ✅,
   unit **570 / 40 files**, **integration 501 passed / 0 failed / 0 skipped** (498 + 3), i18n, secrets
   (478 files), links, ignored-source. E2E runs with the full suite at the end of UI-5.
+
+### UI-3 — what changed
+
+- `recharts` **3.10.1** + `react-is` **19.3.0** (exact, 0 audit findings) in `apps/web` only;
+  `apps/web/src/charts/`: `Charts.tsx` (`CategoryBarChart` horizontal/columns, `DonutChart` with an
+  HTML legend carrying label, value and share), `RatioMeter.tsx` (no chart dependency), `index.tsx`
+  (lazy wrappers with a skeleton). Every chart is a `<figure>` whose numbers are repeated in a
+  visually hidden table; RTL reverses category axes; value axes start at zero; colours from
+  `CHART_SERIES_ORDER`; nothing invented, no trends.
+- **Bundle:** recharts lives only in the lazy `Charts` chunk (378.2 kB / 107.3 kB gzip), not preloaded
+  and not imported by the entry. A Vite manual `vendor-charts` group was tried and **reverted**:
+  rolldown pulled react/clsx into it recursively and the entry then imported it at start-up.
+- **Dashboard** (`DashboardPage.tsx`): executive summary (active contracts, contracted, collected with
+  collection rate, outstanding — server `Decimal128` totals, exact two decimals); "needs attention
+  today" (overdue and upcoming instalments, reservations pending approval, overdue and due
+  follow-ups, reminders ready and simulated, own open and overdue tasks — each a count linking to its
+  list, only non-empty items shown); collections (collection-rate meter, contracted/collected/
+  outstanding bars, overdue ageing by days late — counts from at most 200 rows, labelled as partial
+  when more exist); sales (KPIs, pipeline by stage, leads by source donut); inventory (units by
+  status donut + KPIs linking to filtered units); marketing (spend by platform, labelled as
+  demonstration figures); team (per-representative leads with names). Every request is
+  permission-gated and every figure scoped by the server.
+- Ratios for the meter and chart geometry use `Number` on decimal strings — presentation only; every
+  money figure shown is the server's decimal string formatted, never recomputed.
+- Measured: typecheck, lint, unit 570, build, bundle budget (largest `vendor-mui` 409.3 / 122.2 kB
+  gzip; `Charts` 378.2 / 107.3 kB gzip).
 
 ## Phase status
 
