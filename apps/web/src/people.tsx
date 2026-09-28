@@ -157,7 +157,11 @@ export function PersonName({
 
   if (state.kind === 'loading') {
     return (
-      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+      <Box
+        component="span"
+        data-person="loading"
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
+      >
         <Box component="span" sx={visuallyHidden}>
           {t('people.loading')}
         </Box>

@@ -2,12 +2,24 @@ import type { Activity, Lead, LEAD_STAGES } from '@alola/contracts';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
 import { PageHeader, StateView } from '@alola/ui';
+import {
+  BadgeCheck,
+  CalendarClock,
+  CircleDot,
+  FilePen,
+  History,
+  MapPin,
+  MessageCircle,
+  Phone,
+  TrendingUp,
+  UserPlus,
+  Users,
+  type LucideIcon,
+} from '@alola/ui/icons';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
 import { apiRequest, type ApiError } from '../api/client';
@@ -17,7 +29,9 @@ import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
 import { PersonName } from '../people';
+import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
+  BackLink,
   CardGrid,
   EnumChip,
   ErrorState,
@@ -25,6 +39,8 @@ import {
   LEAD_TONES,
   Panel,
   RequirePermission,
+  Timeline,
+  Transition,
   Verbatim,
 } from './shared';
 
@@ -40,6 +56,19 @@ const STAGES: LeadStage[] = [
   'won',
   'lost',
 ];
+
+/** One glyph per kind of activity, so the timeline can be scanned by shape as well as by word. */
+const ACTIVITY_ICONS: Partial<Record<Activity['kind'], LucideIcon>> = {
+  note: FilePen,
+  call: Phone,
+  whatsapp: MessageCircle,
+  meeting: Users,
+  siteVisit: MapPin,
+  followUpScheduled: CalendarClock,
+  stageChanged: TrendingUp,
+  assignmentChanged: UserPlus,
+  converted: BadgeCheck,
+};
 
 const ACTIVITY_KINDS = [
   'note',
@@ -78,6 +107,8 @@ function LeadDetailScreen() {
     leadId ? `/api/v1/crm/leads/${leadId}/activities` : undefined,
   );
 
+  useBreadcrumbTail(lead.state.kind === 'ready' ? lead.state.data.name : undefined);
+
   if (lead.state.kind === 'loading') {
     return <StateView kind="loading" title={t('states.loadingTitle')} />;
   }
@@ -93,10 +124,20 @@ function LeadDetailScreen() {
 
   return (
     <Box>
+      <BackLink to="/leads" label={t('detail.backTo', { list: t('nav.crm') })} />
       <PageHeader
+        eyebrow={t('detail.lead')}
         title={data.name}
-        subtitle={t('crm.leadDetails')}
-        banner={<EnumChip namespace="leadStage" value={data.stage} tones={LEAD_TONES} />}
+        status={<EnumChip namespace="leadStage" value={data.stage} tones={LEAD_TONES} />}
+        meta={
+          <>
+            <span>{td(`leadSource.${data.source}`)}</span>
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+              {`${t('crm.assignedTo')}:`}
+              <PersonName accountId={data.assignedToAccountId} compact />
+            </Box>
+          </>
+        }
       />
 
       <Stack spacing={3}>
@@ -162,37 +203,42 @@ function LeadDetailScreen() {
           <ActivityForm leadId={data.leadId} onDone={reload} errorMessage={errorMessage} />
         ) : null}
 
-        <Panel title={t('crm.timeline')}>
-          {activities.state.kind === 'ready' && activities.state.data.items.length > 0 ? (
-            <Stack spacing={2} component="ol" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {activities.state.data.items.map((activity) => (
-                <Box key={activity.activityId} component="li">
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {td(`activityKind.${activity.kind}`)}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      <Verbatim>{format.dateTime(activity.occurredAt)}</Verbatim>
-                    </Typography>
-                  </Stack>
-                  {activity.fromStage && activity.toStage ? (
-                    <Typography variant="body2" color="text.secondary">
-                      {`${td(`leadStage.${activity.fromStage}`)} → ${td(`leadStage.${activity.toStage}`)}`}
-                    </Typography>
-                  ) : null}
-                  {activity.body ? <Typography variant="body2">{activity.body}</Typography> : null}
-                  {activity.dueOn ? (
-                    <Typography variant="caption" color="text.secondary">
-                      {`${t('crm.activityDueOn')}: `}
-                      <Verbatim>{format.date(activity.dueOn)}</Verbatim>
-                    </Typography>
-                  ) : null}
-                  <Divider sx={{ marginBlockStart: 1.5 }} />
-                </Box>
-              ))}
-            </Stack>
+        <Panel title={t('crm.timeline')} icon={History}>
+          {activities.state.kind === 'loading' ? (
+            <StateView variant="inline" kind="loading" title={t('states.loadingTitle')} />
           ) : (
-            <Typography color="text.secondary">{t('states.emptyDescription')}</Typography>
+            <Timeline
+              emptyLabel={t('states.emptyDescription')}
+              entries={(activities.state.kind === 'ready' ? activities.state.data.items : []).map(
+                (activity) => ({
+                  key: activity.activityId,
+                  icon: ACTIVITY_ICONS[activity.kind] ?? CircleDot,
+                  title: td(`activityKind.${activity.kind}`),
+                  when: format.dateTime(activity.occurredAt),
+                  body: (
+                    <>
+                      {activity.fromStage && activity.toStage ? (
+                        <Box>
+                          <Transition
+                            from={td(`leadStage.${activity.fromStage}`)}
+                            to={td(`leadStage.${activity.toStage}`)}
+                          />
+                        </Box>
+                      ) : null}
+                      {activity.body ? (
+                        <Box sx={{ color: 'text.primary' }}>{activity.body}</Box>
+                      ) : null}
+                      {activity.dueOn ? (
+                        <Box>
+                          {`${t('crm.activityDueOn')}: `}
+                          <Verbatim>{format.date(activity.dueOn)}</Verbatim>
+                        </Box>
+                      ) : null}
+                    </>
+                  ),
+                }),
+              )}
+            />
           )}
         </Panel>
       </Stack>

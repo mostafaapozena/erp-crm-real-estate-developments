@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-28 (UI/UX redesign — UI-4)
+Last updated: 2026-09-28 (UI/UX redesign — complete)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -61,7 +61,7 @@ implemented or verified requirement.
   **2 of 113** Phase 1 requirements are not started (`CORE-DOC-003`/`005`), 8 are in progress, and the gate also requires a
   stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
-- Requirements `implemented` (code + passing tests): **103 of 113** · `in-progress`: 8 · not started: 2 (as of F12, 2026-09-28)
+- Requirements `implemented` (code + passing tests): **104 of 113** · `in-progress`: 7 · not started: 2 (THEME-009 implemented with the UI redesign, 2026-09-28)
 
 ## Foundation completion (post-demo master prompt) — COMPLETE, stopped at the foundation gate
 
@@ -542,7 +542,7 @@ parked, uncommitted, in the ignored `scratch/hold-f9/` (contracts `imports.ts`, 
 the same paths. Remaining: the reference-items importer, leads and units exporters, the XLSX reader
 (`read-excel-file`, pinned), router, OpenAPI, tests, screen.
 
-## UI/UX redesign, company branding and visual quality gate — IN PROGRESS (started 2026-09-28)
+## UI/UX redesign, company branding and visual quality gate — COMPLETE (2026-09-28), stopped for review
 
 Scope: the UI/UX master prompt — a cohesive corporate interface over the existing product, with no
 backend behaviour, permission, scope, requirement ID or API contract weakened. Business Master
@@ -559,8 +559,8 @@ build + bundle ✅ (largest `vendor-mui` 389.4 kB / 117.2 kB gzip); **integratio
 | UI-1 Tokens, icon library, shared primitives, ADR-0030 | **complete** | `c208e71` |
 | UI-2 Company identity, application shell, sign-in, people lookup | **complete** | `cbc5275` |
 | UI-3 Dashboard and charts | **complete** | `12c3cc3` |
-| UI-4 Lists and tables | **complete** | the commit containing this row |
-| UI-5 Details, forms, marketing, organization, visual QA | not started | — |
+| UI-4 Lists and tables | **complete** | `2384dc1` |
+| UI-5 Details, forms, marketing, organization, visual QA | **complete** | the commit containing this row |
 
 ### UI-1 — what changed
 
@@ -682,6 +682,78 @@ build + bundle ✅ (largest `vendor-mui` 389.4 kB / 117.2 kB gzip); **integratio
 - E2E measured on the UI-3 tree before these fixes: **50 passed / 2 failed** (both the mobile cases of
   the new identity spec, fixed above); the full suite reruns at the end of UI-5.
 - Measured: typecheck, lint, web unit 39 (37 + 2 paging tests).
+
+### UI-5 — what changed
+
+- **Record pages** (contract, reservation, receipt, unit, lead): back link, record-type eyebrow,
+  status chip beside the title (full-width banners kept only for genuine alerts: pending approval,
+  reversed receipt), metadata line, secondary actions before the primary one, record number as the
+  last breadcrumb, icons on sections and KPIs; the contract schedule is a sticky-header table.
+  Shared `Timeline` and `Transition` (direction-aware arrow) replace hand-typed "→" on the unit and
+  lead histories; activity kinds carry distinct glyphs.
+- **Defects fixed:** unit view and payment-plan text always Arabic (now `[locale]`); `visuallyHidden`
+  used `width: 1`, which MUI reads as 100% — every hidden label was page-wide and gave wide screens
+  up to 1,847 px of horizontal scroll (fixed with px strings, tested); the chart's hidden data table
+  now sits in a clipping box; horizontal bar charts rebuilt with layout after recharts' RTL axis put
+  labels under bars (ADR-0030 status update); long money KPIs stepped down a size instead of
+  wrapping their last character; pipeline in pipeline order; `PersonName` loading marker.
+- **Marketing:** connection panel (Meta — not connected, never synchronised, simulated mode),
+  performance KPIs incl. remaining budget (decimal `subtractMoney`), reach and impressions (integer
+  sums over loaded campaigns), leads by campaign, spend and leads by platform, platform/state
+  filters, a "simulated" badge on every state. Only the product's real states are shown (draft,
+  ready to publish, archived); no publish control exists.
+- **Organization:** counts, the legal entity, branches with departments, teams, cost centres and
+  head-counts, and a searchable, filterable people directory with names, titles, teams and managers.
+  Placements only — no account or HR data joined (ADR-0019).
+- Dead code removed: the retired `DevLogoPlaceholder` and its two keys. Docs:
+  `architecture/localization-and-theming.md` §10 (building blocks, direction rules, responsive
+  behaviour, visual QA), ADR-0030 status update, `REQUIREMENTS.md` evidence section;
+  **THEME-009 → `implemented`** (Phase 1: 104 implemented, 7 in progress, 2 not started).
+- **Visual QA** (`scratch/ui-visual-qa.mjs`, screenshots in `scratch/visual-qa/`, ignored): 69 screens
+  — sign-in (4 widths, AR/EN), dashboard at 1920/1440/1024/390, every list and record page in Arabic
+  at 1440 and 390, every list in English at 1920, company identity (admin, second factor computed in
+  memory), collapsed sidebar, mobile drawer. Final report: 0 horizontal overflow, 0 raw keys, 0 raw
+  account ids, 0 emoji, 0 unnamed controls, 0 failed API calls; the only console errors are the
+  expected signed-out 401 of the session probe; three "0 h1" flags were the probe sampling mid-route
+  (the screenshots show one h1).
+
+### Final verification — 2026-09-28 (`scratch/ui-final-verify.sh`, logs in `scratch/final/`)
+
+| Check | Result |
+|---|---|
+| format · lint · strict typecheck | ✅ 0 errors, 0 warnings |
+| i18n (keys + displayed enumerations, both languages) | ✅ |
+| secrets · links · ignored-source | ✅ 480 files · 406 links in 61 files · none hidden |
+| dependency audit | ✅ 0 vulnerabilities |
+| unit | ✅ **577 passed**, 42 files |
+| integration gate (real MongoDB + Redis) | ✅ **501 passed / 0 failed / 0 skipped** |
+| production build · bundle budget | ✅ largest `vendor-mui` 409.3 / 122.2 kB gzip; `Charts` 378.3 / 107.3 (lazy); entry 104.0 / 33.6 |
+| migration status · source/built parity | ✅ nothing pending; parity agrees |
+| client file validation | ✅ |
+| built-API smoke | ✅ ready 200 (transactions, migrations current), 401 without token, **181 OpenAPI paths** |
+| E2E (built web + built API + real services, desktop + mobile) | ✅ **52 passed / 0 failed / 0 skipped** |
+| demonstration data | ✅ 14 business collections byte-identical to the pre-redesign snapshot; only the audited identity records, sessions, tokens, audit events and last sign-in times changed |
+| secrets | ✅ `.env`, `docker/dev.env`, `.demo-credentials.md` ignored, untracked, never in history |
+
+### Remaining debt from the redesign
+
+- Branch-scoped roles see no legal entity on Organization (scope design; candidate for BMP-1).
+- The customer screen has no detail page, so customers are not clickable; per-customer pages are
+  business work (BMP-1).
+- Per-language logos and a secondary brand colour are not in the company contract; not built.
+- The organization timezone of this development deployment is `UTC` (`ORG_TIMEZONE`); a client file
+  sets the real one.
+- The visual QA is a script, not a CI gate; no pixel-diff baseline is stored (screenshots stay out of
+  Git by instruction).
+- Hosted CI still never observed.
+
+### Resume point (UI redesign)
+
+**Stop.** The redesign is complete and committed locally; nothing is pushed or deployed. Business
+Master Prompts 1–5 remain **not started**. To review: `npm run dev:services:up`, then
+`npm run build`, `node apps/api/dist/main.js` and `npm run preview -w @alola/web` →
+http://localhost:4173 (or `npm run dev:api` + `npm run dev:web` → http://localhost:5173). Passwords
+are in the ignored `.demo-credentials.md`.
 
 ## Phase status
 
@@ -1128,9 +1200,9 @@ untouched.
 
 ### Phase 1 registry (113 IDs)
 
-**`implemented` (103):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+**`implemented` (104):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
-THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
+THEME-001–012 (12; THEME-009 added 2026-09-28, UI redesign) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
 **SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2) ·
 **CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6) · **CORE-TASK-001–005** (F7) · **CORE-SEARCH-001** (F8) · **CORE-IMPORT-001–002** (F9) · **INTEGRATION-001–005** (F10) · **INTEGRATION-006** (F12)
 
@@ -1145,7 +1217,7 @@ duplicate enqueue creates one job. † Local `npm run verify`; hosted CI never r
 `INTEGRATION-006` moved from `in-progress` to integration-verified behaviour (idempotent enqueue proven
 against real Redis); it stays `in-progress` overall because the adapter registry it belongs to is not built.
 
-**`in-progress` (8):** PLAT-007 (request, logs, jobs, **and audit** done; provider correlation waits for
+**`in-progress` (7):** PLAT-007 (request, logs, jobs, **and audit** done; provider correlation waits for
 adapters) · PLAT-017 (interface and policy; local development store; no S3 adapter) · SEC-003
 (authentication endpoints throttled per address and per identifier; exports permission-checked, bounded
 and audited since F9; no per-endpoint throttle on exports or provider-triggering endpoints) · SEC-005
@@ -1153,7 +1225,7 @@ and audited since F9; no per-endpoint throttle on exports or provider-triggering
 `not_scanned`) · SEC-006 (env-only secrets; Secrets Manager not integrated) · SEC-008 (signed, expiring
 links for the local store; no object-storage adapter) · SEC-033 (provider-neutral `Encryptor`; staging and
 production **fail closed**; **no KMS adapter**, so they cannot store an MFA secret or a provider
-credential) · THEME-009 (series order + test; no chart component)
+credential)
 
 `SEC-002` moved to `implemented`: cookie authentication now exists, and its protection is the
 `SameSite=Strict` `HttpOnly` path-scoped cookie plus the origin guard. A double-submit token would add

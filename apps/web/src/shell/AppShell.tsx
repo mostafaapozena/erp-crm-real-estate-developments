@@ -368,7 +368,7 @@ function NavSection({
         >
           <Typography
             component="span"
-            sx={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: 0.2 }}
+            sx={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: 0.2, textAlign: 'start' }}
             aria-hidden
           >
             {label}

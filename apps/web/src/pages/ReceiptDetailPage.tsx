@@ -10,7 +10,8 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { DataTable, PageHeader, StateView, type DataColumn } from '@alola/ui';
+import { DataTable, Icon, PageHeader, StateView, type DataColumn } from '@alola/ui';
+import { Printer } from '@alola/ui/icons';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { apiRequest } from '../api/client';
@@ -20,7 +21,9 @@ import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
 import { PersonName } from '../people';
+import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
+  BackLink,
   CardGrid,
   EnumChip,
   ErrorState,
@@ -91,6 +94,8 @@ function ReceiptDetailScreen() {
     [format, t],
   );
 
+  useBreadcrumbTail(receipt.state.kind === 'ready' ? receipt.state.data.receiptNumber : undefined);
+
   if (receipt.state.kind === 'loading') {
     return <StateView kind="loading" title={t('states.loadingTitle')} />;
   }
@@ -101,32 +106,46 @@ function ReceiptDetailScreen() {
 
   return (
     <Box>
+      <BackLink to="/receipts" label={t('detail.backTo', { list: t('nav.receipts') })} />
       <PageHeader
+        eyebrow={t('detail.receipt')}
         title={record.receiptNumber}
-        subtitle={t('collections.receiptDetails')}
-        banner={
-          <Stack spacing={1}>
-            <Box>
-              <EnumChip namespace="receiptState" value={record.state} tones={RECEIPT_TONES} />
-            </Box>
-            {record.state === 'reversed' ? (
-              <Alert severity="error" variant="outlined">
-                <Typography sx={{ fontWeight: 600 }}>{t('collections.reversedBanner')}</Typography>
-                {record.reversalReason}
-              </Alert>
-            ) : null}
-          </Stack>
+        status={<EnumChip namespace="receiptState" value={record.state} tones={RECEIPT_TONES} />}
+        meta={
+          <>
+            <Verbatim>{format.money(record.amount)}</Verbatim>
+            <span>{td(`paymentMethod.${record.method}`)}</span>
+            <Verbatim>{format.date(record.receivedOn)}</Verbatim>
+          </>
         }
+        // A reversed receipt is a genuine alert: the document the customer holds is void.
+        {...(record.state === 'reversed'
+          ? {
+              banner: (
+                <Alert severity="error" variant="outlined">
+                  <Typography sx={{ fontWeight: 600 }}>
+                    {t('collections.reversedBanner')}
+                  </Typography>
+                  {record.reversalReason}
+                </Alert>
+              ),
+            }
+          : {})}
         actions={
           <>
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={() => window.print()}
+              startIcon={<Icon icon={Printer} size={18} />}
+            >
+              {t('actions.print')}
+            </Button>
             {can('collection.receipt.cancel') && record.state === 'posted' ? (
               <Button variant="outlined" color="error" onClick={() => setReverseOpen(true)}>
                 {t('actions.reverseReceipt')}
               </Button>
             ) : null}
-            <Button variant="outlined" onClick={() => window.print()}>
-              {t('actions.print')}
-            </Button>
           </>
         }
       />

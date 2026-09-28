@@ -5,8 +5,6 @@
     "demoSuffix": "نسخة تجريبية"
   },
   "shell": {
-    "logoPlaceholder": "شعار مؤقت — للتطوير فقط",
-    "logoPlaceholderHint": "سيُستبدل بالشعار المعتمد عند توفره",
     "switchLanguage": "English",
     "openNavigation": "فتح قائمة التنقل",
     "closeNavigation": "إغلاق قائمة التنقل",
@@ -557,7 +555,21 @@
     "byPlatform": "حسب المنصة",
     "notConnectedTitle": "وضع تجريبي — منصة Meta غير متصلة",
     "notConnectedBody": "لا يوجد ربط بأي منصة إعلانية: لم يتم إنشاء حساب أعمال ولا مراجعة تطبيق ولا إنفاق إعلاني. الأرقام المعروضة بيانات عرض محلية أُدخلت داخل النظام، ولا يمكن نشر أي حملة من هنا.",
-    "localDraftOnly": "مسودة محلية فقط"
+    "localDraftOnly": "مسودة محلية فقط",
+    "simulated": "محاكاة",
+    "demoFigures": "أرقام عرض تجريبية",
+    "connectionTitle": "حالة الربط بمنصات الإعلانات",
+    "provider": "المنصة",
+    "providerMeta": "ميتا (فيسبوك وإنستجرام)",
+    "connectionState": "حالة الربط",
+    "notConnected": "غير متصل",
+    "lastSync": "آخر مزامنة",
+    "neverSynced": "لم تتم أي مزامنة",
+    "mode": "وضع التشغيل",
+    "performance": "أداء الحملات",
+    "remainingBudget": "الميزانية المتبقية",
+    "leadsByCampaign": "العملاء المحتملون حسب الحملة",
+    "leadsCount": "العملاء المحتملون: {{count}}"
   },
   "campaignPlatform": {
     "facebook": "فيسبوك",
@@ -592,7 +604,12 @@
     "noManager": "لا يوجد مدير مباشر",
     "costCenter": "مركز التكلفة",
     "city": "المدينة",
-    "employeeNote": "بيانات الموظفين الكاملة (العقود والرواتب) خارج نطاق هذه النسخة."
+    "employeeNote": "بيانات الموظفين الكاملة (العقود والرواتب) خارج نطاق هذه النسخة.",
+    "structure": "الهيكل",
+    "team": "الفريق",
+    "people": "الأشخاص: {{count}}",
+    "nothingInScope": "لا يوجد هيكل ضمن نطاق صلاحياتك",
+    "nothingInScopeHint": "يعرض هذا القسم الكيانات والفروع التي يشملها نطاقك فقط."
   },
   "demo": {
     "modeBadge": "وضع تجريبي",
@@ -903,5 +920,14 @@
   },
   "list": {
     "open": "فتح {{label}}"
+  },
+  "detail": {
+    "backTo": "العودة إلى {{list}}",
+    "contract": "عقد",
+    "reservation": "حجز",
+    "lead": "عميل محتمل",
+    "unit": "وحدة",
+    "receipt": "إيصال",
+    "overdueInstallments": "الأقساط المتأخرة: {{count}}"
   }
 }

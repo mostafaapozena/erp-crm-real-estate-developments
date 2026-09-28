@@ -248,12 +248,25 @@ Tests: `apps/api/src/platform/maintenance.int-test.ts` (4, real MongoDB),
 | OPS-007 | Five sweeps — notification delivery, integration processing, task reminders and escalation, approval escalation, instalment states — run on a timer in the API process as `system:maintenance` (ADR-0028). Two schedulers ticking together run each sweep once; a sweep waits for its interval; a failure is recorded by stable code only and the next run is still scheduled; a crashed runner's lease is taken over after it expires. On by default only in staging and production (`MAINTENANCE_ENABLED`) |
 | INTEGRATION-006 | Moved to `implemented`: the job framework (deterministic IDs, bounded backoff, payload-free dead letters, proven against Redis since 2026-09-21) now has the adapter registry it belongs to (F10), and dead letters are counted and visible in diagnostics |
 
+### Implementation evidence — UI/UX redesign (2026-09-28)
+
+No ID is added, renamed or retired. The redesign advances existing rows only
+([ADR-0030](decisions/adr-0030-ui-design-system-icons-and-charts.md),
+[ADR-0031](decisions/adr-0031-people-lookup-for-account-references.md)).
+
+| ID | Evidence |
+|---|---|
+| THEME-009 | Moved to `implemented`: chart components now exist (`apps/web/src/charts/`). `charts.test.tsx` — every horizontal bar is a `<dt>`/`<dd>` pair carrying its label and formatted value; an all-zero series shows the empty message; a donut that cannot draw presents its numbers as a table; a ratio is a labelled `progressbar` with `aria-valuetext`. Column and donut charts repeat their data in a visually hidden table; colours follow `CHART_SERIES_ORDER` |
+| THEME-010 | Extended: `StateView` adds no-results, offline, not-connected and simulated states and an inline variant; `DataTable` shows skeleton rows and distinguishes empty from no-results (`components.test.tsx`) |
+| PLAT-022 / PLAT-023 | Extended with the administrator screen Settings → Company identity over the existing API: draft, preview, validated colour and images, publish as one audited revision, history; branding reloads without a page refresh. E2E `identity.spec.ts` — the configured company on the sign-in screen, sidebar (both languages) and Organization, and no trace of the superseded demonstration name |
+| I18N-005 | Extended: account references render as names (ADR-0031); E2E asserts no `acc_` text on the leads screen |
+
 ## Current status summary
 
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
-| Status `implemented` (code and passing tests) | **103** of the original 113, plus all 17 foundation additions — see per-row status in `docs/MEMORY.md` |
+| Status `implemented` (code and passing tests) | **104** of the original 113 (THEME-009 added 2026-09-28), plus all 17 foundation additions — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |

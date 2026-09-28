@@ -10,7 +10,8 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { PageHeader, StateView } from '@alola/ui';
+import { Icon, PageHeader, StateView } from '@alola/ui';
+import { Printer } from '@alola/ui/icons';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { apiRequest } from '../api/client';
@@ -20,7 +21,9 @@ import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
 import { PersonName } from '../people';
+import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
+  BackLink,
   CardGrid,
   EnumChip,
   ErrorState,
@@ -88,6 +91,8 @@ function ReservationDetailScreen() {
       }),
   );
 
+  useBreadcrumbTail(data?.reservationNumber);
+
   if (reservation.state.kind === 'loading') {
     return <StateView kind="loading" title={t('states.loadingTitle')} />;
   }
@@ -99,28 +104,48 @@ function ReservationDetailScreen() {
 
   return (
     <Box>
+      <BackLink to="/reservations" label={t('detail.backTo', { list: t('nav.reservations') })} />
       <PageHeader
+        eyebrow={t('detail.reservation')}
         title={record.reservationNumber}
-        subtitle={t('sales.reservationDetails')}
-        banner={
-          <Stack spacing={1}>
-            <Box>
-              <EnumChip
-                namespace="reservationState"
-                value={record.state}
-                tones={RESERVATION_TONES}
-              />
-            </Box>
-            {awaitingApproval ? (
-              <Alert severity="warning" variant="outlined">
-                <Typography sx={{ fontWeight: 600 }}>{t('sales.approvalPending')}</Typography>
-                {t('sales.approvalPendingHint')}
-              </Alert>
-            ) : null}
-          </Stack>
+        status={
+          <EnumChip namespace="reservationState" value={record.state} tones={RESERVATION_TONES} />
         }
+        meta={
+          <>
+            <span>{`${t('sales.reservedOn')}: `}</span>
+            <Verbatim>{format.date(record.reservedOn)}</Verbatim>
+            <span>{`${t('sales.expiresOn')}: `}</span>
+            <Verbatim>{format.date(record.expiresOn)}</Verbatim>
+          </>
+        }
+        // A pending approval is a genuine alert: it explains why the next step is blocked.
+        {...(awaitingApproval
+          ? {
+              banner: (
+                <Alert severity="warning" variant="outlined">
+                  <Typography sx={{ fontWeight: 600 }}>{t('sales.approvalPending')}</Typography>
+                  {t('sales.approvalPendingHint')}
+                </Alert>
+              ),
+            }
+          : {})}
         actions={
           <>
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={() => window.print()}
+              startIcon={<Icon icon={Printer} size={18} />}
+            >
+              {t('sales.printSummary')}
+            </Button>
+            {can('sales.reservation.cancel') &&
+            ['draft', 'pendingApproval', 'confirmed'].includes(record.state) ? (
+              <Button variant="outlined" color="error" onClick={() => setCancelOpen(true)}>
+                {t('actions.cancelReservation')}
+              </Button>
+            ) : null}
             {can('sales.reservation.confirm') &&
             (record.state === 'draft' || record.state === 'pendingApproval') ? (
               <Button
@@ -147,15 +172,6 @@ function ReservationDetailScreen() {
                 {t('actions.createContract')}
               </Button>
             ) : null}
-            {can('sales.reservation.cancel') &&
-            ['draft', 'pendingApproval', 'confirmed'].includes(record.state) ? (
-              <Button variant="outlined" color="error" onClick={() => setCancelOpen(true)}>
-                {t('actions.cancelReservation')}
-              </Button>
-            ) : null}
-            <Button variant="outlined" onClick={() => window.print()}>
-              {t('sales.printSummary')}
-            </Button>
           </>
         }
       />

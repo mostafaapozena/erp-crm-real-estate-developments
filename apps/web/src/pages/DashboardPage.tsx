@@ -8,7 +8,7 @@ import type {
   ReminderPage,
   ReservationPage,
 } from '@alola/contracts';
-import { businessDateInZone, nowInstant } from '@alola/contracts';
+import { LEAD_STAGES, businessDateInZone, nowInstant } from '@alola/contracts';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { DemoBadge, Icon, MetricCard, PageHeader, SectionCard, StateView, tokens } from '@alola/ui';
@@ -522,12 +522,18 @@ export default function DashboardPage() {
                 ) : (
                   <CategoryBarChart
                     caption={t('dashboard.pipelineByStage')}
-                    data={Object.entries(crmData?.byStage ?? {}).map(([stage, value]) => ({
-                      key: stage,
-                      label: enumLabel('leadStage', stage),
-                      value,
-                      display: format.number(value),
-                    }))}
+                    // In pipeline order, so the chart reads as the funnel it is.
+                    data={LEAD_STAGES.filter((stage) => crmData?.byStage[stage] !== undefined).map(
+                      (stage) => {
+                        const value = crmData?.byStage[stage] ?? 0;
+                        return {
+                          key: stage,
+                          label: enumLabel('leadStage', stage),
+                          value,
+                          display: format.number(value),
+                        };
+                      },
+                    )}
                     headers={{
                       category: t('dashboard.headers.stage'),
                       value: t('dashboard.headers.count'),

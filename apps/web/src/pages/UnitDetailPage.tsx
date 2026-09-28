@@ -1,22 +1,26 @@
 import type { Unit, UnitEvent } from '@alola/contracts';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { PageHeader, StateView } from '@alola/ui';
+import { Icon, PageHeader, StateView } from '@alola/ui';
+import { CalendarCheck, History, House } from '@alola/ui/icons';
 import { Link, useParams } from 'react-router';
 import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
+  BackLink,
   CardGrid,
   EnumChip,
   ErrorState,
   Field,
   Panel,
   RequirePermission,
+  Timeline,
+  Transition,
   UNIT_TONES,
   Verbatim,
 } from './shared';
@@ -39,7 +43,7 @@ export default function UnitDetailPage() {
 
 function UnitDetailScreen() {
   const { unitId } = useParams<{ unitId: string }>();
-  const { t, td } = useLocale();
+  const { t, td, locale } = useLocale();
   const { can } = useSession();
   const format = useFormatters();
 
@@ -47,6 +51,8 @@ function UnitDetailScreen() {
   const history = useApi<{ items: UnitEvent[] }>(
     unitId ? `/api/v1/inventory/units/${unitId}/history` : undefined,
   );
+
+  useBreadcrumbTail(unit.state.kind === 'ready' ? unit.state.data.code : undefined);
 
   if (unit.state.kind === 'loading') {
     return <StateView kind="loading" title={t('states.loadingTitle')} />;
@@ -59,16 +65,24 @@ function UnitDetailScreen() {
 
   return (
     <Box>
+      <BackLink to="/units" label={t('detail.backTo', { list: t('nav.units') })} />
       <PageHeader
+        eyebrow={t('detail.unit')}
         title={data.code}
-        subtitle={t('inventory.unitDetails')}
-        banner={<EnumChip namespace="unitStatus" value={data.status} tones={UNIT_TONES} />}
+        status={<EnumChip namespace="unitStatus" value={data.status} tones={UNIT_TONES} />}
+        meta={
+          <>
+            <span>{td(`propertyType.${data.propertyType}`)}</span>
+            <span>{td(`usageType.${data.usageType}`)}</span>
+          </>
+        }
         actions={
           sellable && can('sales.reservation.create') ? (
             <Button
               component={Link}
               to={`/reservations/new?unitId=${data.unitId}`}
               variant="contained"
+              startIcon={<Icon icon={CalendarCheck} size={18} />}
             >
               {t('actions.reserve')}
             </Button>
@@ -77,7 +91,7 @@ function UnitDetailScreen() {
       />
 
       <Stack spacing={3}>
-        <Panel title={t('inventory.unitDetails')}>
+        <Panel title={t('inventory.unitDetails')} icon={House}>
           <CardGrid min={200}>
             <Field label={t('inventory.propertyType')}>
               {td(`propertyType.${data.propertyType}`)}
@@ -92,7 +106,7 @@ function UnitDetailScreen() {
             <Field label={t('inventory.finishing')}>
               {td(`finishingStatus.${data.finishingStatus}`)}
             </Field>
-            {data.view ? <Field label={t('inventory.view')}>{data.view.ar}</Field> : null}
+            {data.view ? <Field label={t('inventory.view')}>{data.view[locale]}</Field> : null}
             {/*
               Price fields are absent — not null — for an actor without inventory.unit.viewPricing,
               so their absence is what decides whether they render (SEC-029).
@@ -120,41 +134,36 @@ function UnitDetailScreen() {
           ) : null}
           {data.paymentPlanSummary ? (
             <Box sx={{ marginBlockStart: 2 }}>
-              <Field label={t('inventory.paymentPlanSummary')}>{data.paymentPlanSummary.ar}</Field>
+              <Field label={t('inventory.paymentPlanSummary')}>
+                {data.paymentPlanSummary[locale]}
+              </Field>
             </Box>
           ) : null}
         </Panel>
 
-        <Panel title={t('inventory.history')}>
-          {history.state.kind === 'ready' && history.state.data.items.length > 0 ? (
-            <Stack spacing={1.5} component="ol" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {history.state.data.items.map((event) => (
-                <Box key={event.eventId} component="li">
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}
-                  >
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {event.fromStatus && event.toStatus
-                        ? `${td(`unitStatus.${event.fromStatus}`)} → ${td(`unitStatus.${event.toStatus}`)}`
-                        : td(`unitStatus.${event.toStatus ?? 'available'}`)}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      <Verbatim>{format.dateTime(event.occurredAt)}</Verbatim>
-                    </Typography>
-                  </Stack>
-                  {event.reason ? (
-                    <Typography variant="body2" color="text.secondary">
-                      {event.reason}
-                    </Typography>
-                  ) : null}
-                  <Divider sx={{ marginBlockStart: 1 }} />
-                </Box>
-              ))}
-            </Stack>
+        <Panel title={t('inventory.history')} icon={History}>
+          {history.state.kind === 'loading' ? (
+            <StateView variant="inline" kind="loading" title={t('states.loadingTitle')} />
           ) : (
-            <Typography color="text.secondary">{t('states.emptyDescription')}</Typography>
+            <Timeline
+              emptyLabel={t('states.emptyDescription')}
+              entries={(history.state.kind === 'ready' ? history.state.data.items : []).map(
+                (event) => ({
+                  key: event.eventId,
+                  title:
+                    event.fromStatus && event.toStatus ? (
+                      <Transition
+                        from={td(`unitStatus.${event.fromStatus}`)}
+                        to={td(`unitStatus.${event.toStatus}`)}
+                      />
+                    ) : (
+                      td(`unitStatus.${event.toStatus ?? 'available'}`)
+                    ),
+                  when: format.dateTime(event.occurredAt),
+                  ...(event.reason ? { body: event.reason } : {}),
+                }),
+              )}
+            />
           )}
         </Panel>
       </Stack>

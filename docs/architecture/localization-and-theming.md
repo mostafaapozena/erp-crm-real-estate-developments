@@ -164,13 +164,13 @@ alternative (`PLAT-023`). The company name in the tab and the authenticator labe
 profile too. Nothing about a client's identity is compiled into the build.
 
 Approved logo assets for the first deployment are still outstanding (`SD-17`). Until a deployment
-uploads its own:
+uploads its own (Settings → Company identity, since 2026-09-28):
 
-- Development builds show a clearly labelled **temporary text placeholder**, localized in both languages,
-  that says it is temporary.
-- No logo is invented, redrawn, traced, or permanently embedded. No image file stands in for the logo.
-- The placeholder must never appear in a customer-facing document, PDF, or production build intended for
-  release.
+- Every build shows a **monogram**: the first letter of the configured short name (or the product's
+  initials when nothing is configured) on the theme's primary colour, next to the display name. It
+  imitates no logo and is not an image file.
+- No logo is invented, redrawn, traced, or permanently embedded.
+- The earlier development-only text placeholder was retired with the redesign.
 
 ## 8. Accessibility
 
@@ -192,3 +192,52 @@ uploads its own:
 6. Keyboard operation and visible focus.
 7. Loading, empty, error, forbidden, and success states present.
 8. Where a PDF is generated, Arabic glyph rendering asserted.
+9. For a visual change, the visual QA below is run and its screenshots looked at.
+
+## 10. The UI system (ADR-0030, 2026-09-28)
+
+### Building blocks
+
+| Need | Use | Never |
+|---|---|---|
+| Page title, record header | `PageHeader` (`eyebrow`, `status` beside the title, `meta`, `actions` at the inline end, `banner` only for a genuine alert) | a second `<h1>`; a full-width status bar |
+| A titled section | `SectionCard` (web `Panel`) | a card inside a card |
+| A figure | `MetricCard` (icon, `attention`/`positive` edge, optional link) | a colour per card; an invented trend |
+| A list | `DataTable` + `TableToolbar` + `ListFooter` + `usePagedList` | client-side totals; a spinner instead of skeleton rows |
+| A record's status | `StatusChip` / `EnumChip` (tone maps in `pages/shared.tsx`) | colour without the word and glyph |
+| Loading, empty, no results, error, offline, forbidden, not connected, simulated | `StateView` (`inline` inside a card) | an empty area with no explanation |
+| A person | `PersonName` / `usePersonLabel` (ADR-0031) | an account reference such as `acc_…` |
+| An icon | `<Icon icon={…} />` from `@alola/ui/icons` | another icon package (lint), an emoji, a Unicode arrow |
+| A chart | `apps/web/src/charts` (`CategoryBarChart`, `DonutChart`, `RatioMeter`) | a chart without its numbers in text |
+| History | `Timeline`, `Transition` | "→" typed into a string (it does not mirror) |
+
+### Direction rules added by the redesign
+
+- Directional glyphs pass `mirrorInRtl` (chevrons, back arrows, "view all" arrows, the sidebar
+  collapse toggle, sign-out). Non-directional glyphs never do.
+- Horizontal bar charts are drawn with layout (`HorizontalBars`), not an SVG axis: an SVG category
+  axis in RTL placed labels under the bars (found in visual QA). Column charts reverse their category
+  axis in RTL.
+- A bilingual label is rendered with `label[locale]`, never `label.ar` (two such defects were fixed).
+- In MUI `sx`, a number ≤ 1 is a fraction: sizes meant as pixels are written `'1px'` (a `width: 1`
+  once made every visually hidden label page-wide).
+
+### Responsive behaviour
+
+- ≥ `md`: a permanent sidebar at the inline start (272 px, 76 px collapsed, preference remembered in
+  this browser), a sticky top bar, one page scroll; the sidebar scrolls on its own only when taller
+  than the window.
+- < `md`: a temporary drawer from the inline start (right in Arabic), search inside the drawer, the
+  language switch as an icon button with its language name as its accessible name.
+- Tables become label/value cards below `md`; `secondary` columns appear from `lg`.
+- Content is capped at 1680 px and padded 16/24/32 px by breakpoint.
+
+### Visual QA
+
+`scratch/ui-visual-qa.mjs` (ignored, read-only) signs in as the demonstration executive and
+administrator against the **built** web app and API and captures every screen at 1920, 1440, 1024
+and 390 px, in Arabic and English, into `scratch/visual-qa/`, with a JSON report of horizontal
+overflow, raw translation keys, raw account references, emoji, heading count, unnamed controls,
+console errors and failed API calls. It never prints a credential; the administrator's one-time code
+is computed in memory and waits for a fresh time step. DOM assertions are not visual QA: the
+screenshots are looked at.

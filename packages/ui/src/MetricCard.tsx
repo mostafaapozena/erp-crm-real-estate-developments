@@ -118,10 +118,20 @@ export function MetricCard({
         <Typography
           component="p"
           sx={{
-            fontSize: { xs: '1.375rem', md: '1.625rem' },
+            // A long money figure ("3,965,368.96 ج.م.") steps down a size instead of breaking: a
+            // figure split across lines, or a currency's final period on its own line, misreads.
+            fontSize:
+              // Every money figure is longer than 10 characters, so all money in a row shares one
+              // size and short counts keep the large one.
+              (value?.length ?? 0) > 10
+                ? { xs: '1.125rem', md: '1.25rem' }
+                : { xs: '1.375rem', md: '1.625rem' },
             fontWeight: 700,
-            lineHeight: 1.2,
-            overflowWrap: 'anywhere',
+            lineHeight: 1.25,
+            overflowWrap: 'normal',
+            // Separate currencies (" · ") may wrap between figures, never inside one.
+            '& bdi': { whiteSpace: 'nowrap' },
+            ...((value?.includes(' · ') ?? false) ? { '& bdi': { whiteSpace: 'normal' } } : {}),
           }}
         >
           <LtrIsolate>{value ?? '—'}</LtrIsolate>

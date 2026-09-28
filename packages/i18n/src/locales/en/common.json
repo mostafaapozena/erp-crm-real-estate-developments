@@ -5,8 +5,6 @@
     "demoSuffix": "Demonstration build"
   },
   "shell": {
-    "logoPlaceholder": "Temporary logo — development only",
-    "logoPlaceholderHint": "Will be replaced by the approved logo when available",
     "switchLanguage": "العربية",
     "openNavigation": "Open navigation",
     "closeNavigation": "Close navigation",
@@ -557,7 +555,21 @@
     "byPlatform": "By platform",
     "notConnectedTitle": "Demo mode — Meta not connected",
     "notConnectedBody": "No advertising platform is connected: there is no business account, no app review and no advertising spend. The figures shown are local demonstration data entered inside the system, and no campaign can be published from here.",
-    "localDraftOnly": "Local draft only"
+    "localDraftOnly": "Local draft only",
+    "simulated": "Simulated",
+    "demoFigures": "Demonstration figures",
+    "connectionTitle": "Advertising platform connection",
+    "provider": "Platform",
+    "providerMeta": "Meta (Facebook and Instagram)",
+    "connectionState": "Connection",
+    "notConnected": "Not connected",
+    "lastSync": "Last synchronisation",
+    "neverSynced": "Never synchronised",
+    "mode": "Mode",
+    "performance": "Campaign performance",
+    "remainingBudget": "Remaining budget",
+    "leadsByCampaign": "Leads by campaign",
+    "leadsCount": "Leads: {{count}}"
   },
   "campaignPlatform": {
     "facebook": "Facebook",
@@ -592,7 +604,12 @@
     "noManager": "No direct manager",
     "costCenter": "Cost centre",
     "city": "City",
-    "employeeNote": "Full employee records — contracts and payroll — are outside the scope of this build."
+    "employeeNote": "Full employee records — contracts and payroll — are outside the scope of this build.",
+    "structure": "Structure",
+    "team": "Team",
+    "people": "People: {{count}}",
+    "nothingInScope": "No structure within your scope",
+    "nothingInScopeHint": "This section shows only the entities and branches your scope covers."
   },
   "demo": {
     "modeBadge": "Demo mode",
@@ -895,5 +912,14 @@
   },
   "list": {
     "open": "Open {{label}}"
+  },
+  "detail": {
+    "backTo": "Back to {{list}}",
+    "contract": "Contract",
+    "reservation": "Reservation",
+    "lead": "Lead",
+    "unit": "Unit",
+    "receipt": "Receipt",
+    "overdueInstallments": "Overdue instalments: {{count}}"
   }
 }

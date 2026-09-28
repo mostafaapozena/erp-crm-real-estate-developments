@@ -6,7 +6,13 @@ import { DataTable, type DataColumn } from './DataTable';
 import { Icon } from './Icon';
 import { LtrIsolate } from './LtrIsolate';
 import { StateView, type StateKind } from './StateView';
-import { STATUS_ICONS, STATUS_PALETTE, StatusChip, type StatusTone } from './StatusChip';
+import {
+  STATUS_ICONS,
+  STATUS_PALETTE,
+  StatusChip,
+  visuallyHidden,
+  type StatusTone,
+} from './StatusChip';
 import { ThemeRoot } from './ThemeRoot';
 import { createAppTheme } from './theme';
 import { tokens } from './tokens';
@@ -134,6 +140,14 @@ describe('StatusChip (WCAG 1.4.1)', () => {
     for (const { fg, bg } of Object.values(STATUS_PALETTE)) {
       expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(4.5);
     }
+  });
+});
+
+describe('visuallyHidden', () => {
+  it('is one pixel, never a fraction of its parent (MUI reads width: 1 as 100%)', () => {
+    expect(visuallyHidden.width).toBe('1px');
+    expect(visuallyHidden.height).toBe('1px');
+    expect(visuallyHidden.margin).toBe('-1px');
   });
 });
 

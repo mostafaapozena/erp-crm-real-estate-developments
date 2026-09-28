@@ -10,7 +10,8 @@ import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { DataTable, MetricCard, PageHeader, StateView, type DataColumn } from '@alola/ui';
+import { DataTable, Icon, MetricCard, PageHeader, StateView, type DataColumn } from '@alola/ui';
+import { CalendarClock, Coins, HandCoins, Printer, TriangleAlert, Wallet } from '@alola/ui/icons';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { apiRequest } from '../api/client';
@@ -19,7 +20,10 @@ import { useApi, useIdempotencyKey, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { PersonName } from '../people';
+import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
+  BackLink,
   CONTRACT_TONES,
   CardGrid,
   EnumChip,
@@ -28,8 +32,10 @@ import {
   INSTALLMENT_TONES,
   Panel,
   RequirePermission,
+  TableSection,
   Verbatim,
   tableStatus,
+  useTableLabels,
 } from './shared';
 
 const METHODS = ['cash', 'bankTransfer', 'card', 'cheque', 'promissoryNote'] as const;
@@ -64,6 +70,8 @@ function ContractDetailScreen() {
     contractId ? `/api/v1/sales/contracts/${contractId}/installments` : undefined,
   );
   const data = contract.state.kind === 'ready' ? contract.state.data : undefined;
+  const labels = useTableLabels();
+  useBreadcrumbTail(data?.contractNumber);
   const summary = useApi<CustomerFinancialSummary>(
     data && can('sales.contract.view')
       ? `/api/v1/sales/customers/${data.customerId}/summary`
@@ -128,44 +136,76 @@ function ContractDetailScreen() {
 
   return (
     <Box>
+      <BackLink to="/contracts" label={t('detail.backTo', { list: t('nav.contracts') })} />
       <PageHeader
+        eyebrow={t('detail.contract')}
         title={record.contractNumber}
-        subtitle={t('sales.contractsSubtitle')}
-        banner={<EnumChip namespace="contractState" value={record.state} tones={CONTRACT_TONES} />}
+        status={<EnumChip namespace="contractState" value={record.state} tones={CONTRACT_TONES} />}
+        meta={
+          <>
+            <span>{`${t('sales.contractedOn')}: `}</span>
+            <Verbatim>{format.date(record.contractedOn)}</Verbatim>
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+              {`${t('sales.salesOwner')}:`}
+              <PersonName accountId={record.salesOwnerAccountId} compact />
+            </Box>
+          </>
+        }
         actions={
           <>
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={() => window.print()}
+              startIcon={<Icon icon={Printer} size={18} />}
+            >
+              {t('sales.printContract')}
+            </Button>
             {can('collection.receipt.create') && record.state === 'active' ? (
-              <Button variant="contained" onClick={() => setPayOpen(true)}>
+              <Button
+                variant="contained"
+                onClick={() => setPayOpen(true)}
+                startIcon={<Icon icon={HandCoins} size={18} />}
+              >
                 {t('actions.recordPayment')}
               </Button>
             ) : null}
-            <Button variant="outlined" onClick={() => window.print()}>
-              {t('sales.printContract')}
-            </Button>
           </>
         }
       />
 
       <Stack spacing={3}>
         <CardGrid min={200}>
-          <MetricCard label={t('sales.totalPrice')} value={format.money(record.totalPrice)} />
-          <MetricCard label={t('sales.paidAmount')} value={format.money(record.paidAmount)} />
           <MetricCard
+            icon={Wallet}
+            label={t('sales.totalPrice')}
+            value={format.money(record.totalPrice)}
+          />
+          <MetricCard
+            icon={HandCoins}
+            label={t('sales.paidAmount')}
+            value={format.money(record.paidAmount)}
+          />
+          <MetricCard
+            icon={Coins}
             label={t('sales.outstandingAmount')}
             value={format.money(record.outstandingAmount)}
             tone={Number(record.outstandingAmount.amount) > 0 ? 'attention' : 'default'}
           />
           {summaryData ? (
             <MetricCard
+              icon={TriangleAlert}
               label={t('collections.overdueAmount')}
               value={format.money(summaryData.overdueAmount)}
-              hint={`${format.number(summaryData.overdueCount)}`}
+              hint={t('detail.overdueInstallments', {
+                count: format.number(summaryData.overdueCount),
+              })}
               tone={summaryData.overdueCount > 0 ? 'attention' : 'default'}
             />
           ) : null}
         </CardGrid>
 
-        <Panel title={t('sales.paymentPlan')}>
+        <Panel title={t('sales.paymentPlan')} icon={CalendarClock}>
           <CardGrid min={180}>
             <Field label={t('sales.contractedOn')}>
               <Verbatim>{format.date(record.contractedOn)}</Verbatim>
@@ -185,24 +225,17 @@ function ContractDetailScreen() {
           </CardGrid>
         </Panel>
 
-        <Panel title={t('sales.schedule')}>
+        <TableSection title={t('sales.schedule')}>
           <DataTable
             columns={columns}
             rows={installments.state.kind === 'ready' ? installments.state.data.items : []}
             rowKey={(row) => row.installmentId}
             status={tableStatus(installments.state)}
             caption={t('sales.schedule')}
-            labels={{
-              loadingTitle: t('states.loadingTitle'),
-              emptyTitle: t('states.emptyTitle'),
-              emptyDescription: t('states.emptyDescription'),
-              errorTitle: t('states.errorTitle'),
-              errorDescription: t('states.errorDescription'),
-              forbiddenTitle: t('states.forbiddenTitle'),
-              forbiddenDescription: t('states.forbiddenDescription'),
-            }}
+            labels={labels}
+            maxHeight={520}
           />
-        </Panel>
+        </TableSection>
 
         <Alert severity="info" variant="outlined">
           <Typography sx={{ fontWeight: 600 }}>{t('sales.demoDocumentTitle')}</Typography>

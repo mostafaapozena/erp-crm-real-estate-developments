@@ -15,7 +15,8 @@ import {
   type DataTableStatus,
   type StatusTone,
 } from '@alola/ui';
-import { Search, type LucideIcon } from '@alola/ui/icons';
+import { ArrowLeft, ArrowRight, CircleDot, Search, type LucideIcon } from '@alola/ui/icons';
+import { Link as RouterLink } from 'react-router';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import type { ApiError } from '../api/client';
 import { useSession } from '../api/session';
@@ -408,6 +409,147 @@ export function FilterSelect({
         </MenuItem>
       ))}
     </TextField>
+  );
+}
+
+/**
+ * "Back to the list" for a record page. A link, not `history.back()`: a record opened from a bookmark
+ * or a search result has no meaningful history, and the list is always the right place to return to.
+ */
+export function BackLink({ to, label }: { to: string; label: string }) {
+  return (
+    <Button
+      component={RouterLink}
+      to={to}
+      variant="text"
+      size="small"
+      startIcon={<Icon icon={ArrowLeft} size={16} mirrorInRtl />}
+      sx={{ color: 'text.secondary', marginInlineStart: -1 }}
+    >
+      {label}
+    </Button>
+  );
+}
+
+/**
+ * A titled table inside a record page. The table brings its own surface, so the section is a heading
+ * and the table — not a card around a card.
+ */
+export function TableSection({
+  title,
+  actions,
+  children,
+}: {
+  title: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Box component="section" aria-label={title}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+          marginBlockEnd: 1.25,
+        }}
+      >
+        <Typography component="h2" sx={{ fontSize: '1rem', fontWeight: 600 }}>
+          {title}
+        </Typography>
+        {actions}
+      </Box>
+      {children}
+    </Box>
+  );
+}
+
+/** "from → to", with the arrow pointing in the reading direction in both languages. */
+export function Transition({ from, to }: { from: ReactNode; to: ReactNode }) {
+  return (
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+      <span>{from}</span>
+      <Box component="span" sx={{ color: 'text.secondary', display: 'inline-flex' }}>
+        <Icon icon={ArrowRight} size={14} mirrorInRtl />
+      </Box>
+      <span>{to}</span>
+    </Box>
+  );
+}
+
+export interface TimelineEntry {
+  key: string;
+  title: ReactNode;
+  /** When — already formatted. */
+  when: string;
+  body?: ReactNode;
+  icon?: LucideIcon;
+}
+
+/**
+ * A record's history, newest first: a marker and a connecting rule at the inline start, then what
+ * happened and when. A semantic ordered list, so a screen reader hears it in order.
+ */
+export function Timeline({
+  entries,
+  emptyLabel,
+}: {
+  entries: TimelineEntry[];
+  emptyLabel: string;
+}) {
+  if (entries.length === 0) {
+    return <StateView variant="inline" kind="empty" title={emptyLabel} />;
+  }
+  return (
+    <Box component="ol" sx={{ listStyle: 'none', margin: 0, padding: 0 }}>
+      {entries.map((entry, index) => (
+        <Box
+          component="li"
+          key={entry.key}
+          sx={{ display: 'grid', gridTemplateColumns: '32px 1fr', columnGap: 1.5 }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <Box
+              aria-hidden
+              sx={{
+                inlineSize: 28,
+                blockSize: 28,
+                borderRadius: '50%',
+                display: 'grid',
+                placeItems: 'center',
+                bgcolor: 'primary.light',
+                color: 'text.primary',
+                flexShrink: 0,
+              }}
+            >
+              <Icon icon={entry.icon ?? CircleDot} size={14} />
+            </Box>
+            {index < entries.length - 1 ? (
+              <Box
+                aria-hidden
+                sx={{ flexGrow: 1, inlineSize: 2, bgcolor: 'divider', minBlockSize: 12 }}
+              />
+            ) : null}
+          </Box>
+          <Box sx={{ paddingBlockEnd: index < entries.length - 1 ? 2 : 0, minWidth: 0 }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 1 }}>
+              <Typography component="span" variant="body2" sx={{ fontWeight: 600 }}>
+                {entry.title}
+              </Typography>
+              <Typography component="span" variant="caption" color="text.secondary">
+                <LtrIsolate>{entry.when}</LtrIsolate>
+              </Typography>
+            </Box>
+            {entry.body ? (
+              <Box sx={{ typography: 'body2', color: 'text.secondary', marginBlockStart: 0.25 }}>
+                {entry.body}
+              </Box>
+            ) : null}
+          </Box>
+        </Box>
+      ))}
+    </Box>
   );
 }
 

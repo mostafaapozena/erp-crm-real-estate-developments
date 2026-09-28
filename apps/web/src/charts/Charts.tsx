@@ -67,34 +67,55 @@ function ChartFrame({ caption, data, headers, emptyLabel, height, children }: Ch
     );
   }
   return (
-    <Box component="figure" sx={{ margin: 0, minWidth: 0 }} data-chart={caption}>
+    <Box
+      component="figure"
+      sx={{ margin: 0, minWidth: 0, position: 'relative' }}
+      data-chart={caption}
+    >
       {canMeasure() ? (
         <Box aria-hidden sx={{ inlineSize: '100%', blockSize: height, minWidth: 0 }}>
           {children}
         </Box>
       ) : null}
-      <Box
-        component="table"
-        sx={canMeasure() ? visuallyHidden : { inlineSize: '100%', borderCollapse: 'collapse' }}
-      >
-        <caption>{caption}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{headers.category}</th>
-            <th scope="col">{headers.value}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((datum) => (
-            <tr key={datum.key}>
-              <th scope="row">{datum.label}</th>
-              <td>
-                <LtrIsolate>{datum.display}</LtrIsolate>
-              </td>
-            </tr>
-          ))}
-        </tbody>
+      {/*
+        A table sizes itself to its content whatever width it is given, so it is hidden inside a
+        one-pixel clipping box rather than directly — otherwise it widens the page.
+      */}
+      <Box sx={canMeasure() ? visuallyHidden : {}}>
+        <ChartTable caption={caption} data={data} headers={headers} />
       </Box>
+    </Box>
+  );
+}
+
+function ChartTable({
+  caption,
+  data,
+  headers,
+}: {
+  caption: string;
+  data: ChartDatum[];
+  headers: { category: string; value: string };
+}) {
+  return (
+    <Box component="table" sx={{ inlineSize: '100%', borderCollapse: 'collapse' }}>
+      <caption>{caption}</caption>
+      <thead>
+        <tr>
+          <th scope="col">{headers.category}</th>
+          <th scope="col">{headers.value}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {data.map((datum) => (
+          <tr key={datum.key}>
+            <th scope="row">{datum.label}</th>
+            <td>
+              <LtrIsolate>{datum.display}</LtrIsolate>
+            </td>
+          </tr>
+        ))}
+      </tbody>
     </Box>
   );
 }

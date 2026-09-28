@@ -80,13 +80,19 @@ export function StatusChip({ tone, label, size = 'small', srPrefix }: StatusChip
   );
 }
 
-/** Present to assistive technology, absent from the screen. */
+/**
+ * Present to assistive technology, absent from the screen.
+ *
+ * Sizes are **strings in px** on purpose: in MUI's `sx`, a number ≤ 1 is a fraction of the parent
+ * (`width: 1` is 100%), which once made every hidden label as wide as the page and gave wide screens
+ * a horizontal scroll. `components.test.tsx` pins this.
+ */
 export const visuallyHidden = {
   position: 'absolute',
-  width: 1,
-  height: 1,
+  width: '1px',
+  height: '1px',
   padding: 0,
-  margin: -1,
+  margin: '-1px',
   overflow: 'hidden',
   clip: 'rect(0 0 0 0)',
   whiteSpace: 'nowrap',

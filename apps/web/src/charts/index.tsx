@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
 import { Suspense, lazy, type ComponentProps } from 'react';
+import { HorizontalBars } from './HorizontalBars';
 
 /**
  * The chart components, loaded on demand (ADR-0030).
@@ -29,7 +30,21 @@ export function ChartSkeleton({ height = 160 }: { height?: number }) {
   );
 }
 
+/**
+ * Word categories render as layout-drawn horizontal bars (`HorizontalBars`), which mirror correctly
+ * in RTL and need no chart chunk; ordered buckets (`orientation="columns"`) use recharts.
+ */
 export function CategoryBarChart(props: ComponentProps<typeof LazyCategoryBarChart>) {
+  if ((props.orientation ?? 'horizontal') === 'horizontal') {
+    return (
+      <HorizontalBars
+        caption={props.caption}
+        data={props.data}
+        emptyLabel={props.emptyLabel}
+        {...(props.multicolour ? { multicolour: true } : {})}
+      />
+    );
+  }
   return (
     <Suspense fallback={<ChartSkeleton />}>
       <LazyCategoryBarChart {...props} />

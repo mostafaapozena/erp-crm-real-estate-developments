@@ -94,3 +94,16 @@ exist (I18N-007).
 
 - WCAG 2.1 SC 1.1.1, 1.3.1, 1.4.1, 1.4.3, 1.4.11, 2.1.1, 2.4.7
 - lucide-react — https://lucide.dev · recharts — https://recharts.org
+
+## Status update — 2026-09-28 (visual QA)
+
+- **Horizontal bar charts are drawn with layout, not recharts.** Visual QA of the built application
+  showed recharts' SVG category axis in RTL placing the category labels under the bars and the value
+  labels on top of them. Word-category bar charts (pipeline, sources, platforms, portfolio, team) are
+  now `apps/web/src/charts/HorizontalBars.tsx`: label and value in text on one line, the bar beneath
+  growing from the inline start — correct in both directions by construction, a `<dl>` for assistive
+  technology, and no chart chunk needed. Recharts remains for column (ageing) and donut charts, which
+  rendered correctly.
+- **No `vendor-charts` manual chunk.** Charts load through `React.lazy`; a manual chunk group captured
+  react and clsx recursively and made the entry import it (measured, reverted). The lazy `Charts`
+  chunk is 378 kB / 107 kB gzip, inside the unchanged budget.
