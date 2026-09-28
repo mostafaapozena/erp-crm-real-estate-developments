@@ -125,6 +125,23 @@ describe('PLAT-003: module boundaries', () => {
     );
   });
 
+  it('allows icons in the browser only through the design system (ADR-0030)', async () => {
+    for (const source of [
+      "import { Bell } from 'lucide-react';",
+      "import Bell from '@mui/icons-material/Notifications';",
+      "import { FaBell } from 'react-icons/fa';",
+    ]) {
+      expect((await messages(source, 'apps/web/src/a.tsx')).join()).toContain('@alola/ui/icons');
+    }
+    expect(await messages("import { Bell } from '@alola/ui/icons';", 'apps/web/src/a.tsx')).toEqual(
+      [],
+    );
+    // The design system itself is where the library is wrapped.
+    expect(await messages("import { Bell } from 'lucide-react';", 'packages/ui/src/a.tsx')).toEqual(
+      [],
+    );
+  });
+
   it('allows the server only the React-free brand rule from the design system', async () => {
     for (const file of ['apps/api/src/a.ts', 'apps/api/src/modules/company/service.ts']) {
       expect(await messages("import { validateBrandColor } from '@alola/ui/brand';", file)).toEqual(

@@ -1,6 +1,6 @@
 # ADR-0005 — Extended Light Mode semantic token set
 
-- Status: Accepted
+- Status: Accepted · status update 2026-09-28 (three neutral tokens and elevation added, ADR-0030)
 - Date: 2026-09-19
 - Deciders: ALOLA business owner (approved palette), implementation team
 - Scope: Design
@@ -172,3 +172,19 @@ chart that is unreadable in grayscale is a defect.
 - [ADR-0004](adr-0004-light-mode-only.md)
 - [../architecture/localization-and-theming.md](../architecture/localization-and-theming.md)
 - WCAG 2.1 SC 1.4.3 (Contrast Minimum), 1.4.11 (Non-text Contrast), 1.4.1 (Use of Color)
+
+## Status update — 2026-09-28 (ADR-0030)
+
+No approved value changed. Three neutral tokens and an elevation scale were **added** for the UI
+redesign, each measured and registered in `packages/ui/src/contrast.ts`:
+
+| Token | Value | Use | Measured |
+|---|---|---|---|
+| `neutralSoft` | `#F1F5F9` | Table header fill, neutral status chip, hovered row, meter track | `mainText` 16.3:1 · `secondaryText` 6.92:1 · `borderStrong` 4.34:1 (non-text) |
+| `mutedText` | `#64748B` | Supporting text and metadata on `surface` and `pageBackground` **only** | 4.76:1 on `surface` · 4.55:1 on `pageBackground` · **4.34:1 on `neutralSoft` — not used there** |
+| `borderSoft` | `#E2E8F0` | Card and section outlines, dividers inside a card | 1.23:1 — decorative only, like `borderSubtle` (THEME-007) |
+
+`elevation` (`card`, `raised`, `overlay`, `modal`) holds the only shadow values in the product; they
+are built from `mainText` at low opacity. The derived brand palette (THEME-013) is unaffected: none
+of the new tokens is derived from the brand colour, and the new pairs are part of the registry every
+configured colour is validated against.

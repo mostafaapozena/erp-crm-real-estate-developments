@@ -1,7 +1,12 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { Bell } from 'lucide-react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { contrastRatio } from './contrast';
+import { DataTable, type DataColumn } from './DataTable';
+import { Icon } from './Icon';
 import { LtrIsolate } from './LtrIsolate';
 import { StateView, type StateKind } from './StateView';
+import { STATUS_ICONS, STATUS_PALETTE, StatusChip, type StatusTone } from './StatusChip';
 import { ThemeRoot } from './ThemeRoot';
 import { createAppTheme } from './theme';
 import { tokens } from './tokens';
@@ -33,7 +38,17 @@ describe('theme (THEME-001, THEME-002)', () => {
 });
 
 describe('StateView (THEME-010)', () => {
-  const kinds: StateKind[] = ['loading', 'empty', 'error', 'forbidden', 'success'];
+  const kinds: StateKind[] = [
+    'loading',
+    'empty',
+    'noResults',
+    'error',
+    'offline',
+    'forbidden',
+    'success',
+    'notConnected',
+    'simulated',
+  ];
 
   for (const kind of kinds) {
     it(`renders the ${kind} state with text and an accessible role`, () => {
@@ -42,7 +57,7 @@ describe('StateView (THEME-010)', () => {
           <StateView kind={kind} title={`title-${kind}`} description={`desc-${kind}`} />
         </ThemeRoot>,
       );
-      const region = screen.getByRole(kind === 'error' ? 'alert' : 'status');
+      const region = screen.getByRole(kind === 'error' || kind === 'offline' ? 'alert' : 'status');
       expect(region).toHaveProperty('dataset.state', kind);
       expect(screen.getByText(`title-${kind}`)).toBeDefined();
       expect(screen.getByText(`desc-${kind}`)).toBeDefined();
@@ -84,5 +99,84 @@ describe('LtrIsolate (I18N-005)', () => {
       expect(element.textContent).toBe(value);
       expect(element.textContent).not.toMatch(/[\u0660-\u0669\u06F0-\u06F9]/);
     });
+  });
+});
+
+describe('Icon (ADR-0030)', () => {
+  it('is hidden from assistive technology unless it carries a label', () => {
+    const { container } = render(<Icon icon={Bell} />);
+    const wrapper = container.querySelector('[data-icon]');
+    expect(wrapper?.getAttribute('aria-hidden')).toBe('true');
+    expect(wrapper?.querySelector('svg')).not.toBeNull();
+  });
+
+  it('exposes a label as an image when the icon stands alone', () => {
+    render(<Icon icon={Bell} label="notifications" />);
+    expect(screen.getByRole('img', { name: 'notifications' })).toBeDefined();
+  });
+});
+
+describe('StatusChip (WCAG 1.4.1)', () => {
+  it('gives every tone its label and a distinct glyph', () => {
+    const tones: StatusTone[] = ['neutral', 'info', 'success', 'warning', 'danger'];
+    const glyphs = new Set(tones.map((tone) => STATUS_ICONS[tone]));
+    expect(glyphs.size).toBe(tones.length);
+    for (const tone of tones) {
+      const { container, unmount } = render(<StatusChip tone={tone} label={`label-${tone}`} />);
+      const chip = container.querySelector(`[data-tone="${tone}"]`);
+      expect(chip?.textContent).toContain(`label-${tone}`);
+      expect(chip?.querySelector('svg')).not.toBeNull();
+      unmount();
+    }
+  });
+
+  it('uses only registered contrast pairs', () => {
+    for (const { fg, bg } of Object.values(STATUS_PALETTE)) {
+      expect(contrastRatio(fg, bg)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});
+
+describe('DataTable (THEME-010)', () => {
+  const columns: DataColumn<{ id: string; name: string }>[] = [
+    { key: 'name', header: 'Name', render: (row) => row.name },
+  ];
+  const labels = {
+    loadingTitle: 'loading',
+    emptyTitle: 'empty',
+    noResultsTitle: 'no-results',
+    errorTitle: 'error',
+    forbiddenTitle: 'forbidden',
+  };
+  const base = { columns, rowKey: (row: { id: string }) => row.id, caption: 'people', labels };
+
+  it('shows skeleton rows while loading, announced as busy', () => {
+    render(<DataTable {...base} rows={[]} status="loading" />);
+    const status = screen.getByRole('status');
+    expect(status.getAttribute('aria-busy')).toBe('true');
+    expect(screen.getByText('loading')).toBeDefined();
+  });
+
+  it('tells "nothing yet" apart from "nothing matches the filters"', () => {
+    const { rerender } = render(<DataTable {...base} rows={[]} status="ready" />);
+    expect(screen.getByText('empty')).toBeDefined();
+    rerender(<DataTable {...base} rows={[]} status="ready" filtered />);
+    expect(screen.getByText('no-results')).toBeDefined();
+  });
+
+  it('opens a row from the keyboard', () => {
+    const opened: string[] = [];
+    render(
+      <DataTable
+        {...base}
+        rows={[{ id: 'a', name: 'Alpha' }]}
+        status="ready"
+        onRowClick={(row) => opened.push(row.id)}
+        rowLabel={(row) => `open ${row.name}`}
+      />,
+    );
+    const row = screen.getByLabelText('open Alpha');
+    fireEvent.keyDown(row, { key: 'Enter' });
+    expect(opened).toEqual(['a']);
   });
 });

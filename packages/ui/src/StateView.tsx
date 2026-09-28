@@ -1,49 +1,88 @@
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import SvgIcon, { type SvgIconProps } from '@mui/material/SvgIcon';
 import Typography from '@mui/material/Typography';
+import type { LucideIcon } from 'lucide-react';
+import {
+  CircleAlert,
+  CircleCheck,
+  FlaskConical,
+  Inbox,
+  Lock,
+  SearchX,
+  Unplug,
+  WifiOff,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Icon } from './Icon';
+import { tokens } from './tokens';
 
 /**
- * Shared interface states (THEME-010): loading, empty, error, forbidden, success.
+ * Shared interface states (THEME-010).
  *
  * Text is always passed in by the caller from translation keys — this component owns no user-facing
- * copy. Every state carries an icon **and** text, never color alone (WCAG 1.4.1).
+ * copy. Every state carries an icon **and** text, never colour alone (WCAG 1.4.1).
+ *
+ * The kinds are deliberately distinct, because each asks something different of the person reading:
+ *
+ * - `empty` — nothing exists yet (first use); the action is usually "create the first one".
+ * - `noResults` — records exist, but the filters exclude them; the action is "clear the filters".
+ * - `error` / `offline` — the request failed; the action is "try again".
+ * - `forbidden` — the person may not see this; no action, and no hint of what is behind it.
+ * - `notConnected` — a provider is not configured (ADR-0026); never looks like an error.
+ * - `simulated` — a demonstration operation; says so, so nobody mistakes it for a real one.
+ *
+ * `inline` renders without the bordered panel, for a state inside a card that already has one — so
+ * a quiet section does not become a large empty box.
  */
-export type StateKind = 'loading' | 'empty' | 'error' | 'forbidden' | 'success';
+export type StateKind =
+  | 'loading'
+  | 'empty'
+  | 'noResults'
+  | 'error'
+  | 'offline'
+  | 'forbidden'
+  | 'success'
+  | 'notConnected'
+  | 'simulated';
 
 export interface StateViewProps {
   kind: StateKind;
   title: string;
   description?: string;
   action?: ReactNode;
+  variant?: 'panel' | 'inline';
 }
 
-// Material Design icon paths (Apache-2.0).
-const ICON_PATHS: Record<Exclude<StateKind, 'loading'>, string> = {
-  empty:
-    'M19 3H4.99c-1.11 0-1.98.89-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z',
-  error:
-    'M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z',
-  forbidden:
-    'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z',
-  success:
-    'M16.59 7.58 10 14.17l-3.59-3.58L5 12l5 5 8-8zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z',
+const ICONS: Record<Exclude<StateKind, 'loading'>, LucideIcon> = {
+  empty: Inbox,
+  noResults: SearchX,
+  error: CircleAlert,
+  offline: WifiOff,
+  forbidden: Lock,
+  success: CircleCheck,
+  notConnected: Unplug,
+  simulated: FlaskConical,
 };
 
-const ICON_COLOR: Record<Exclude<StateKind, 'loading'>, SvgIconProps['color']> = {
-  empty: 'action',
-  error: 'error',
-  forbidden: 'warning',
-  success: 'success',
+/** Icon colour on its soft disc. Each pair is registered in `contrast.ts` as a non-text mark. */
+const DISC: Record<Exclude<StateKind, 'loading'>, { fg: string; bg: string }> = {
+  empty: { fg: tokens.secondaryText, bg: tokens.neutralSoft },
+  noResults: { fg: tokens.secondaryText, bg: tokens.neutralSoft },
+  error: { fg: tokens.error, bg: tokens.errorSoft },
+  offline: { fg: tokens.error, bg: tokens.errorSoft },
+  forbidden: { fg: tokens.warning, bg: tokens.warningSoft },
+  success: { fg: tokens.success, bg: tokens.successSoft },
+  notConnected: { fg: tokens.info, bg: tokens.infoSoft },
+  simulated: { fg: tokens.info, bg: tokens.infoSoft },
 };
 
-export function StateView({ kind, title, description, action }: StateViewProps) {
-  const role = kind === 'error' ? 'alert' : 'status';
+export function StateView({ kind, title, description, action, variant = 'panel' }: StateViewProps) {
+  const alerting = kind === 'error' || kind === 'offline';
+  const inline = variant === 'inline';
   return (
     <Box
-      role={role}
-      aria-live={kind === 'error' ? 'assertive' : 'polite'}
+      role={alerting ? 'alert' : 'status'}
+      aria-live={alerting ? 'assertive' : 'polite'}
       aria-busy={kind === 'loading' || undefined}
       data-state={kind}
       sx={{
@@ -52,27 +91,48 @@ export function StateView({ kind, title, description, action }: StateViewProps) 
         alignItems: 'center',
         textAlign: 'center',
         gap: 1,
-        paddingBlock: 4,
+        paddingBlock: inline ? 3 : 5,
         paddingInline: 2,
-        bgcolor: 'background.paper',
         color: 'text.primary',
-        border: 1,
-        borderColor: 'divider',
-        borderRadius: 2,
+        ...(inline
+          ? {}
+          : {
+              bgcolor: 'background.paper',
+              border: 1,
+              borderColor: tokens.borderSoft,
+              borderRadius: 3,
+            }),
       }}
     >
       {kind === 'loading' ? (
-        <CircularProgress aria-hidden size={32} />
+        <CircularProgress aria-hidden size={28} thickness={4.5} />
       ) : (
-        <SvgIcon aria-hidden color={ICON_COLOR[kind]} sx={{ fontSize: 40 }}>
-          <path d={ICON_PATHS[kind]} />
-        </SvgIcon>
+        <Box
+          aria-hidden
+          sx={{
+            display: 'grid',
+            placeItems: 'center',
+            inlineSize: inline ? 40 : 48,
+            blockSize: inline ? 40 : 48,
+            borderRadius: '50%',
+            color: DISC[kind].fg,
+            backgroundColor: DISC[kind].bg,
+            marginBlockEnd: 0.5,
+          }}
+        >
+          <Icon icon={ICONS[kind]} size={inline ? 20 : 24} />
+        </Box>
       )}
       <Typography component="p" variant="subtitle1" sx={{ fontWeight: 600 }}>
         {title}
       </Typography>
       {description ? (
-        <Typography component="p" variant="body2" color="text.secondary">
+        <Typography
+          component="p"
+          variant="body2"
+          color="text.secondary"
+          sx={{ maxInlineSize: '48ch' }}
+        >
           {description}
         </Typography>
       ) : null}

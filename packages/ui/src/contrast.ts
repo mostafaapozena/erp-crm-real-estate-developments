@@ -90,7 +90,20 @@ export const TOKEN_PAIRS_IN_USE: readonly TokenPair[] = [
   { foreground: 'chart4', background: 'surface', usage: 'nonText' },
   { foreground: 'chart5', background: 'surface', usage: 'nonText' },
   { foreground: 'chart6', background: 'surface', usage: 'nonText' },
+  // ADR-0030 additions (2026-09-28). `neutralSoft` carries table headers, neutral chips and hovered
+  // rows; `mutedText` is supporting text on the two plain surfaces only — it measures 4.34:1 on
+  // `neutralSoft` and is therefore never used there.
+  { foreground: 'mainText', background: 'neutralSoft', usage: 'text' },
+  { foreground: 'secondaryText', background: 'neutralSoft', usage: 'text' },
+  { foreground: 'mutedText', background: 'surface', usage: 'text' },
+  { foreground: 'mutedText', background: 'pageBackground', usage: 'text' },
+  // Icon discs (state views, KPI cards): the glyph against its soft fill.
+  { foreground: 'primary', background: 'primarySoft', usage: 'nonText' },
+  { foreground: 'secondaryText', background: 'neutralSoft', usage: 'nonText' },
+  { foreground: 'focusRing', background: 'neutralSoft', usage: 'nonText' },
+  { foreground: 'borderStrong', background: 'neutralSoft', usage: 'nonText' },
   // THEME-007 / THEME-008: below 3:1 by design; compliant only as used.
+  { foreground: 'borderSoft', background: 'surface', usage: 'decorative' },
   { foreground: 'borderSubtle', background: 'surface', usage: 'decorative', recorded: 1.48 },
   { foreground: 'disabled', background: 'surface', usage: 'inactive', recorded: 2.56 },
 ];

@@ -106,6 +106,16 @@ const SERVER_ONLY = [
   '@alola/security',
 ];
 
+/** ADR-0030: one icon library, reached only through the design system's curated entry. */
+const ICON_PACKAGES = [
+  'lucide-react',
+  'lucide-react/*',
+  '@mui/icons-material',
+  '@mui/icons-material/*',
+  'react-icons',
+  'react-icons/*',
+];
+
 const BROWSER_ONLY = ['react', 'react-dom', 'react-dom/*', '@mui/*', '@emotion/*', 'i18next'];
 
 /**
@@ -178,6 +188,10 @@ export const restrictions = [
             publicEntryOnly,
             { group: SERVER_ONLY, message: 'Server-only module imported into the browser app.' },
             { group: ['node:*'], message: 'Node built-in imported into the browser app.' },
+            {
+              group: ICON_PACKAGES,
+              message: 'Icons come from @alola/ui/icons only, drawn through <Icon> (ADR-0030).',
+            },
             {
               group: ['@alola/api', '@alola/worker', '**/apps/api/**', '**/apps/worker/**'],
               message: 'Applications must not import each other.',

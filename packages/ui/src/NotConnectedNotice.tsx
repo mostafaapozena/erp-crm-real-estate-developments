@@ -1,7 +1,9 @@
 import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
-import Chip from '@mui/material/Chip';
-import SvgIcon from '@mui/material/SvgIcon';
+import Box from '@mui/material/Box';
+import { FlaskConical, Unplug } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Icon } from './Icon';
 import { tokens } from './tokens';
 
 /**
@@ -18,39 +20,53 @@ export interface NotConnectedNoticeProps {
   body: string;
   /** A short badge repeated next to the individual controls, e.g. "Demo mode". */
   badgeLabel?: string;
+  /** Extra detail rendered under the body, e.g. a connection-status list. */
+  children?: ReactNode;
 }
 
-export function NotConnectedNotice({ title, body }: NotConnectedNoticeProps) {
+export function NotConnectedNotice({ title, body, children }: NotConnectedNoticeProps) {
   return (
     <Alert
       severity="info"
       variant="outlined"
-      icon={
-        <SvgIcon aria-hidden>
-          <path d="M11 7h2v6h-2zm0 8h2v2h-2zm1-13C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
-        </SvgIcon>
-      }
+      icon={<Icon icon={Unplug} size={20} />}
       sx={{ borderColor: tokens.info, backgroundColor: tokens.infoSoft, color: tokens.mainText }}
     >
       <AlertTitle sx={{ fontWeight: 700 }}>{title}</AlertTitle>
       {body}
+      {children ? <Box sx={{ marginBlockStart: 1 }}>{children}</Box> : null}
     </Alert>
   );
 }
 
-/** The compact form, for placing beside a single control rather than above a section. */
+/**
+ * The compact form, for placing beside a single control or value rather than above a section. It
+ * says "simulated / demonstration" in words and with a flask mark, never by colour alone.
+ */
 export function DemoBadge({ label }: { label: string }) {
   return (
-    <Chip
-      size="small"
-      label={label}
-      variant="outlined"
+    <Box
+      component="span"
+      data-demo-badge=""
       sx={{
-        color: tokens.info,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.5,
+        paddingInline: 1,
+        paddingBlock: 0.25,
+        borderRadius: 999,
+        border: 1,
         borderColor: tokens.info,
+        color: tokens.info,
         backgroundColor: tokens.infoSoft,
+        fontSize: '0.75rem',
         fontWeight: 600,
+        lineHeight: 1.5,
+        whiteSpace: 'nowrap',
       }}
-    />
+    >
+      <Icon icon={FlaskConical} size={14} />
+      {label}
+    </Box>
   );
 }

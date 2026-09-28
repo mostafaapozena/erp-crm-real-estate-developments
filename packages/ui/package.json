@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./brand": "./src/brand.ts"
+    "./brand": "./src/brand.ts",
+    "./icons": "./src/icons.ts"
   },
   "scripts": {
     "typecheck": "node ../../scripts/bin.mjs tsc --noEmit -p tsconfig.json"
@@ -17,6 +18,7 @@
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
     "@mui/material": "9.4.0",
+    "lucide-react": "1.48.0",
     "stylis": "4.2.0",
     "stylis-plugin-rtl": "2.1.1"
   },

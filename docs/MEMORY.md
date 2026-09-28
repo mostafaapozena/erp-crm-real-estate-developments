@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-28 (foundation gate)
+Last updated: 2026-09-28 (UI/UX redesign — UI-1)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -541,6 +541,46 @@ parked, uncommitted, in the ignored `scratch/hold-f9/` (contracts `imports.ts`, 
 `apps/api/src/modules/imports/` model and service, `platform/csv.ts` with tests): move them back to
 the same paths. Remaining: the reference-items importer, leads and units exporters, the XLSX reader
 (`read-excel-file`, pinned), router, OpenAPI, tests, screen.
+
+## UI/UX redesign, company branding and visual quality gate — IN PROGRESS (started 2026-09-28)
+
+Scope: the UI/UX master prompt — a cohesive corporate interface over the existing product, with no
+backend behaviour, permission, scope, requirement ID or API contract weakened. Business Master
+Prompts remain **not started**. Starting HEAD `45aee8c`. One local commit per bounded group.
+
+Baseline at `45aee8c` (measured before any change): lint, format, typecheck, i18n, secrets, links,
+ignored-source ✅; **unit 542 / 39 files** (the chained `verify` run hit vitest worker start-up
+timeouts under load — 10 files never started, 0 failures — and a standalone rerun passed all 542);
+build + bundle ✅ (largest `vendor-mui` 389.4 kB / 117.2 kB gzip); **integration 498 passed / 0 failed
+/ 0 skipped**. Demo database snapshot: `scratch/ui-demo-before.json` (counts + content hashes, ignored).
+
+| Group | State | Commit |
+|---|---|---|
+| UI-1 Tokens, icon library, shared primitives, ADR-0030 | **complete** | the commit containing this row |
+| UI-2 Company identity, application shell, sign-in, people lookup | not started | — |
+| UI-3 Dashboard and charts | not started | — |
+| UI-4 Lists and tables | not started | — |
+| UI-5 Details, forms, marketing, organization, visual QA | not started | — |
+
+### UI-1 — what changed
+
+- [ADR-0030](decisions/adr-0030-ui-design-system-icons-and-charts.md): layout scale
+  (`packages/ui/src/layout.ts`), elevation (`tokens.elevation`), type scale in the theme, icons from
+  `lucide-react` **1.48.0** (exact) through `@alola/ui/icons` + `<Icon>`, charts to be `recharts`
+  (added in UI-3). ADR-0005 status update: three **added** neutral tokens (`neutralSoft`,
+  `mutedText`, `borderSoft`), measured and registered; no approved value changed.
+- Lint: `lucide-react`, `@mui/icons-material`, `react-icons` refused in `apps/web` (tested).
+- Primitives rebuilt: `StatusChip` (soft chip, distinct glyph per tone, `data-tone` kept), `StateView`
+  (+ `noResults`, `offline`, `notConnected`, `simulated`, `inline` variant), `MetricCard` (icon disc,
+  `attention`/`positive` edge, optional link — no invented trends), `PageHeader` (`eyebrow`,
+  `status` beside the title, `meta`), new `SectionCard`, `TableToolbar`, `DataTable` (skeleton rows,
+  empty vs no-results, toolbar/footer, keyboard-openable rows with a mirrored chevron, secondary
+  columns hidden below `lg`, optional `maxHeight` sticky header). Theme: component defaults for
+  buttons, inputs (`TextField` defaults to `small`), tables, tabs, dialogs, menus, tooltips, and a
+  `prefers-reduced-motion` rule.
+- Web: `Panel` now wraps `SectionCard`; `Field` restyled; `useTableLabels()` added.
+- Measured: unit **563** (542 + 21), lint/typecheck/format on changed areas, i18n, links, secrets
+  (466 files), ignored-source, build, bundle (`vendor-mui` 392.6 / 117.9 kB gzip).
 
 ## Phase status
 

@@ -1,16 +1,17 @@
 import type { Permission } from '@alola/contracts';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import {
   LtrIsolate,
+  SectionCard,
   StateView,
   StatusChip,
+  type DataTableLabels,
   type DataTableStatus,
   type StatusTone,
 } from '@alola/ui';
+import type { LucideIcon } from '@alola/ui/icons';
 import type { ReactNode } from 'react';
 import type { ApiError } from '../api/client';
 import { useSession } from '../api/session';
@@ -190,16 +191,25 @@ export function ErrorState({ error, onRetry }: { error: ApiError; onRetry: () =>
 /**
  * A labelled read-only field.
  *
- * The value is direction-isolated because most of them are identifiers, numbers or dates, and those
- * reorder inside Arabic text without it (ADR-0003).
+ * The value is direction-isolated where it is an identifier, a number or a date — those reorder
+ * inside Arabic text without it (ADR-0003) — by the caller wrapping it in `Verbatim`.
  */
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <Box>
-      <Typography variant="caption" color="text.secondary" component="p">
+    <Box sx={{ minWidth: 0 }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        component="p"
+        sx={{ fontWeight: 600, marginBlockEnd: 0.25 }}
+      >
         {label}
       </Typography>
-      <Typography component="p" sx={{ fontWeight: 500, wordBreak: 'break-word' }}>
+      <Typography
+        component="div"
+        variant="body2"
+        sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}
+      >
         {children}
       </Typography>
     </Box>
@@ -211,30 +221,51 @@ export function Verbatim({ children }: { children: ReactNode }) {
   return <LtrIsolate>{children}</LtrIsolate>;
 }
 
-/** A titled panel. Used for every detail card so spacing and headings stay consistent. */
+/** A titled section. Every detail card uses it, so spacing and headings stay consistent. */
 export function Panel({
   title,
   actions,
   children,
+  icon,
+  description,
+  flush,
 }: {
   title: string;
   actions?: ReactNode;
   children: ReactNode;
+  icon?: LucideIcon;
+  description?: string;
+  flush?: boolean;
 }) {
   return (
-    <Paper variant="outlined" sx={{ padding: { xs: 2, sm: 3 } }}>
-      <Stack
-        direction="row"
-        sx={{ justifyContent: 'space-between', alignItems: 'center', marginBlockEnd: 2, gap: 1 }}
-      >
-        <Typography variant="h2" component="h2" sx={{ fontSize: '1.125rem' }}>
-          {title}
-        </Typography>
-        {actions}
-      </Stack>
+    <SectionCard
+      title={title}
+      {...(actions ? { actions } : {})}
+      {...(icon ? { icon } : {})}
+      {...(description ? { description } : {})}
+      {...(flush ? { flush } : {})}
+      fill
+    >
       {children}
-    </Paper>
+    </SectionCard>
   );
+}
+
+/** The table state labels every list uses, in the current language. */
+export function useTableLabels(): DataTableLabels {
+  const { t } = useLocale();
+  return {
+    loadingTitle: t('states.loadingTitle'),
+    loadingDescription: t('states.loadingDescription'),
+    emptyTitle: t('states.emptyTitle'),
+    emptyDescription: t('states.emptyDescription'),
+    noResultsTitle: t('states.noResults'),
+    noResultsDescription: t('states.noResultsHint'),
+    errorTitle: t('states.errorTitle'),
+    errorDescription: t('states.errorDescription'),
+    forbiddenTitle: t('states.forbiddenTitle'),
+    forbiddenDescription: t('states.forbiddenDescription'),
+  };
 }
 
 /** A responsive grid of fields or cards — the layout every detail screen and dashboard uses. */

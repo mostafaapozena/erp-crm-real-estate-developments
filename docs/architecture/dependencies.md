@@ -66,6 +66,7 @@ Runtime: **Node.js 24** (`engines: >=24`, `.nvmrc`). Verified on Node 24.14.1 / 
 | stylis / stylis-plugin-rtl | 4.4.0 / 2.1.1 | Mirrors MUI's internal styles in RTL |
 | i18next | 26.4.2 | Translation runtime (I18N-001) |
 | @fontsource/alexandria / inter | 5.3.0 / 5.3.0 | Self-hosted fonts bundled with the app, weights 400/600/700 only (I18N-007) |
+| lucide-react | 1.48.0 | **Added 2026-09-28 (ADR-0030).** The one icon library: one outline style and stroke weight, ISC licence, ES modules with `sideEffects: false` so only imported glyphs are bundled. Imported by `@alola/ui` only; applications use the curated `@alola/ui/icons` entry, and lint refuses the package elsewhere. 0 audit findings at install |
 
 ## Deliberately not added
 
@@ -73,7 +74,7 @@ Runtime: **Node.js 24** (`engines: >=24`, `.nvmrc`). Verified on Node 24.14.1 / 
 |---|---|
 | react-i18next | The app needs one piece of locale state that drives text, direction, and theme together (I18N-003). A small context over `i18n.getFixedT(locale)` does that without a second source of language state. Add it if `<Trans>` rich-text interpolation is needed. |
 | @asteasolutions/zod-to-openapi | Zod 4's built-in `z.toJSONSchema` emits JSON Schema 2020-12, which OpenAPI 3.1 uses directly. |
-| @mui/icons-material | Very large. The few Phase 1 icons are inline Material paths. |
+| @mui/icons-material | Very large, and a second icon style beside `lucide-react` (ADR-0030). Refused by lint in the web application. |
 | dotenv | Node 24's built-in `process.loadEnvFile` / `--env-file` covers it. |
 | AWS SDK (S3, KMS) | Not configured in development yet. Interfaces exist (`PrivateFileStore`, `Encryptor`) with fail-loud unconfigured implementations; the SDK adapters arrive with provisioning. **`SEC-033` is not implemented**, so staging and production cannot store an MFA secret yet (ADR-0023 §6). |
 | cookie-parser | One cookie is read, by name, in `modules/identity/cookies.ts`. A parser would turn every header value into request state for no benefit; `res.cookie` for writing is already built into Express 5. |

@@ -10,36 +10,95 @@ import type { ReactNode } from 'react';
  * heading ends up with two `<h1>`s on some pages and none on others, and a screen reader user then
  * cannot tell where they are.
  *
- * Actions sit at the inline **end** so they mirror in RTL without a second layout.
+ * Layout, for a list and for a record alike:
+ *
+ *     [eyebrow — a reference number, a record type]
+ *     Title  [status]                                   [secondary actions] [primary action]
+ *     Subtitle
+ *     [meta — who, when, where, as a quiet line]
+ *     [banner — only for something that genuinely needs full-width attention]
+ *
+ * Actions sit at the inline **end** so they mirror in RTL without a second layout. A record's status
+ * sits **beside** its title as a compact chip rather than in a full-width bar: it is a property of the
+ * record, not an alert.
  */
 export interface PageHeaderProps {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
-  /** Rendered under the subtitle: a demo notice, a status chip, a warning. */
+  /** A small line above the title: a human-readable reference, or the kind of record. */
+  eyebrow?: ReactNode;
+  /** A compact status chip rendered beside the title. */
+  status?: ReactNode;
+  /** Contextual metadata under the subtitle. */
+  meta?: ReactNode;
+  /** Rendered under everything: a genuine alert, a demonstration notice. */
   banner?: ReactNode;
 }
 
-export function PageHeader({ title, subtitle, actions, banner }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  subtitle,
+  actions,
+  eyebrow,
+  status,
+  meta,
+  banner,
+}: PageHeaderProps) {
   return (
     <Stack spacing={2} sx={{ marginBlockEnd: 3 }}>
       <Stack
-        direction={{ xs: 'column', sm: 'row' }}
+        direction={{ xs: 'column', md: 'row' }}
         spacing={2}
-        sx={{ alignItems: { sm: 'flex-start' }, justifyContent: 'space-between' }}
+        sx={{ alignItems: { md: 'flex-start' }, justifyContent: 'space-between' }}
       >
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h1" component="h1" sx={{ fontSize: '1.75rem' }}>
-            {title}
-          </Typography>
+          {eyebrow ? (
+            <Typography
+              component="div"
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontWeight: 600, marginBlockEnd: 0.5, display: 'block' }}
+            >
+              {eyebrow}
+            </Typography>
+          ) : null}
+          <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1.5 }}>
+            <Typography
+              variant="h1"
+              component="h1"
+              sx={{ fontSize: { xs: '1.375rem', md: '1.625rem' }, overflowWrap: 'anywhere' }}
+            >
+              {title}
+            </Typography>
+            {status ? <Box sx={{ display: 'inline-flex' }}>{status}</Box> : null}
+          </Box>
           {subtitle ? (
-            <Typography color="text.secondary" sx={{ marginBlockStart: 0.5 }}>
+            <Typography color="text.secondary" variant="body2" sx={{ marginBlockStart: 0.5 }}>
               {subtitle}
             </Typography>
           ) : null}
+          {meta ? (
+            <Box
+              sx={{
+                marginBlockStart: 1,
+                display: 'flex',
+                flexWrap: 'wrap',
+                columnGap: 2,
+                rowGap: 0.5,
+                color: 'text.secondary',
+                typography: 'body2',
+              }}
+            >
+              {meta}
+            </Box>
+          ) : null}
         </Box>
         {actions ? (
-          <Stack direction="row" spacing={1} sx={{ flexShrink: 0, flexWrap: 'wrap', gap: 1 }}>
+          <Stack
+            direction="row"
+            sx={{ flexShrink: 0, flexWrap: 'wrap', gap: 1, alignItems: 'flex-start' }}
+          >
             {actions}
           </Stack>
         ) : null}

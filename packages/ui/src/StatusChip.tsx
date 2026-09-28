@@ -1,5 +1,7 @@
-import Chip from '@mui/material/Chip';
-import SvgIcon from '@mui/material/SvgIcon';
+import Box from '@mui/material/Box';
+import type { LucideIcon } from 'lucide-react';
+import { CircleCheck, CircleDot, CircleX, Info, TriangleAlert } from 'lucide-react';
+import { Icon } from './Icon';
 import { tokens } from './tokens';
 
 /**
@@ -9,6 +11,9 @@ import { tokens } from './tokens';
  * outline differs per tone. Someone who cannot distinguish the greens from the ambers still reads the
  * word and sees a different mark, which is the point: on a units table the difference between
  * "available" and "reserved" decides whether a unit gets sold twice.
+ *
+ * Compact by design: a soft fill with the status colour as text, sized to sit inside a table row or
+ * beside a heading. A status is a property of a record, not an alarm, so it is never a full-width bar.
  */
 export type StatusTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
 
@@ -20,44 +25,70 @@ export interface StatusChipProps {
   srPrefix?: string;
 }
 
-/** Distinct shapes, not just distinct hues: a dot, an arrow, a tick, a bar, a cross. */
-const ICON_PATHS: Record<StatusTone, string> = {
-  neutral: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
-  info: 'M12 4 4 12l8 8 1.4-1.4L7.8 13H20v-2H7.8l5.6-5.6z',
-  success: 'M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z',
-  warning: 'M4 10h16v4H4z',
-  danger:
-    'M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z',
+/** Distinct shapes, not just distinct hues: a dot, an "i", a tick, a triangle, a cross. */
+export const STATUS_ICONS: Record<StatusTone, LucideIcon> = {
+  neutral: CircleDot,
+  info: Info,
+  success: CircleCheck,
+  warning: TriangleAlert,
+  danger: CircleX,
 };
 
-const PALETTE: Record<StatusTone, { fg: string; bg: string; border: string }> = {
-  neutral: { fg: tokens.mainText, bg: tokens.pageBackground, border: tokens.borderStrong },
-  info: { fg: tokens.info, bg: tokens.infoSoft, border: tokens.info },
-  success: { fg: tokens.success, bg: tokens.successSoft, border: tokens.success },
-  warning: { fg: tokens.warning, bg: tokens.warningSoft, border: tokens.warning },
-  danger: { fg: tokens.error, bg: tokens.errorSoft, border: tokens.error },
+/** Every pair here is in the contrast registry (`contrast.ts`) at text strength. */
+export const STATUS_PALETTE: Record<StatusTone, { fg: string; bg: string }> = {
+  neutral: { fg: tokens.mainText, bg: tokens.neutralSoft },
+  info: { fg: tokens.info, bg: tokens.infoSoft },
+  success: { fg: tokens.success, bg: tokens.successSoft },
+  warning: { fg: tokens.warning, bg: tokens.warningSoft },
+  danger: { fg: tokens.error, bg: tokens.errorSoft },
 };
 
 export function StatusChip({ tone, label, size = 'small', srPrefix }: StatusChipProps) {
-  const palette = PALETTE[tone];
+  const palette = STATUS_PALETTE[tone];
+  const small = size === 'small';
   return (
-    <Chip
-      size={size}
-      variant="outlined"
+    <Box
+      component="span"
       data-tone={tone}
-      icon={
-        <SvgIcon aria-hidden sx={{ fontSize: 16, color: `${palette.fg} !important` }}>
-          <path d={ICON_PATHS[tone]} />
-        </SvgIcon>
-      }
-      label={srPrefix ? `${srPrefix} ${label}` : label}
       sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.5,
+        maxWidth: '100%',
+        paddingInline: small ? 1 : 1.25,
+        paddingBlock: small ? 0.25 : 0.5,
+        borderRadius: 999,
         color: palette.fg,
         backgroundColor: palette.bg,
-        borderColor: palette.border,
+        fontSize: small ? '0.75rem' : '0.8125rem',
         fontWeight: 600,
-        '& .MuiChip-label': { paddingInline: 1 },
+        lineHeight: 1.5,
+        whiteSpace: 'nowrap',
+        verticalAlign: 'middle',
       }}
-    />
+    >
+      <Icon icon={STATUS_ICONS[tone]} size={small ? 14 : 16} />
+      <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {srPrefix ? (
+          <Box component="span" sx={visuallyHidden}>
+            {`${srPrefix} `}
+          </Box>
+        ) : null}
+        {label}
+      </Box>
+    </Box>
   );
 }
+
+/** Present to assistive technology, absent from the screen. */
+export const visuallyHidden = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+} as const;
