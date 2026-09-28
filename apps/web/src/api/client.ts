@@ -40,6 +40,8 @@ export class ApiError extends Error {
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
+  /** A file sent as-is (an import upload). Mutually exclusive with `body`. */
+  file?: Blob;
   signal?: AbortSignal;
   /** Set for the refresh call itself, so a failed refresh cannot recurse into another refresh. */
   skipRefresh?: boolean;
@@ -78,6 +80,7 @@ async function parseError(response: Response): Promise<ApiError> {
 async function send(path: string, options: RequestOptions): Promise<Response> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (options.file !== undefined) headers['Content-Type'] = 'application/octet-stream';
   if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
   return fetch(path, {
     method: options.method ?? 'GET',
@@ -85,6 +88,7 @@ async function send(path: string, options: RequestOptions): Promise<Response> {
     // The refresh token is an HttpOnly cookie; it must ride along, and only to our own origin.
     credentials: 'same-origin',
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+    ...(options.file !== undefined ? { body: options.file } : {}),
     ...(options.signal ? { signal: options.signal } : {}),
   });
 }
@@ -121,6 +125,23 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (!response.ok) throw await parseError(response);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+/**
+ * The same request, returning the body as a file rather than JSON — for a download that needs the
+ * access token, which a plain link would not carry (an import's issue report).
+ */
+export async function apiBlob(path: string): Promise<Blob> {
+  let response = await send(path, {}).catch(() => {
+    throw new ApiError(0, 'NETWORK_ERROR');
+  });
+  if (response.status === 401 && (await tryRefresh())) {
+    response = await send(path, {}).catch(() => {
+      throw new ApiError(0, 'NETWORK_ERROR');
+    });
+  }
+  if (!response.ok) throw await parseError(response);
+  return response.blob();
 }
 
 /**

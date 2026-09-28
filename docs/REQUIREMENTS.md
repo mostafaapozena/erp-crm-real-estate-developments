@@ -76,7 +76,7 @@ real **values** (`SD-01`) remain a Phase 2 input, and no business policy is deci
 | PLAT-024 | Centralized validated business settings, permissioned and audited, with history | F3 | implemented |
 | PLAT-025 | Reference data with stable codes, bilingual labels, ordering and deactivation; a code in use is never removed or recoded | F3 | implemented |
 | PLAT-026 | Feature flags limited to an approved catalog, audited | F3 | implemented |
-| CORE-IMPORT-003 | Export: permission-checked, scope- and field-restricted, bounded, formula-safe, audited, expiring | F9 | approved |
+| CORE-IMPORT-003 | Export: permission-checked, scope- and field-restricted, bounded, formula-safe, audited, expiring | F9 | implemented |
 | OPS-004 | Explicit, versioned schema migrations with a recorded database version | F11 | approved |
 | OPS-005 | Repeatable client-deployment initialization, idempotent, refusing destructive resets | F11 | approved |
 | OPS-006 | Operational readiness: worker, queue, integration and migration health; build metadata; redacted diagnostics | F12 | approved |
@@ -200,12 +200,23 @@ Tests: `apps/api/src/modules/search/search.int-test.ts` (6, real MongoDB),
 |---|---|
 | CORE-SEARCH-001 | The search service owns no index: each kind of record is searched by its owning module's scoped query, only when the caller holds that module's read permission (`searched` lists which); a branch-A caller finds branch-A leads and customers and never the branch-B record sharing the name; a phone number is matched but never echoed; a unit's restricted price is neither matched (searching the price finds nothing) nor returned; a caller without read permissions searches nothing; the term is escaped text (`.*` and `^P` match nothing); one failing provider never hides the others' answers; at most five hits per kind |
 
+### Implementation evidence — F9 (2026-09-28)
+
+Tests: `apps/api/src/modules/imports/imports.int-test.ts` (11, real MongoDB and a real disk; includes a
+generated `.xlsx`), `apps/api/src/platform/csv.test.ts` (5), `apps/web/src/pages/ImportsPage.test.tsx` (2).
+
+| ID | Evidence |
+|---|---|
+| CORE-IMPORT-001 | CSV (UTF-8, RFC 4180) and `.xlsx` (first sheet) are parsed and every row validated before anything is written; the preview shows the rows as they will be stored, Arabic included; a clean preview commits every row in one transaction with the batch state and the audit records; a second commit is `IMPORT_NOT_PENDING`; non-UTF-8, malformed CSV, unreadable XLSX and more than 5000 rows are refused rather than guessed at; the importer's permission and `feature.imports` are required; a preview expires after 24 hours |
+| CORE-IMPORT-002 | Every issue is reported by spreadsheet row and column (header problems as row 1; unknown list, product-bound list, bad code, missing label, one-language description, bad sort order, duplicate in the file, code already stored); a file with any issue cannot be committed and nothing is written; a code taken between preview and commit rolls the **whole** import back and leaves the batch pending; the full issue list downloads as formula-safe CSV; a batch is visible only to its uploader |
+| CORE-IMPORT-003 | `POST /exports` for leads and units needs `crm.lead.export` / `inventory.unit.export`; rows come from the owning module's scoped query (a branch-A exporter's file has no branch-B lead); a unit's price columns are **absent** without `inventory.unit.viewPricing`; a cell beginning `=`, `+`, `-`, `@`, tab or CR is neutralized; more than 5000 rows is refused (`EXPORT_TOO_LARGE`); each export is an append-only record plus an audit event; the file is reached only through a signed link that expires within minutes; `feature.exports` switches it off |
+
 ## Current status summary
 
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
-| Status `implemented` (code and passing tests) | **95** of the original 113, plus 12 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
+| Status `implemented` (code and passing tests) | **97** of the original 113, plus 13 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
@@ -516,8 +527,8 @@ adapter exists ([ADR-0023](decisions/adr-0023-password-hashing-and-session-token
 | ID | Requirement | Source | Notes |
 |---|---|---|---|
 | CORE-SEARCH-001 | Global search honouring data scope and field restrictions | ADR-0006 | **implemented** 2026-09-28 (F8). Search is a common scope-leak path |
-| CORE-IMPORT-001 | Validated Excel/CSV import with preview before commit | MM §8 | |
-| CORE-IMPORT-002 | Per-row error report; no partial silent import | MM §8 | |
+| CORE-IMPORT-001 | Validated Excel/CSV import with preview before commit | MM §8 | **implemented** 2026-09-28 (F9). One importer (reference items); business importers arrive with their modules |
+| CORE-IMPORT-002 | Per-row error report; no partial silent import | MM §8 | **implemented** 2026-09-28 (F9) |
 
 ## I18N — Localization
 

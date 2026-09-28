@@ -72,7 +72,10 @@ export const NAVIGATION: NavGroup[] = [
   },
   {
     labelKey: 'nav.groupAdmin',
-    items: [{ path: '/organization', labelKey: 'nav.organization', permissions: ['org.view'] }],
+    items: [
+      { path: '/organization', labelKey: 'nav.organization', permissions: ['org.view'] },
+      { path: '/imports', labelKey: 'nav.imports', permissions: ['referenceData.manage'] },
+    ],
   },
 ];
 

@@ -19,6 +19,7 @@ import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { ExportButton } from './ExportButton';
 import { CardGrid, EnumChip, RequirePermission, UNIT_TONES, Verbatim, tableStatus } from './shared';
 
 type Unit = UnitPage['items'][number];
@@ -130,6 +131,7 @@ function UnitsScreen() {
       <PageHeader
         title={t('inventory.unitsTitle')}
         subtitle={t('inventory.unitsSubtitle')}
+        actions={<ExportButton kind="units" permission="inventory.unit.export" />}
         banner={
           pricingVisible || !can('inventory.unit.view') ? undefined : (
             <Typography variant="body2" color="text.secondary">

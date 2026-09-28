@@ -518,6 +518,44 @@ export class CrmService {
   }
 
   /** Leads by name or phone prefix, inside the actor's scope (CORE-SEARCH-001). */
+  /**
+   * Leads for an export (CORE-IMPORT-003): the list's scoped query, bounded by the caller. Contact
+   * details leave the system only through here, with `crm.lead.export` and an audit record.
+   */
+  async exportLeads(
+    actor: ActorContext,
+    limit: number,
+  ): Promise<{ columns: string[]; rows: (string | number | null | undefined)[][] }> {
+    const documents = await this.leads
+      .find(withScope(buildScopeFilter(actor, LEAD_SCOPE_FIELDS)))
+      .sort({ createdAt: 1, leadId: 1 })
+      .limit(limit)
+      .lean<LeadDocument[]>()
+      .exec();
+    return {
+      columns: [
+        'lead_id',
+        'name',
+        'primary_phone',
+        'email',
+        'source',
+        'stage',
+        'next_follow_up_on',
+        'created_at',
+      ],
+      rows: documents.map((lead) => [
+        lead.leadId,
+        lead.name,
+        lead.primaryPhone,
+        lead.email,
+        lead.source,
+        lead.stage,
+        lead.nextFollowUpOn,
+        lead.createdAt.toISOString(),
+      ]),
+    };
+  }
+
   async searchLeads(
     actor: ActorContext,
     term: string,

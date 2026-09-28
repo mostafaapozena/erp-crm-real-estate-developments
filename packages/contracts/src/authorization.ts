@@ -138,11 +138,15 @@ export const PERMISSIONS = [
   'inventory.unit.manage',
   /** Reveals a unit's pricing. Someone may need to see availability without seeing the price list. */
   'inventory.unit.viewPricing',
+  /** Take units out of the system as a file (CORE-IMPORT-003). Prices only with viewPricing too. */
+  'inventory.unit.export',
 
   // CRM (`CRM-*`)
   'crm.customer.view',
   'crm.customer.manage',
   'crm.lead.view',
+  /** Take leads — names and phone numbers — out of the system as a file (CORE-IMPORT-003). */
+  'crm.lead.export',
   'crm.lead.create',
   'crm.lead.edit',
   /** Hand a lead to another sales owner — a manager's action, not an owner's. */

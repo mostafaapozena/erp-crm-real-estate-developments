@@ -8,6 +8,7 @@ import {
   INSTALLMENT_FREQUENCIES,
   INSTALLMENT_KINDS,
   INSTALLMENT_STATES,
+  IMPORT_STATES,
   INSTRUMENT_KINDS,
   INSTRUMENT_STATES,
   LEAD_SOURCES,
@@ -70,6 +71,7 @@ export const DISPLAYED_ENUMS: Readonly<Record<string, readonly string[]>> = {
   notificationBody: NOTIFICATION_TYPES,
   notificationState: NOTIFICATION_STATES,
   taskState: TASK_STATES,
+  importState: IMPORT_STATES,
   taskPriority: TASK_PRIORITIES,
 };
 

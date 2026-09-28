@@ -49,6 +49,12 @@ Runtime: **Node.js 24** (`engines: >=24`, `.nvmrc`). Verified on Node 24.14.1 / 
 | jose | 6.2.12 | Signed access tokens and MFA challenges (SEC-014), per Master Mapping §4.3. Pure JavaScript, no native build |
 | otpauth | 9.5.2 | TOTP (RFC 6238) for the second factor (SEC-017). Master Mapping §4.3 names no TOTP library, so one was selected: pure TypeScript, actively maintained, and no hand-rolled HMAC construction |
 
+## Import (added 2026-09-28 with `CORE-IMPORT-001`)
+
+| Package | Version | Why this version |
+|---|---|---|
+| read-excel-file | 9.3.10 | Reads the first sheet of an uploaded `.xlsx` for import preview (CORE-IMPORT-001). Chosen over `exceljs` (last published 2024, pulls `archiver`, `unzipper`, `tmp`, `uuid@8`) and SheetJS `xlsx` (npm build unmaintained). Four small dependencies, MIT, maintained in 2026, 0 audit findings at install. Read-only: formulas are not evaluated. Always given a `Buffer` — a string argument is read as a file path. Exports are CSV (own formula-safe writer), so no spreadsheet **writer** was added |
+
 ## Web
 
 | Package | Version | Why |

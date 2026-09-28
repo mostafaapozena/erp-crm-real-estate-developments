@@ -42,7 +42,8 @@
     "groupFinance": "Collections and finance",
     "groupMarketing": "Marketing",
     "groupAdmin": "Administration",
-    "tasks": "Tasks"
+    "tasks": "Tasks",
+    "imports": "Import data"
   },
   "auth": {
     "signInTitle": "Sign in",
@@ -663,5 +664,57 @@
       "document": "Documents",
       "task": "Tasks"
     }
+  },
+  "exports": {
+    "csv": "Export CSV"
+  },
+  "imports": {
+    "title": "Import reference data",
+    "subtitle": "Load lists from a CSV or Excel file, check them, then commit all or nothing",
+    "columnsHint": "The first row names the columns. UTF-8 CSV or .xlsx (first sheet).",
+    "choose": "Choose a file",
+    "summary": "{{total}} rows · {{valid}} valid · {{invalid}} with problems",
+    "hasIssues": "Fix every problem in the file and upload it again. Nothing is imported partially.",
+    "issues": "Problems found",
+    "row": "Row",
+    "column": "Column",
+    "problem": "Problem",
+    "downloadIssues": "Download the problem report",
+    "preview": "Preview",
+    "commit": "Import all rows",
+    "discard": "Discard"
+  },
+  "importState": {
+    "previewed": "Checked, not imported",
+    "committed": "Imported",
+    "discarded": "Discarded"
+  },
+  "importIssue": {
+    "UNKNOWN_COLUMN": "Unknown column",
+    "DUPLICATE_COLUMN": "Column appears twice",
+    "MISSING_COLUMN": "Required column is missing",
+    "NO_ROWS": "The file has no data rows",
+    "UNKNOWN_LIST": "Unknown list",
+    "LIST_BOUND_TO_PRODUCT": "This list is fixed by the product; its items can be relabelled, not added",
+    "REFERENCE_CODE_EXPECTED": "Code must be letters, digits, \"-\" or \"_\", up to 40 characters",
+    "REQUIRED": "Required",
+    "TOO_LONG": "Too long",
+    "BOTH_LANGUAGES_REQUIRED": "Give the text in both Arabic and English",
+    "SORT_ORDER_EXPECTED": "Sort order must be a whole number from 0 to 10000",
+    "DUPLICATE_IN_FILE": "This code appears earlier in the file",
+    "CODE_TAKEN": "This code already exists",
+    "FILE_EMPTY": "The file is empty",
+    "FILE_TOO_LARGE": "The file is larger than 5 MB",
+    "TOO_MANY_ROWS": "The file has more than 5000 rows",
+    "XLSX_UNREADABLE": "The Excel file could not be read",
+    "CSV_NOT_UTF8": "Save the CSV file as UTF-8 and try again",
+    "CSV_MALFORMED": "The CSV file is malformed",
+    "FILE_TYPE_NOT_ALLOWED": "This type of file is not accepted",
+    "IMPORT_HAS_ERRORS": "The file still has problems",
+    "IMPORT_EXPIRED": "This preview has expired; upload the file again",
+    "IMPORT_NOT_PENDING": "This file was already imported or discarded",
+    "STALE_VERSION": "Someone changed this in the meantime; reload and try again",
+    "FEATURE_DISABLED": "This feature is turned off for this deployment",
+    "EXPORT_TOO_LARGE": "Too many rows to export at once"
   }
 }

@@ -28,6 +28,7 @@ import { useApi, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { ExportButton } from './ExportButton';
 import { EnumChip, LEAD_TONES, RequirePermission, Verbatim, tableStatus } from './shared';
 
 type Lead = LeadPage['items'][number];
@@ -117,11 +118,14 @@ function LeadsScreen() {
         title={t('crm.title')}
         subtitle={t('crm.subtitle')}
         actions={
-          can('crm.lead.create') ? (
-            <Button variant="contained" onClick={() => setDialogOpen(true)}>
-              {t('crm.newLead')}
-            </Button>
-          ) : undefined
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+            <ExportButton kind="leads" permission="crm.lead.export" />
+            {can('crm.lead.create') ? (
+              <Button variant="contained" onClick={() => setDialogOpen(true)}>
+                {t('crm.newLead')}
+              </Button>
+            ) : null}
+          </Stack>
         }
       />
 

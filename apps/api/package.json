@@ -23,6 +23,7 @@
     "mongoose": "9.10.1",
     "pino-http": "11.0.0",
     "rate-limiter-flexible": "11.2.1",
+    "read-excel-file": "9.3.10",
     "zod": "4.6.5"
   },
   "devDependencies": {

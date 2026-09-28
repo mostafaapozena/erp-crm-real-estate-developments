@@ -36,7 +36,8 @@ import { APPROVAL_AUDIT_ACTIONS } from '@alola/contracts';
 import { OrganizationService } from '../modules/organization';
 import { SalesService } from '../modules/sales';
 import { SecurityService } from '../modules/security';
-import { SettingsService } from '../modules/settings';
+import { SettingsService, referenceItemImporter } from '../modules/settings';
+import { ImportService, readFirstSheet } from '../modules/imports';
 import { TaskService } from '../modules/tasks';
 import { SearchService, type SearchProvider } from '../modules/search';
 import { AppError } from '../errors';
@@ -92,6 +93,7 @@ export interface DomainServices {
   notifications: () => NotificationService;
   tasks: () => TaskService;
   search: () => SearchService;
+  imports: () => ImportService;
   /** The private file store; a `LocalDiskFileStore` only in development and test. */
   fileStore: PrivateFileStore;
 }
@@ -117,6 +119,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let notificationService: NotificationService | undefined;
   let taskService: TaskService | undefined;
   let searchService: SearchService | undefined;
+  let importService: ImportService | undefined;
 
   /**
    * Encryption for MFA secrets (`SEC-017`).
@@ -444,6 +447,37 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     return searchService;
   }
 
+  /**
+   * Import and export (CORE-IMPORT-001 … 003). Each importer and exporter belongs to its module; the
+   * feature flags come from settings, and exports are written to the same private file store as
+   * documents, reached only by a short-lived signed link.
+   */
+  function getImportService(): ImportService {
+    const connection = requireConnection();
+    importService ??= new ImportService({
+      connection,
+      audit: getAuditService(),
+      store: fileStore,
+      importers: [referenceItemImporter(getSettingsService)],
+      exporters: [
+        {
+          kind: 'leads',
+          permission: 'crm.lead.export',
+          rows: (actor, limit) => getCrmService().exportLeads(actor, limit),
+        },
+        {
+          kind: 'units',
+          permission: 'inventory.unit.export',
+          rows: (actor, limit) => getInventoryService().exportUnits(actor, limit),
+        },
+      ],
+      readXlsx: readFirstSheet,
+      importsEnabled: () => getSettingsService().isEnabled('feature.imports'),
+      exportsEnabled: () => getSettingsService().isEnabled('feature.exports'),
+    });
+    return importService;
+  }
+
   function getOrganizationService(): OrganizationService {
     const connection = requireConnection();
     organizationService ??= new OrganizationService({
@@ -765,6 +799,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     notifications: getNotificationService,
     tasks: getTaskService,
     search: getSearchService,
+    imports: getImportService,
     fileStore,
   };
 }

@@ -26,6 +26,7 @@ import {
   assertSafeFilter,
   buildChangeSummary,
   buildScopeFilter,
+  can,
   restrictDocument,
   restrictDocuments,
   withScope,
@@ -313,6 +314,58 @@ export class InventoryService {
    * price fields are restricted (SEC-029), and a search that matched on them would answer questions
    * about a value the actor may not see.
    */
+  /**
+   * Units for an export (CORE-IMPORT-003): the same scoped query as the list, the same field
+   * restriction as every other read. Price columns exist only for an actor who may see prices — for
+   * anyone else they are absent from the file, not blank (SEC-029).
+   */
+  async exportUnits(
+    actor: ActorContext,
+    limit: number,
+  ): Promise<{ columns: string[]; rows: (string | number | null | undefined)[][] }> {
+    const documents = await this.units
+      .find(withScope(buildScopeFilter(actor, INVENTORY_SCOPE_FIELDS)))
+      .sort({ code: 1, unitId: 1 })
+      .limit(limit)
+      .lean<UnitDocument[]>()
+      .exec();
+    const units = restrictDocuments('unit', actor, documents.map(toUnit)) as Unit[];
+    // The rule restrictDocuments applies to each unit, decided once for the header.
+    const pricing = can(actor, 'inventory.unit.viewPricing');
+    const columns = [
+      'code',
+      'project_id',
+      'floor',
+      'property_type',
+      'usage_type',
+      'area',
+      'finishing_status',
+      'status',
+      ...(pricing ? ['base_price', 'current_price', 'price_per_square_meter', 'currency'] : []),
+    ];
+    return {
+      columns,
+      rows: units.map((unit) => [
+        unit.code,
+        unit.projectId,
+        unit.floor,
+        unit.propertyType,
+        unit.usageType,
+        unit.area,
+        unit.finishingStatus,
+        unit.status,
+        ...(pricing
+          ? [
+              unit.basePrice?.amount,
+              unit.currentPrice?.amount,
+              unit.pricePerSquareMeter?.amount,
+              unit.basePrice?.currency,
+            ]
+          : []),
+      ]),
+    };
+  }
+
   async searchUnits(
     actor: ActorContext,
     term: string,

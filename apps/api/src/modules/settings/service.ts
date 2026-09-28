@@ -21,7 +21,7 @@ import {
 } from '@alola/contracts';
 import { resources, type ResourceTree } from '@alola/i18n';
 import { assertSafeFilter } from '@alola/security';
-import type { Connection } from 'mongoose';
+import type { ClientSession, Connection } from 'mongoose';
 import {
   auditActor,
   conflict,
@@ -341,6 +341,67 @@ export class SettingsService {
     } catch (error) {
       if (isDuplicateKeyError(error)) throw conflict('CODE_TAKEN', ['code']);
       throw error;
+    }
+  }
+
+  /** Every stored code of a list, active or not — what an import checks new codes against. */
+  async storedCodes(list: ReferenceList): Promise<Set<string>> {
+    const rows = await this.items.find({ list }, { code: 1 }).lean<{ code: string }[]>().exec();
+    return new Set(rows.map((row) => row.code));
+  }
+
+  /**
+   * Create many items inside the caller's transaction (CORE-IMPORT-001), each audited. A code taken
+   * meanwhile fails the whole transaction — an import writes every row or none.
+   */
+  async importItems(
+    actor: ActorContext,
+    rows: readonly (CreateReferenceItem & { list: ReferenceList })[],
+    session: ClientSession,
+    context: RequestContext,
+  ): Promise<void> {
+    const now = new Date();
+    for (const row of rows) {
+      if (BOUND_REFERENCE_LISTS[row.list]) throw conflict('LIST_BOUND_TO_PRODUCT', ['code']);
+      assertSafeFilter({ code: row.code });
+    }
+    try {
+      await this.items.insertMany(
+        rows.map((row) => ({
+          list: row.list,
+          code: row.code,
+          label: row.label,
+          ...(row.description ? { description: row.description } : {}),
+          sortOrder: row.sortOrder,
+          active: true,
+          version: 1,
+          createdAt: now,
+          createdBy: actor.accountId,
+          updatedAt: now,
+          updatedBy: actor.accountId,
+        })),
+        { session, ordered: true },
+      );
+    } catch (error) {
+      if (isDuplicateKeyError(error)) throw conflict('CODE_TAKEN', ['code']);
+      throw error;
+    }
+    for (const row of rows) {
+      await this.options.audit.record(
+        {
+          action: SETTINGS_AUDIT_ACTIONS.referenceCreated,
+          outcome: 'succeeded',
+          actor: auditActor(actor),
+          target: { type: `referenceData.${row.list}`, id: row.code },
+          changes: [
+            { path: 'label.en', to: row.label.en },
+            { path: 'label.ar', to: row.label.ar },
+          ],
+          reason: 'import',
+          context,
+        },
+        { session },
+      );
     }
   }
 
