@@ -1,24 +1,51 @@
 # Business master prompts — delivery plan
 
 For the stakeholder and the implementation team planning the work after the foundation gate. Approved
-grouping: [ADR-0029](../decisions/adr-0029-business-master-prompts.md).
+grouping: [ADR-0032](../decisions/adr-0032-three-business-master-prompts.md), which replaced the
+five-prompt **sequence** of [ADR-0029](../decisions/adr-0029-business-master-prompts.md) on 2026-09-29
+and kept its rules.
 
 **This is a grouping of work already registered, not a re-registration.** No requirement ID is
-renamed, renumbered, merged or retired by this plan; no status is raised by it; nothing in it is
-started. [../REQUIREMENTS.md](../REQUIREMENTS.md) remains the register of record, the nine engineering
-phases keep their meaning, and each phase still passes [phase-gates.md](phase-gates.md). The five
-prompts group those phases into instructions of a size one delivery run can finish and verify.
+renamed, renumbered, merged or retired by this plan; no status is raised by it.
+[../REQUIREMENTS.md](../REQUIREMENTS.md) remains the register of record, the nine engineering phases
+keep their meaning, and each phase still passes [phase-gates.md](phase-gates.md).
 
-| Prompt | Name | Engineering scope | Macro phase |
-|---|---|---|---|
-| **BMP-1** | Inventory, CRM, Sales and Reservations | Phase 2 in full; Phase 3 CRM modules without providers; Phase 4 quotations, discounts, reservations | Macro Phase 2 |
-| **BMP-2** | Contracts, Installments, Collections, Finance and Banking | Phase 4 contracts, changes, cancellations; Phase 5 in full; Phase 6 in full | Macro Phase 2 |
-| **BMP-3** | Construction, Contractors, Procurement, Warehouses and Assets | Phase 7 in full; Phase 6 fixed assets if not delivered in BMP-2 | Macro Phase 3 |
-| **BMP-4** | HR, Attendance, Leave, Payroll and Internal Administration | Phase 8 in full | Macro Phase 3 |
-| **BMP-5** | Marketing, Official Integrations, Production Hardening and Launch | Phase 3 provider work (WhatsApp, Meta, CAPI); Phase 9 in full; `SEC-033` KMS adapter | Macro Phase 4 |
+| Prompt | Name | Engineering scope | Macro phase | State |
+|---|---|---|---|---|
+| **BMP-1** | Commercial Operations — CRM, Sales, Inventory, Reservations, Contracts and Documents | Phase 2 in full; Phase 3 CRM modules without providers; Phase 4 in full up to collected money; `COL-SCHEDULE`; `CORE-DOC-003`, `CORE-DOC-005` | Macro Phase 2 | **in progress** (started 2026-09-29) |
+| **BMP-2** | Collections, Finance, Operations and People | Phase 5 after the schedule; `SALE-CANCEL` and `SALE-CHANGE` where money has moved; Phase 6; Phase 7; Phase 8 | Macro Phases 2 and 3 | not started |
+| **BMP-3** | Marketing, Official Integrations, Production Hardening and Launch | Phase 3 provider work; Phase 9; `SEC-033`, `PLAT-017`, `SEC-005`, `SEC-006` | Macro Phase 4 | not started |
 
 The prompts run in order. Each starts only on the stakeholder's explicit instruction, after the
 previous one's gate, and each begins by re-reading `docs/MEMORY.md` and the decisions it depends on.
+The names and boundaries of BMP-2 and BMP-3 are confirmed when those prompts are issued.
+
+## Traceability — five planned prompts to three
+
+Every module the five-prompt plan named appears exactly once below. "Split" means the module's
+enumerated requirement IDs are divided between two prompts, and each ID's row in
+[../REQUIREMENTS.md](../REQUIREMENTS.md) names its owner.
+
+| Module or item | Five-prompt plan | Three-prompt plan | Note |
+|---|---|---|---|
+| `CORE-ORG` completion for the client's real structure | BMP-1 | BMP-1 | Values are `SD-01`; the mechanism is F2 |
+| `INV-PROJECT`, `INV-UNIT`, `INV-STATUS`, `INV-PRICE`, `INV-PLAN`, `INV-HOLD`, `INV-SEARCH` | BMP-1 | BMP-1 | |
+| `CRM-PERSON`, `CRM-LEAD`, `CRM-OPP`, `CRM-PIPE`, `CRM-ASSIGN`, `CRM-OWNER`, `CRM-ACTIVITY`, `CRM-MATCH`, `CRM-LOSS`, `CRM-REPORT` | BMP-1 | BMP-1 | Provider-free |
+| `SALE-QUOTE`, `SALE-DISCOUNT`, `SALE-RESERVE` | BMP-1 | BMP-1 | |
+| `SALE-CONTRACT` | BMP-2 | **BMP-1** | Moved: the journey ends on a contract |
+| `SALE-CHANGE` | BMP-2 | **Split** | Plan change before money moves: BMP-1. Unit substitution and assignment/transfer: BMP-2 (`BD-07`, `BD-08`) |
+| `SALE-CANCEL` | BMP-2 | **Split** | Cancellation before collection, with unit release: BMP-1. Penalties, refunds, commission reversal, paper return: BMP-2 (`BD-05`, `BD-06`, `BD-15`) |
+| `COL-SCHEDULE` | BMP-2 | **Split** | Creating the contractual schedule and its approved revisions: BMP-1. Settlement against it: BMP-2 |
+| `CORE-DOC-003` PDF with embedded Arabic fonts | BMP-2 | **BMP-1** | Phase 1 row, not started until now |
+| `CORE-DOC-005` QR verification | BMP-2 | **BMP-1** | Phase 1 row, not started until now |
+| `COL-INVOICE`, `COL-RECEIPT`, `COL-REMIND`, `COL-CHECK`, `COL-NOTE`, `COL-STATEMENT` | BMP-2 | BMP-2 | |
+| `FIN-COA` … `FIN-REPORT` (Phase 6) | BMP-2 | BMP-2 | `SD-08` still blocks posting |
+| `PROC-*`, `WH-*`, `CONST-*` (Phase 7) | BMP-3 | BMP-2 | |
+| `HR-*` (Phase 8) | BMP-4 | BMP-2 | |
+| `CRM-WA`, `MKT-*`, `MKT-CAPI` (Phase 3 providers) | BMP-5 | BMP-3 | |
+| `HAND-*`, `CS-TICKET`, `PORTAL-CUSTOMER`, legacy migration (Phase 9) | BMP-5 | BMP-3 | |
+| `SEC-033`, `PLAT-017`, `SEC-005`, `SEC-006` | BMP-5 | BMP-3 | Production blockers, unchanged |
+| Carried debt: per-resource scope; reference lists in business modules; `salesCounters` → `CORE-DOC-001`; account picker; organization scope on account administration | BMP-1 | BMP-1 | Account administration scope stays debt unless BMP-1 needs it |
 
 ## What every prompt inherits from the foundation
 
@@ -37,84 +64,57 @@ than build a second one:
 
 ---
 
-## BMP-1 — Inventory, CRM, Sales and Reservations
+## BMP-1 — Commercial Operations
 
-**Scope.** Phase 2: `CORE-ORG` completion for the client's real structure, `INV-PROJECT`, `INV-UNIT`,
-`INV-STATUS`, `INV-PRICE`, `INV-PLAN`, `INV-HOLD`, `INV-SEARCH`. Phase 3 without providers:
-`CRM-PERSON`, `CRM-LEAD`, `CRM-OPP`, `CRM-PIPE`, `CRM-ASSIGN`, `CRM-OWNER`, `CRM-ACTIVITY`,
-`CRM-MATCH`, `CRM-LOSS`, `CRM-REPORT`. Phase 4: `SALE-QUOTE`, `SALE-DISCOUNT`, `SALE-RESERVE`.
+**Scope.** The journey Lead → Qualification → Opportunity → Customer → Unit Selection → Reservation →
+Approval → Contract → Instalment Schedule Handoff, and the commercial documents and approvals it
+needs. Enumerated requirement IDs: [../REQUIREMENTS.md](../REQUIREMENTS.md) §"Business Master Prompt 1
+— enumerated requirements".
 
-**Starts from.** The demonstration slice (inventory, CRM, reservations) is real code and the natural
-starting point, but it is a slice: each module's requirements are enumerated in its discovery and the
-slice is brought up to them, not assumed to meet them.
+**Starts from.** The demonstration slice is real code and the starting point, but it is a slice: each
+module is brought up to its enumerated requirements, not assumed to meet them.
 
-**Carried debt to resolve.** Per-resource scope (a representative's own leads with readable
-inventory); business modules reading reference lists instead of their own enumerations; the demo's
-`salesCounters` moving to `CORE-DOC-001` numbering with a series-continuing migration; an account
-picker for assignment; organization scope on account administration.
+**Decisions required.** `SD-01`–`SD-05`, `SD-10`, `SD-17`, `SD-21`; register entries BD-01–BD-05,
+BD-07–BD-09, BD-19, BD-22, BD-24 and the new commercial entries BD-25 onward. Each is handled as a
+configurable policy that stores *not configured* until the owner answers
+([ADR-0032](../decisions/adr-0032-three-business-master-prompts.md) rule 5). The Arabic questionnaire
+for the client is [../decisions/bmp-1-decision-questionnaire-ar.md](../decisions/bmp-1-decision-questionnaire-ar.md).
 
-**Decisions required.** `SD-01`, `SD-02`, `SD-03`, `SD-04`, `SD-05` (reservation part), `SD-21`; register
-entries BD-01, BD-02, BD-03, BD-04, BD-22, BD-24.
+**Not in BMP-1.** Finance, payroll, procurement, Meta, WhatsApp, payment providers and production
+deployment — except interfaces strictly needed by a later prompt.
 
-**Done when.** A client's real inventory, leads and reservations run end to end with approved
-discounts and holds, in both languages, with every phase-gate check passing for Phases 2 and 4 (the
-reservation part) and the provider-free Phase 3 modules.
+**Done when.** The full journey runs on persisted data; concurrent users cannot double-reserve a unit;
+discounts and exceptions obey approvals; confirmed contracts keep their snapshots; schedules reconcile
+exactly; Arabic and English documents render correctly and verify by QR; permissions and scopes are
+proven; every mandatory check passes with zero skips; demonstration data is preserved.
 
-## BMP-2 — Contracts, Installments, Collections, Finance and Banking
+## BMP-2 — Collections, Finance, Operations and People
 
-**Scope.** Phase 4: `SALE-CONTRACT`, `SALE-CHANGE`, `SALE-CANCEL`. Phase 5: `COL-SCHEDULE`,
-`COL-INVOICE`, `COL-RECEIPT`, `COL-REMIND`, `COL-CHECK`, `COL-NOTE`, `COL-STATEMENT` (with gap `G-06`).
-Phase 6: `FIN-COA`, `FIN-GL`, `FIN-ARAP`, `FIN-INVOICE`, `FIN-CASH`, `FIN-BANK`, `FIN-FACILITY`,
-`FIN-BUDGET`, `FIN-TAX`, `FIN-ASSET`, `FIN-REPORT` (with gaps `G-01`, `G-02`, `G-04`, `G-05`, `G-07`,
-`G-11`, `G-12`). `CORE-DOC-003` (PDF with embedded Arabic fonts) and `CORE-DOC-005` (QR verification),
-which official contracts and receipts need.
+**Scope.** Phase 5 after the schedule: `COL-INVOICE`, `COL-RECEIPT`, `COL-REMIND`, `COL-CHECK`,
+`COL-NOTE`, `COL-STATEMENT` (with gap `G-06`). The money side of `SALE-CANCEL` and `SALE-CHANGE`.
+Phase 6: `FIN-COA` … `FIN-REPORT` (with gaps `G-01`, `G-02`, `G-04`, `G-05`, `G-07`, `G-11`, `G-12`).
+Phase 7: `PROC-*`, `WH-*`, `CONST-*` (with gap `G-13`). Phase 8: `HR-*` (boundary ADR-0019).
 
-**Hard prerequisite.** `SD-08`: Phase 6 cannot start without a formally appointed accounting reviewer.
-Contracts and collections may proceed; posting may not.
+**Hard prerequisite.** `SD-08`: Phase 6 posting cannot start without a formally appointed accounting
+reviewer. Collections may proceed; posting may not.
 
-**Decisions required.** `SD-05`, `SD-07`, `SD-08`, `SD-10`, `SD-17`; register entries BD-05 to BD-19.
+**Decisions required.** `SD-02`, `SD-05`–`SD-08`, `SD-10`, `SD-12`, `SD-21`; register entries BD-05 to
+BD-18, BD-24.
 
-**Done when.** A contract, its schedule, its collections, its cheques and notes, and their postings
-reconcile to the ledger in the reviewer's presence, with reversals by contra-entry only.
+**Done when.** A contract's collections, cheques and notes, and their postings reconcile to the ledger
+in the reviewer's presence, with reversals by contra-entry only; project costs reach the cost report
+per project and per phase; an employee's month produces a payroll run that posts.
 
-## BMP-3 — Construction, Contractors, Procurement, Warehouses and Assets
-
-**Scope.** Phase 7: `PROC-VENDOR`, `PROC-REQUEST`, `PROC-RFQ`, `PROC-PO`, `WH-ITEM`, `WH-TRANS`,
-`CONST-CONTRACT` (with gap `G-13`), `CONST-CERT`, `CONST-PROGRESS`; `FIN-ASSET` if BMP-2 deferred it.
-
-**Depends on.** BMP-2's ledger (every purchase and certificate posts), approvals for spending limits.
-
-**Decisions required.** `SD-02` (purchase and certificate approval limits), `SD-12` for the domain.
-
-**Done when.** A project's costs — purchases, stock movements, contractor certificates — reach its
-cost report per project and per phase, with inventory history never deleted.
-
-## BMP-4 — HR, Attendance, Leave, Payroll and Internal Administration
-
-**Scope.** Phase 8: `HR-EMP` (the boundary with `SEC` accounts is ADR-0019), `HR-TIME`, `HR-PAY`,
-`HR-COMM`, `HR-ADV`, `HR-CUSTODY`, `HR-PERF`; leave and internal administration as enumerated in its
-discovery.
-
-**Depends on.** BMP-2's ledger (payroll posts), the organization and placements (F2), commissions from
-BMP-1/BMP-2 sales.
-
-**Decisions required.** `SD-06`, `SD-08`, `SD-21`; register entries BD-14, BD-15, BD-24.
-
-**Done when.** An employee's month — attendance, leave, commission, advances, custody — produces a
-payroll run that posts, with employee data protected by field restrictions and never exported without
-the export permission.
-
-## BMP-5 — Marketing, Official Integrations, Production Hardening and Launch
+## BMP-3 — Marketing, Official Integrations, Production Hardening and Launch
 
 **Scope.** Phase 3 provider work: `CRM-WA`, `MKT-CONNECT` through `MKT-AUDIT`, `MKT-CAPI` (production
 delivery gated, ADR-0017), each as an adapter on the F10 registry with contract tests. Phase 9:
-`HAND-READY`, `HAND-APPT`, `HAND-INSPECT`, `HAND-DELIVER`, `CS-TICKET`, `PORTAL-CUSTOMER`, analytics,
-legacy data migration (`SD-11`), hardening and UAT. `SEC-033`: the KMS adapter, which staging and
-production need before any MFA secret or provider credential can be stored. Object storage (`PLAT-017`),
-a malware scanner (`SEC-005`), a secrets manager (`SEC-006`).
+`HAND-*`, `CS-TICKET`, `PORTAL-CUSTOMER`, analytics, legacy data migration (`SD-11`), hardening and
+UAT. `SEC-033` (KMS), `PLAT-017` (object storage), `SEC-005` (malware scanner), `SEC-006` (secrets
+manager).
 
-**Decisions required.** `SD-09`, `SD-11`, `SD-15`, `SD-17`, `SD-18`, `SD-19`, `SD-20`; register entries
-BD-20, BD-21, BD-23.
+**Decisions required.** `SD-09`, `SD-11`, `SD-15`, `SD-17`–`SD-20`; register entries BD-20, BD-21,
+BD-23.
 
 **Done when.** The approved production release: providers connected under the client's own accounts,
 data migrated and reconciled, backups restored in rehearsal, and the Phase 9 gate signed.
@@ -126,3 +126,11 @@ data migrated and reconciled, backups restored in rehearsal, and the Phase 9 gat
 Anything not registered. A new need found during a prompt is registered first (next free ID in its
 namespace, status `proposed`), approved, and only then built — never added silently to a prompt's
 scope.
+
+## Superseded: the five-prompt sequence (ADR-0029, 2026-09-28)
+
+Kept for traceability. BMP-1 Inventory, CRM, Sales and Reservations · BMP-2 Contracts, Installments,
+Collections, Finance and Banking · BMP-3 Construction, Contractors, Procurement, Warehouses and Assets
+· BMP-4 HR, Attendance, Leave, Payroll and Internal Administration · BMP-5 Marketing, Official
+Integrations, Production Hardening and Launch. The table above maps each of their modules to the
+three-prompt plan.

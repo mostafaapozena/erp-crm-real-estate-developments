@@ -40,6 +40,23 @@ Owners are roles at the client, not people; the deployment record names the pers
 | BD-22 | Escalation timing — grace before an overdue task or approval escalates, and to whom (`SD-02`) | Immediately; after N hours; per priority | Immediately to the direct manager (the registry's own rule, G-09); `tasks.escalationDelayHours` holds a grace period once decided | Management | Macro Phase 2 | proposed | — |
 | BD-23 | Quiet hours — when non-urgent external messages are held (`SD-21`) | None; evenings and nights; per day of week | None — nothing is held until set | Management, marketing | Macro Phase 4 | open | — |
 | BD-24 | Working week and holidays — which days count for due dates and escalations (`SD-21`) | Saturday–Thursday; Sunday–Thursday; holiday calendar | None | HR, management | Macro Phase 3 | open | — |
+| BD-25 | Lead assignment — who receives a new lead (`SD-04`) | Manual by a manager; round-robin per team; rules by project or source | Manual: the creator owns the lead unless a holder of the assign permission names someone else (what the product does today) | Sales director | BMP-1 (`CRM-ASSIGN-002` blocked) | proposed | — |
+| BD-26 | Duplicate rule — which identifiers make two leads or customers "the same" (`SD-04`) | Phone; phone or e-mail; phone, e-mail or national ID; warn or refuse | Leads: warn on phone, e-mail or identifier. Customers: refuse a second customer with the same phone in one legal entity. Merge is never automatic | Sales director, legal | BMP-1 | proposed | — |
+| BD-27 | Opportunity stages and win probabilities | The product's stage codes relabelled; additional stages; a probability per stage or none | Stage codes as shipped, labels editable; **no probability** until one is approved per stage | Sales director | BMP-1 | open | — |
+| BD-28 | Customer ownership — how long a representative owns a customer and what activity keeps it (`SD-04`) | Fixed days; days since last meaningful activity; until contract | None | Sales director | BMP-1 (`CRM-OWNER-002` blocked) | open | — |
+| BD-29 | Unit hold — how long a customer hold lasts before reservation, and who may extend it (`SD-03`, conflict `C-06`) | Hours; days; per project; extension by approval | None. A hold with no configured duration is refused | Sales director | BMP-1 | open | — |
+| BD-30 | Competing requests for one unit | First committed wins and others are refused; waiting list | First committed wins; the others are told the unit is no longer available. No waiting list | Sales director | BMP-1 | proposed | — |
+| BD-31 | Price changes and overrides — who may change a unit's price or sell below it (`SD-02`, `SD-05`) | Approval per role; threshold by amount or percentage; maker-checker | Maker-checker on every price change and every override | Management, finance | BMP-1 | proposed | — |
+| BD-32 | Schedule rules — rounding of uneven instalments, first-due date, maintenance deposit (`SD-05`) | Odd piastres to earliest or last row; first due N days after contract; maintenance deposit amount or percentage and due date | Odd piastres to the earliest rows (deterministic and shown on the preview). No maintenance deposit until an amount is set | Finance | BMP-1 | proposed | — |
+| BD-33 | Required documents — which papers must be on file before a reservation is confirmed or a contract is activated | Identity copy; deposit evidence; signed form; per project | None — the product records documents and blocks nothing until a list is approved | Sales director, legal | BMP-1 | open | — |
+| BD-34 | Customer identity — which identifier is mandatory, and at which step | None; national ID or passport at reservation; at contract | None. The product asks for it on the contract and warns when it is missing | Legal | BMP-1 | open | — |
+| BD-35 | Contract activation and signing — who activates, and whether a signed copy must be on file first | Sales manager; legal review; finance review; signed copy required | Activation needs the permission; a signed copy is recorded but not required until decided | Legal, management | BMP-1 | open | — |
+| BD-36 | Quotation validity — how long a quoted price holds | Days; until the next price change; per project | None. A quotation carries the validity the person entering it states | Sales director | BMP-1 | open | — |
+
+**BMP-1 note (2026-09-29).** The development demonstration seed sets some of these values so the
+journey can be shown. Each such value is stored with the reason "demonstration value — BD-nn open" and
+listed in `docs/MEMORY.md`; none changes the status above. A client deployment starts with every one
+of them *not configured*.
 
 ## Recording a decision
 

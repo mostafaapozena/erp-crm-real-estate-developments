@@ -271,6 +271,7 @@ No ID is added, renamed or retired. The redesign advances existing rows only
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
 | Modules registered for Phases 2–9 | 82 |
+| BMP-1 enumerated requirements (2026-09-29) | 59 (55 owned by BMP-1, 4 by BMP-2) — see §"Business Master Prompt 1 — enumerated requirements" |
 
 Per-requirement implementation status is recorded in `docs/MEMORY.md` by ID. A row with no status note
 below is `approved` and not started.
@@ -669,6 +670,86 @@ receive IDs when their phase is elaborated.
 | G-11 | Book balances and currency per treasury and bank account | FIN-CASH, FIN-BANK | 6 | pending Phase 6 | `proposed` |
 | G-12 | Cost and profitability per project **and per phase** | FIN-REPORT | 6 | pending Phase 6 | `proposed` |
 | G-13 | Subcontractor contracts as a distinct tier | CONST-CONTRACT | 7 | pending Phase 7 | `proposed` |
+
+---
+
+# Business Master Prompt 1 — enumerated requirements (discovery, 2026-09-29)
+
+Source: the stakeholder's Business Master Prompt 1 instruction of 2026-09-29, Master Mapping §8–§9,
+Phase Prompts 2–4, and [ADR-0032](decisions/adr-0032-three-business-master-prompts.md). These IDs are
+**new and claimed here before any code uses them**; no existing ID is renamed, renumbered, merged or
+retired. Status `approved` means the scope is approved for BMP-1, not that it is built. A row owned by
+BMP-2 is registered now so the split of a module is explicit, and stays `approved` until BMP-2.
+
+Business **values** these rows need (durations, amounts, thresholds, stages, formats) are decisions in
+[decisions/business-decision-register.md](decisions/business-decision-register.md). A row never decides
+one: it builds the configurable policy, stores *not configured* by default, and names the entry.
+
+| ID | Requirement | Owner | Decision | Status |
+|---|---|---|---|---|
+| SEC-034 | Resource-level scope policy: an ownerless catalogue resource (project, building, unit, price, plan template) resolves an actor's `self`/`assigned`/`team`/`department` scope to the organization references that scope carries, and fails closed when it carries none — never by inventing an owner | BMP-1 | — | approved |
+| INV-PROJECT-001 | Project master data — bilingual name, city, description, status, currency, placement from the branch — created and edited with optimistic concurrency and an audit record | BMP-1 | `SD-01` | approved |
+| INV-PROJECT-002 | Building and phase structure under a project, with floor count; a unit's floor is bounded by its building | BMP-1 | — | approved |
+| INV-PROJECT-003 | Project, building and unit document attachments through `CORE-DOC`, scoped by the owning record | BMP-1 | — | approved |
+| INV-UNIT-001 | Unit master data: code, property and usage type, floor, areas, view, finishing, bedrooms, bathrooms, parking and storage; non-commercial attributes editable with concurrency and audit | BMP-1 | — | approved |
+| INV-STATUS-001 | Unit state machine enforced atomically: a commitment (hold, reservation, contract) changes only through its owning workflow; a person may only withdraw or restore an uncommitted unit | BMP-1 | `SD-03` | approved |
+| INV-STATUS-002 | Append-only unit history naming the source of every change | BMP-1 | — | approved |
+| INV-PRICE-001 | Effective-dated, versioned unit prices with history; a version is never edited after it takes effect | BMP-1 | `SD-05` | approved |
+| INV-PRICE-002 | Price visibility is a field restriction on every read, list, comparison, matrix and export | BMP-1 | — | approved |
+| INV-PRICE-003 | A price change submits to the approval engine when a policy applies, and takes effect only when approved | BMP-1 | `BD-31` | approved |
+| INV-PLAN-001 | Payment-plan templates with project eligibility and decimal-safe preview; a template is versioned by retirement, never edited in use | BMP-1 | `SD-05`, `BD-32` | approved |
+| INV-HOLD-001 | Timed customer holds with atomic conflict prevention, expiry sweep, and conversion into a reservation | BMP-1 | `BD-29` | approved |
+| INV-HOLD-002 | Hold release with reason, and extension (through approval where a policy applies), with history | BMP-1 | `BD-29` | approved |
+| INV-SEARCH-001 | Scoped unit search and filtering by project, building, type, usage, status, floor, area and price (price filters only with price visibility) | BMP-1 | — | approved |
+| INV-SEARCH-002 | Availability matrix: building × floor grid of unit statuses, scoped | BMP-1 | — | approved |
+| INV-SEARCH-003 | Unit comparison of up to four units, field-restricted | BMP-1 | — | approved |
+| CRM-PERSON-001 | Customer as individual or company; entered name with optional name in the other script; normalized phones and e-mail | BMP-1 | — | approved |
+| CRM-PERSON-002 | Identity (national ID, passport, commercial registration, tax number) held as a field restriction: absent from every payload without the permission, never logged, redacted in audit | BMP-1 | `BD-34` | approved |
+| CRM-PERSON-003 | Address, preferred language and channel, and per-channel consent with its source and date | BMP-1 | `SD-09` | approved |
+| CRM-PERSON-004 | Customer detail: leads, opportunities, reservations, contracts, instalment and receipt summaries, documents, activities, owner, history — each part under its own permission and scope | BMP-1 | — | approved |
+| CRM-PERSON-005 | Correction workflow: an edit states a reason and the version it read, and is audited with a redacted change summary | BMP-1 | — | approved |
+| CRM-PERSON-006 | Duplicate candidates by normalized phone, e-mail and identifier; merge is recorded as a request and **not executed** until its rule is decided | BMP-1 | `BD-26` | approved |
+| CRM-LEAD-001 | Manual lead entry: lead, first activity and audit record in one transaction | BMP-1 | — | approved |
+| CRM-LEAD-002 | Source and campaign attribution: the original source is immutable; the current source may change and is recorded | BMP-1 | — | approved |
+| CRM-LEAD-003 | Duplicate detection on lead entry by normalized phone, e-mail and identifier, reported as a warning | BMP-1 | `BD-26` | approved |
+| CRM-LEAD-004 | Qualification record (budget, timeframe, need, decision role) and disqualification with a reason from reference data | BMP-1 | — | approved |
+| CRM-LEAD-005 | Conversion of a lead to a customer and to an opportunity, idempotent, keeping the lead as history | BMP-1 | — | approved |
+| CRM-LEAD-006 | Lead import through `CORE-IMPORT` with preview, per-row errors and duplicate warnings | BMP-1 | — | approved |
+| CRM-PIPE-001 | Controlled stage transitions for leads and opportunities with append-only stage history; terminal stages require a reason | BMP-1 | `BD-27` | approved |
+| CRM-ASSIGN-001 | Manual assignment only to an active account holding the relevant permission and inside the assigner's scope, with reason and history | BMP-1 | `BD-25` | approved |
+| CRM-ASSIGN-002 | Round-robin and rule-based assignment with absence handling | BMP-1 | `SD-04`, `BD-25` | blocked |
+| CRM-OWNER-001 | Ownership transfer of customers and opportunities with reason, append-only history and audit | BMP-1 | — | approved |
+| CRM-OWNER-002 | Ownership retention by meaningful activity, and ownership disputes | BMP-1 | `SD-04`, `BD-28` | blocked |
+| CRM-ACTIVITY-001 | Calls, messages, meetings, visits and notes on leads, customers and opportunities; follow-ups; tasks linked through `CORE-TASK` | BMP-1 | — | approved |
+| CRM-MATCH-001 | Requirement-to-unit matching: available units in scope matching project, type and budget (budget matching only with price visibility) | BMP-1 | — | approved |
+| CRM-LOSS-001 | Lost, disqualified and on-hold reasons from reference data; a nurture flag | BMP-1 | — | approved |
+| CRM-REPORT-001 | Pipeline, conversion, ageing and owner performance computed inside the actor's scope | BMP-1 | — | approved |
+| CRM-OPP-001 | Opportunity as its own aggregate — several per customer — with target project, unit type, budget, expected value, expected close date and owner; probability only when configured per stage | BMP-1 | `BD-27` | approved |
+| CRM-OPP-002 | Opportunity won/lost outcome with reason, stage history, and conversion into a reservation | BMP-1 | — | approved |
+| SALE-QUOTE-001 | Quotation versions from the unit's effective price and a plan, with validity; a quotation never reserves inventory | BMP-1 | `BD-36` | approved |
+| SALE-DISCOUNT-001 | Discount by amount or percentage with exact arithmetic; a configured maximum; no discount takes effect before its required approval | BMP-1 | `BD-03`, `BD-04` | approved |
+| SALE-DISCOUNT-002 | Price override below the effective price as an approval-controlled exception | BMP-1 | `BD-31` | approved |
+| SALE-RESERVE-001 | Reservation lifecycle: draft, pending approval, approved, rejected, confirmed, cancelled, expired, converted | BMP-1 | — | approved |
+| SALE-RESERVE-002 | Atomic unit protection, idempotent submission, and a proven single winner under concurrent requests | BMP-1 | `BD-30` | approved |
+| SALE-RESERVE-003 | Validity and expiry from configuration; extension through approval where a policy applies | BMP-1 | `BD-01` | approved |
+| SALE-RESERVE-004 | Deposit rule from configuration; booking evidence as documents; evidence never confirms a collection | BMP-1 | `BD-02` | approved |
+| SALE-RESERVE-005 | Cancellation with reason, optional approval, unit release, and a refund hand-off state for BMP-2 | BMP-1 | `BD-05`, `BD-06` | approved |
+| SALE-RESERVE-006 | Reservation and contract numbers issued through `CORE-DOC-001` when a format is active, continuing the existing series | BMP-1 | `BD-19` | approved |
+| SALE-CONTRACT-001 | Contract draft from a confirmed reservation carrying immutable customer, unit and pricing snapshots | BMP-1 | — | approved |
+| SALE-CONTRACT-002 | Contract parties (buyer, co-buyer, guarantor, representative) with shares that total exactly | BMP-1 | — | approved |
+| SALE-CONTRACT-003 | Activation — through approval when an exception applies — freezing the schedule and committing the unit; signing state recorded | BMP-1 | `BD-35` | approved |
+| SALE-CONTRACT-004 | Contract documents, approval history and audit trail on the contract record | BMP-1 | — | approved |
+| SALE-CHANGE-001 | Plan-change amendment before settlement: remaining unpaid rows replaced through approval, old rows kept as rescheduled, totals reconciled | BMP-1 | `BD-09` | approved |
+| SALE-CHANGE-002 | Unit substitution with transfer of paid money | BMP-2 | `BD-07` | approved |
+| SALE-CHANGE-003 | Contract assignment or transfer to a new buyer | BMP-2 | `BD-08` | approved |
+| SALE-CANCEL-001 | Contract cancellation before any collection, with reason, optional approval, cancelled schedule and unit release | BMP-1 | `BD-05` | approved |
+| SALE-CANCEL-002 | Cancellation after collection: penalties, refunds, commission reversal, paper return, clearance | BMP-2 | `BD-05`, `BD-06`, `BD-15` | approved |
+| COL-SCHEDULE-001 | Contractual schedule from a plan or template — down payment, periodic instalments, final payment, maintenance deposit, dated milestone rows — reconciling exactly, with a stated rounding rule and a preview that uses the same code | BMP-1 | `BD-32` | approved |
+| COL-SCHEDULE-002 | A confirmed schedule is immutable; it changes only by an approved amendment | BMP-1 | `BD-09` | approved |
+
+`CORE-DOC-003` and `CORE-DOC-005` (Phase 1 rows above) are delivered inside BMP-1 with this scope:
+reservation form, quotation, contract, payment schedule, amendment, cancellation form and approval
+record, in Arabic and English, with QR verification by an opaque reference.
 
 ---
 

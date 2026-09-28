@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-29 (final UI polish and RTL formatting pass — complete)
+Last updated: 2026-09-29 (Business Master Prompt 1 — Commercial Operations — in progress)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -50,7 +50,9 @@ implemented or verified requirement.
 
 ## Current phase
 
-- Phase: **1 — Discovery, architecture, core, security, localization, Light Mode**
+- Phase: **1 — Discovery, architecture, core, security, localization, Light Mode** (gate open)
+- Active delivery: **Business Master Prompt 1 — Commercial Operations** (engineering Phases 2–4 scope,
+  plus `CORE-DOC-003`/`005`), started 2026-09-29 on explicit instruction — see the BMP-1 section below
 - Sub-stage: Build half — foundation, audit, authorization, identity, and approvals complete; green
 - Macro Phase 1 (Client Demo MVP) is **built and green**, and is a demonstration slice: it raises no
   requirement status and closes no gate. See "Macro Phase 1 — the demonstration slice" below.
@@ -62,6 +64,54 @@ implemented or verified requirement.
   stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
 - Requirements `implemented` (code + passing tests): **104 of 113** · `in-progress`: 7 · not started: 2 (THEME-009 implemented with the UI redesign, 2026-09-28)
+
+## Business Master Prompt 1 — Commercial Operations — IN PROGRESS (started 2026-09-29)
+
+Instruction of 2026-09-29: the stakeholder approved the foundation, the UI/UX redesign and the final UI
+polish **for continuation into development only** — not production, not deployment, not acceptance of
+any open business decision — and issued BMP-1 as the first of **three** prompts
+([ADR-0032](decisions/adr-0032-three-business-master-prompts.md)). Starting HEAD `6089c33`, tree clean,
+services healthy, migrations current (`0001` only).
+
+Scope: Lead → Qualification → Opportunity → Customer → Unit Selection → Reservation → Approval →
+Contract → Instalment Schedule Handoff, and the commercial documents and approvals it needs. 59 IDs
+enumerated in `REQUIREMENTS.md` §"Business Master Prompt 1 — enumerated requirements" (55 BMP-1,
+4 BMP-2), plus `CORE-DOC-003` and `CORE-DOC-005`. Blocked: `CRM-ASSIGN-002`, `CRM-OWNER-002` (`SD-04`).
+
+Demonstration data snapshot before any change: `scratch/bmp1-demo-before.json` (counts and content
+hashes of every collection, ignored). Nothing may reset or reseed; new scenarios only through
+idempotent seed extensions.
+
+| Package | State | Commit |
+|---|---|---|
+| 1 Scope consolidation, ADR-0032, discovery IDs, decisions, Arabic questionnaire | **complete** | the commit containing this row |
+| 2 CRM and customer completion | not started | — |
+| 3 Opportunities and ownership | not started | — |
+| 4 Inventory and pricing | not started | — |
+| 5 Reservations and approvals | not started | — |
+| 6 Contracts and schedules | not started | — |
+| 7 Arabic/English PDF documents and QR verification | not started | — |
+| 8 UI journey, dashboards and reports | not started | — |
+| 9 Final verification and phase documentation | not started | — |
+
+### Package 1 — what changed
+
+- [ADR-0032](decisions/adr-0032-three-business-master-prompts.md): five prompts → three (BMP-1
+  Commercial Operations; BMP-2 Collections, Finance, Operations and People; BMP-3 Marketing,
+  Integrations, Hardening and Launch). ADR-0029's sequence superseded, its rules kept. The
+  module-by-module traceability table is in `phases/business-master-prompts.md`.
+- Registered `SEC-034` (resource-level scope policy for ownerless catalogue records) and the BMP-1 IDs
+  in `INV-*`, `CRM-*`, `SALE-*`, `COL-SCHEDULE-*`; all `approved` except the two `SD-04` rows.
+- Business decision register: BD-25–BD-36 added (assignment, duplicates, opportunity stages,
+  ownership, unit hold, competing requests, price overrides, schedule rules, required documents,
+  identity, activation and signing, quotation validity). Five are `proposed`, seven `open`; none
+  approved. Arabic client questionnaire: `decisions/bmp-1-decision-questionnaire-ar.md`.
+- **Defects found during discovery, to be fixed in their packages:** the stored payment plan drops
+  `downPaymentDueOn`, so a contract built from a reservation dates the deposit on the first instalment
+  date (package 6); the manual unit-status route lets `inventory.unit.manage` move a `reserved` or
+  `contracted` unit to `available` while its reservation or contract is live (package 4); reservation
+  `holdDays` defaults to an invented 14 days although validity is BD-01 (package 5); lead creation,
+  its first activity and its audit record are three separate writes (package 2).
 
 ## Foundation completion (post-demo master prompt) — COMPLETE, stopped at the foundation gate
 

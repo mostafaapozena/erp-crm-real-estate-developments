@@ -1,6 +1,7 @@
 # ADR-0029 — Five business master prompts group the remaining engineering phases
 
-- Status: Accepted
+- Status: Accepted — **sequence superseded 2026-09-29 by [ADR-0032](adr-0032-three-business-master-prompts.md)**;
+  rules 2–4 remain in force
 - Date: 2026-09-28
 - Deciders: Stakeholder (product owner), recorded by the implementation team
 - Scope: Delivery, Governance
