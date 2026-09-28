@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-28 (UI/UX redesign — UI-1)
+Last updated: 2026-09-28 (UI/UX redesign — UI-2)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -556,8 +556,8 @@ build + bundle ✅ (largest `vendor-mui` 389.4 kB / 117.2 kB gzip); **integratio
 
 | Group | State | Commit |
 |---|---|---|
-| UI-1 Tokens, icon library, shared primitives, ADR-0030 | **complete** | the commit containing this row |
-| UI-2 Company identity, application shell, sign-in, people lookup | not started | — |
+| UI-1 Tokens, icon library, shared primitives, ADR-0030 | **complete** | `c208e71` |
+| UI-2 Company identity, application shell, sign-in, people lookup | **complete** | the commit containing this row |
 | UI-3 Dashboard and charts | not started | — |
 | UI-4 Lists and tables | not started | — |
 | UI-5 Details, forms, marketing, organization, visual QA | not started | — |
@@ -581,6 +581,55 @@ build + bundle ✅ (largest `vendor-mui` 389.4 kB / 117.2 kB gzip); **integratio
 - Web: `Panel` now wraps `SectionCard`; `Field` restyled; `useTableLabels()` added.
 - Measured: unit **563** (542 + 21), lint/typecheck/format on changed areas, i18n, links, secrets
   (466 files), ignored-source, build, bundle (`vendor-mui` 392.6 / 117.9 kB gzip).
+
+### UI-2 — what changed
+
+- **Company identity (PLAT-022/023 screens):** `/settings/company` (`CompanyIdentityPage.tsx`) over the
+  existing F1 API — no new company model. Draft → "Publish changes" (one audited revision, guarded by
+  `expectedVersion`), discard, unpublished-changes chip, read-only view without
+  `company.profile.manage`, live preview (sidebar, sign-in, document header) under a theme built from
+  the draft colour, colour validated in the browser with the server's rule (`validateBrandColor`),
+  logo/compact/favicon upload through the existing validated endpoint (PNG/JPEG, magic bytes,
+  512 KB, stored in MongoDB — no object-storage bypass), revision history with names. Not supported by
+  the contract and therefore not built: per-language logos, a secondary colour.
+- `BrandingProvider` gained `useBrandingReload()`: a publish updates the running app without a reload.
+  `brandDisplayName`, `initialsOf` helpers. `apiRequest` gained `fileType` (declared upload type).
+- **ALOLA demonstration identity, applied 2026-09-28** with the new `npm run seed:demo:identity`
+  (`scripts/seed-demo/identity.ts`, `identity-cli.ts`; guarded exactly like the seed, idempotent,
+  writes through the services as the seeded administrator and marketing manager). Development
+  database change, verified by content hash against `scratch/ui-demo-before.json`: `companyProfiles`
+  0→1 and `companyProfileRevisions` 0→1 (legal/display name شركة العلا للتطوير العقاري / ALOLA
+  Developments, short العلا / ALOLA, fictional CR/tax/contact); `orgLegalEntities` LE-DEMO renamed from
+  the superseded دار المستقبل للتطوير العقاري / Future House Development; one `marketingCampaigns`
+  headline; `roles` (demo administrator gains `company.profile.view` and administrative
+  `company.profile.manage`); `auditEvents` +3. Nothing else changed; a second run reports `unchanged`.
+  A fresh `seed:demo` now creates the ALOLA identity directly (`dataset.ts`).
+- **People lookup (ADR-0031):** `GET /api/v1/organization/people?ids=` — authenticated only, ≤100
+  well-formed references, returns directory label + job title of **active** placements only, not
+  scope-filtered by design (the caller already holds the reference). OpenAPI documented. Web:
+  `people.tsx` (`PeopleProvider` batches per frame and caches per session; `PersonName`,
+  `usePersonLabel`; localized "System" / "Unavailable user" fallbacks). **Raw `acc_…` IDs removed**
+  from leads list, lead detail, reservation detail, receipt detail, organization and the dashboard
+  owner chart.
+- **Shell:** grouped navigation (overview, CRM, inventory, reservations & contracts, collections &
+  finance, marketing, organization & administration, settings) with lucide icons, collapsible groups
+  (the active group cannot fold), icon-only collapsed mode with tooltips, both remembered in
+  `localStorage` (try/catch), brand block (logo or monogram, display name, product descriptor), sticky
+  top bar (global search with icon and description, notifications, compact language switch, user
+  avatar/name/job title menu with Company identity and sign-out), breadcrumbs with a detail-page tail
+  (`useBreadcrumbTail`), single page scroll, mobile drawer from the inline start.
+- **Sign-in:** brand mark and name from configuration, show/hide password, loading state, language
+  switch in the header, demonstration notice only when `demonstration` is true, no "forgot password"
+  (no delivery provider exists).
+- Tests: `navigation.test.ts` (groups, permissions, active item, breadcrumbs, initials), branding tests
+  (display-name alt text, monogram), `organization.int-test.ts` (+3 people lookup), E2E
+  `identity.spec.ts` (ALOLA on sign-in/sidebar/organization, no superseded name, no `acc_`, no raw
+  `receiptState.` key).
+- **Defect found and fixed during verification:** `initialsOf` had lost its `\s` escapes when the file
+  was generated, producing wrong initials — caught by the new unit test.
+- Measured (working tree including the UI-3/UI-4 drafts): typecheck ✅, lint on changed areas ✅,
+  unit **570 / 40 files**, **integration 501 passed / 0 failed / 0 skipped** (498 + 3), i18n, secrets
+  (478 files), links, ignored-source. E2E runs with the full suite at the end of UI-5.
 
 ## Phase status
 

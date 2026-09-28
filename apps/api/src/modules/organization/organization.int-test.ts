@@ -516,6 +516,79 @@ describe.skipIf(!gate.available)(`organization module — ${gate.reason}`, () =>
     });
   });
 
+  describe('people lookup (ADR-0031)', () => {
+    it('names the references asked about, and nothing else', async () => {
+      const tree = await buildTree();
+      // Branch B: outside the branch viewer's scope, and the lookup still names the person.
+      await as(ADMIN)
+        .post('/api/v1/organization/placements')
+        .send({
+          accountId: `${RUN}-people-b`,
+          displayName: 'Colleague In Branch B',
+          departmentId: tree.deptB.departmentId,
+          jobTitleId: tree.jobTitle.jobTitleId,
+          startedOn: '2026-01-01',
+        })
+        .expect(201);
+      await as(ADMIN)
+        .post('/api/v1/organization/placements')
+        .send({
+          accountId: `${RUN}-people-a`,
+          displayName: 'Colleague In Branch A',
+          departmentId: tree.deptA.departmentId,
+          jobTitleId: tree.jobTitle.jobTitleId,
+          startedOn: '2026-01-01',
+        })
+        .expect(201);
+
+      const response = await as(NO_GRANT)
+        .get(`/api/v1/organization/people?ids=${RUN}-people-b,${RUN}-unknown`)
+        .expect(200);
+      expect(response.body.items).toEqual([
+        {
+          accountId: `${RUN}-people-b`,
+          displayName: 'Colleague In Branch B',
+          jobTitle: label('Consultant'),
+        },
+      ]);
+      // Only directory fields: no placement, branch, department or employee reference leaks.
+      expect(Object.keys(response.body.items[0]).sort()).toEqual([
+        'accountId',
+        'displayName',
+        'jobTitle',
+      ]);
+    });
+
+    it('requires a signed-in caller and bounded, well-formed references', async () => {
+      await as().get(`/api/v1/organization/people?ids=${RUN}-people-a`).expect(401);
+      await as(NO_GRANT).get('/api/v1/organization/people').expect(400);
+      await as(NO_GRANT).get('/api/v1/organization/people?ids=%24where').expect(400);
+      const tooMany = Array.from({ length: 101 }, (_, index) => `acc_${index}`).join(',');
+      await as(NO_GRANT).get(`/api/v1/organization/people?ids=${tooMany}`).expect(400);
+    });
+
+    it('omits an ended placement rather than naming a former holder', async () => {
+      const tree = await buildTree();
+      const placement = await as(ADMIN)
+        .post('/api/v1/organization/placements')
+        .send({
+          accountId: `${RUN}-people-ended`,
+          displayName: 'Former Colleague',
+          departmentId: tree.deptA.departmentId,
+          jobTitleId: tree.jobTitle.jobTitleId,
+          startedOn: '2026-01-01',
+        })
+        .expect(201);
+      await placementModel(connection)
+        .updateOne({ placementId: placement.body.placementId }, { $set: { status: 'inactive' } })
+        .exec();
+      const response = await as(NO_GRANT)
+        .get(`/api/v1/organization/people?ids=${RUN}-people-ended`)
+        .expect(200);
+      expect(response.body.items).toEqual([]);
+    });
+  });
+
   describe('no hard delete (ADR-0009)', () => {
     it('refuses every deletion path on a placement', async () => {
       const tree = await buildTree();

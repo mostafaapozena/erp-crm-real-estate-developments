@@ -23,6 +23,7 @@ import {
   demoPhone,
 } from './dataset';
 import { C } from './collections';
+import { applyDemoIdentity } from './identity';
 import { tally, type Counter, type SeedLedger } from './ledger';
 import type { SeedFoundation } from './seed';
 
@@ -46,6 +47,8 @@ export interface BusinessSeedOptions {
   foundation: SeedFoundation;
   logger: Logger;
   correlationId: string;
+  /** The organization timezone, recorded on the company profile. */
+  timeZone: string;
 }
 
 const egp = (amount: string): Money => money(amount, DEMO_CURRENCY);
@@ -56,7 +59,7 @@ const percentOf = (amount: Money, percent: string): Money =>
   divideMoney(multiplyMoney(amount, percent), '100', 2);
 
 export async function seedBusiness(options: BusinessSeedOptions): Promise<Counter> {
-  const { services, foundation, logger, correlationId } = options;
+  const { services, foundation, logger, correlationId, timeZone } = options;
   const context = { correlationId, method: 'CLI', route: 'scripts/seed-demo' };
   const { accountIds, counts, systemActor, ledger } = foundation;
 
@@ -66,6 +69,16 @@ export async function seedBusiness(options: BusinessSeedOptions): Promise<Counte
   const unitIds = await seedInventory(services, actors.admin, context, foundation);
   const leadIds = await seedPipeline(services, actors, context, foundation);
   await seedCampaigns(services, actors.marketing, context, foundation);
+  // The deployment's company identity — configuration, written by the administrator (PLAT-022).
+  const identity = await applyDemoIdentity({
+    services,
+    admin: actors.admin,
+    marketing: actors.marketing,
+    ledger,
+    timeZone,
+    context,
+  });
+  tally(counts, 'companyProfile', identity.companyProfile === 'created');
   await seedJourneys(services, actors, context, foundation, unitIds, leadIds);
 
   // The sweep the scheduled job would run. Without it every instalment stays `upcoming` however long

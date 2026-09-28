@@ -66,6 +66,10 @@ export const DEMO_ROLES: DemoRole[] = [
     name: { ar: 'مسؤول النظام', en: 'System administrator' },
     scope: 'all',
     permissions: [
+      // The deployment's identity: Settings → Company identity (PLAT-022). Administrative, so it sits
+      // with the one role that already carries a second factor.
+      'company.profile.view',
+      'company.profile.manage',
       'org.view',
       'org.manage',
       'org.placement.view',

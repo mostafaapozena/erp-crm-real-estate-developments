@@ -38,6 +38,7 @@ const Organization = lazy(() => import('./pages/OrganizationPage'));
 const Notifications = lazy(() => import('./pages/NotificationsPage'));
 const Tasks = lazy(() => import('./pages/TasksPage'));
 const Imports = lazy(() => import('./pages/ImportsPage'));
+const CompanyIdentity = lazy(() => import('./pages/CompanyIdentityPage'));
 const NotFound = lazy(() => import('./pages/NotFoundPage'));
 
 /** Tall enough that the page does not reflow when the chunk arrives. */
@@ -92,6 +93,7 @@ export function AppRoutes() {
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/imports" element={<Imports />} />
+          <Route path="/settings/company" element={<CompanyIdentity />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>

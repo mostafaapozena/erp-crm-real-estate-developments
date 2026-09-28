@@ -42,6 +42,11 @@ export interface RequestOptions {
   body?: unknown;
   /** A file sent as-is (an import upload). Mutually exclusive with `body`. */
   file?: Blob;
+  /**
+   * The declared type of `file`. The server never trusts it — it checks the bytes — but an endpoint
+   * that accepts only certain types refuses a mismatch, so a brand image says what it is.
+   */
+  fileType?: string;
   signal?: AbortSignal;
   /** Set for the refresh call itself, so a failed refresh cannot recurse into another refresh. */
   skipRefresh?: boolean;
@@ -80,7 +85,9 @@ async function parseError(response: Response): Promise<ApiError> {
 async function send(path: string, options: RequestOptions): Promise<Response> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (options.file !== undefined) headers['Content-Type'] = 'application/octet-stream';
+  if (options.file !== undefined) {
+    headers['Content-Type'] = options.fileType ?? 'application/octet-stream';
+  }
   if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
   return fetch(path, {
     method: options.method ?? 'GET',

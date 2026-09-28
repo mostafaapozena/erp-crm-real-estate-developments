@@ -1,6 +1,7 @@
 import Badge from '@mui/material/Badge';
 import IconButton from '@mui/material/IconButton';
-import SvgIcon from '@mui/material/SvgIcon';
+import { Icon } from '@alola/ui';
+import { Bell } from '@alola/ui/icons';
 import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useApi } from '../api/useApi';
@@ -38,9 +39,7 @@ export function NotificationBell() {
     <IconButton component={Link} to="/notifications" aria-label={label}>
       {/* No content at all when nothing is unread, so no hidden "0" sits in the document. */}
       <Badge color="primary" badgeContent={unread > 0 ? unread : undefined} max={99}>
-        <SvgIcon aria-hidden>
-          <path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 0 0 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-        </SvgIcon>
+        <Icon icon={Bell} size={22} />
       </Badge>
     </IconButton>
   );

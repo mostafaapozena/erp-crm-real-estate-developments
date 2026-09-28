@@ -16,6 +16,7 @@ import { useApi, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { PersonName } from '../people';
 import {
   CardGrid,
   EnumChip,
@@ -116,7 +117,7 @@ function LeadDetailScreen() {
             ) : null}
             <Field label={t('crm.source')}>{td(`leadSource.${data.source}`)}</Field>
             <Field label={t('crm.assignedTo')}>
-              <Verbatim>{data.assignedToAccountId}</Verbatim>
+              <PersonName accountId={data.assignedToAccountId} showTitle />
             </Field>
             <Field label={t('crm.nextFollowUp')}>{format.date(data.nextFollowUpOn)}</Field>
             {data.budgetMin || data.budgetMax ? (

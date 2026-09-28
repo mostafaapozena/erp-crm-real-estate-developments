@@ -19,6 +19,7 @@ import { useApi, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { PersonName } from '../people';
 import {
   CardGrid,
   EnumChip,
@@ -141,7 +142,7 @@ function ReceiptDetailScreen() {
               <Verbatim>{format.date(record.receivedOn)}</Verbatim>
             </Field>
             <Field label={t('fields.receivedBy')}>
-              <Verbatim>{record.receivedByAccountId}</Verbatim>
+              <PersonName accountId={record.receivedByAccountId} showTitle />
             </Field>
             {record.depositReference ? (
               <Field label={t('collections.depositReference')}>

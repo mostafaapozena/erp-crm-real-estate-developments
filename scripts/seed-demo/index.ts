@@ -96,7 +96,13 @@ try {
     totpIssuer: config.AUTH_TOTP_ISSUER,
     correlationId,
   });
-  const counts = await seedBusiness({ services, foundation, logger, correlationId });
+  const counts = await seedBusiness({
+    services,
+    foundation,
+    logger,
+    correlationId,
+    timeZone: config.ORG_TIMEZONE,
+  });
 
   writeCredentialsFile(repositoryRoot, foundation.credentials, {
     databaseName: config.MONGODB_DB_NAME,

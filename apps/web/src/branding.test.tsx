@@ -57,9 +57,11 @@ describe('runtime branding', () => {
     render(<App i18n={createI18n(() => undefined)} />);
     await screen.findByRole('heading', { level: 1, name: 'تسجيل الدخول' });
     expect(document.title).toBe('شركة المثال');
-    expect(screen.getByRole('img', { name: 'شركة المثال' }).getAttribute('src')).toBe(
+    // The logo's text alternative is the display name shown with it on the sign-in screen.
+    expect(screen.getByRole('img', { name: 'شركة المثال للتطوير' }).getAttribute('src')).toBe(
       configured.assets.logo?.url,
     );
+    expect(screen.getByText('نظام إدارة التطوير العقاري')).toBeDefined();
     expect(document.querySelector('link[rel="icon"]')?.getAttribute('href')).toBe(
       configured.assets.favicon?.url,
     );
@@ -86,6 +88,15 @@ describe('runtime branding', () => {
     render(<App i18n={createI18n(() => undefined)} />);
     await screen.findByRole('heading', { level: 1, name: 'تسجيل الدخول' });
     expect(document.title).toBe('نظام إدارة التطوير العقاري');
+  });
+
+  it('draws a monogram from the brand colour when no logo is configured', async () => {
+    serve({ ...configured, assets: {} });
+    render(<App i18n={createI18n(() => undefined)} />);
+    await screen.findByRole('heading', { level: 1 });
+    expect(screen.queryByTestId('brand-logo')).toBeNull();
+    expect(screen.getByTestId('brand-monogram').textContent).toBe('م');
+    expect(screen.getByText('شركة المثال للتطوير')).toBeDefined();
   });
 
   it('falls back to the neutral identity when the API refuses', async () => {

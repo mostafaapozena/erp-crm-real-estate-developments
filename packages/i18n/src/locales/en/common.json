@@ -18,7 +18,15 @@
     "notificationsEmpty": "No notifications",
     "signOut": "Sign out",
     "signedInAs": "Signed in as",
-    "loadingSection": "Loading section"
+    "loadingSection": "Loading section",
+    "productDescriptor": "Real Estate Management System",
+    "collapseNavigation": "Collapse the sidebar",
+    "expandNavigation": "Expand the sidebar",
+    "toggleGroup": "Show or hide {{group}}",
+    "language": "Language",
+    "account": "Account",
+    "globalSearch": "Search the whole system",
+    "home": "Home"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -39,11 +47,18 @@
     "campaigns": "Campaigns",
     "organization": "Organization",
     "groupSales": "Sales and customers",
-    "groupFinance": "Collections and finance",
+    "groupFinance": "Collections and financial operations",
     "groupMarketing": "Marketing",
-    "groupAdmin": "Administration",
+    "groupAdmin": "Organization and administration",
     "tasks": "Tasks",
-    "imports": "Import data"
+    "imports": "Import data",
+    "groupOverview": "Overview",
+    "groupCrm": "CRM and sales",
+    "groupInventory": "Properties and inventory",
+    "groupDeals": "Reservations and contracts",
+    "groupSettings": "Settings",
+    "companyIdentity": "Company identity",
+    "notifications": "Notifications"
   },
   "auth": {
     "signInTitle": "Sign in",
@@ -56,7 +71,10 @@
     "mfaSubtitle": "Enter the code from your authenticator app, or a recovery code",
     "mfaCode": "Verification code",
     "verify": "Verify",
-    "demoNotice": "Demonstration environment with fictional data — it contains no real customer records"
+    "demoNotice": "Demonstration environment with fictional data — it contains no real customer records",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "secureNote": "Secure connection. Never share your sign-in details."
   },
   "states": {
     "loadingTitle": "Loading",
@@ -171,7 +189,58 @@
     "marketingSpend": "Marketing spend",
     "campaignLeads": "Leads from campaigns",
     "quickActions": "Quick actions",
-    "nothingAssigned": "Nothing within your scope yet"
+    "nothingAssigned": "Nothing within your scope yet",
+    "scopeNote": "Figures are calculated within your permitted scope only",
+    "sections": {
+      "executive": "Executive summary",
+      "collections": "Collections and overdue exposure",
+      "sales": "Sales performance",
+      "inventory": "Inventory status",
+      "attention": "Needs your attention today",
+      "marketing": "Marketing performance",
+      "team": "Sales team performance"
+    },
+    "collectionRate": "Collected share of contract value",
+    "portfolio": "Contracted, collected and outstanding",
+    "overdueAgeing": "Overdue instalments by days late",
+    "ageingPartial": "Based on the first {{count}} overdue instalments",
+    "ageing": {
+      "d1to30": "1–30 days",
+      "d31to60": "31–60 days",
+      "d61to90": "61–90 days",
+      "d90plus": "Over 90 days"
+    },
+    "availableShare": "Share of units available",
+    "leadsCaption": "Total leads",
+    "unitsCaption": "Total units",
+    "viewAll": "View all",
+    "openList": "Open list",
+    "headers": {
+      "category": "Category",
+      "count": "Count",
+      "amount": "Amount",
+      "stage": "Stage",
+      "source": "Source",
+      "status": "Status",
+      "platform": "Platform",
+      "representative": "Representative",
+      "period": "Days late"
+    },
+    "wonOfTotal": "{{won}} won of {{total}}",
+    "attention": {
+      "overdueInstallments": "Overdue instalments",
+      "upcomingInstallments": "Instalments due within 15 days",
+      "dueFollowUps": "Follow-ups due today",
+      "overdueFollowUps": "Overdue follow-ups",
+      "pendingApprovals": "Reservations awaiting approval",
+      "remindersReady": "Reminders ready to send",
+      "remindersSimulated": "Reminders simulated — WhatsApp not connected",
+      "tasksOpen": "Your open tasks",
+      "tasksOverdue": "Your overdue tasks",
+      "allClear": "Nothing needs your attention right now",
+      "allClearHint": "Overdue instalments, follow-ups, approvals and tasks appear here when there are any."
+    },
+    "marketingDemo": "Demonstration figures — advertising platforms are not connected"
   },
   "crm": {
     "title": "Leads",
@@ -534,7 +603,9 @@
   "pagination": {
     "showing": "Showing {{shown}} of {{total}}",
     "page": "Page",
-    "rowsPerPage": "Rows per page"
+    "rowsPerPage": "Rows per page",
+    "showMore": "Show more",
+    "loadingMore": "Loading more"
   },
   "confirm": {
     "title": "Confirm action",
@@ -650,7 +721,7 @@
   },
   "search": {
     "label": "Search",
-    "placeholder": "Name, code, number or phone",
+    "placeholder": "Search customers, units, contracts…",
     "hint": "Type at least two characters",
     "empty": "Nothing found",
     "types": {
@@ -716,5 +787,113 @@
     "STALE_VERSION": "Someone changed this in the meantime; reload and try again",
     "FEATURE_DISABLED": "This feature is turned off for this deployment",
     "EXPORT_TOO_LARGE": "Too many rows to export at once"
+  },
+  "people": {
+    "system": "System",
+    "unknown": "Unavailable user",
+    "loading": "Loading name"
+  },
+  "company": {
+    "title": "Company identity",
+    "subtitle": "The name, logo, colour and document details this company's system is shown with",
+    "firstTimeTitle": "The company identity is not set yet",
+    "firstTimeBody": "The system is using its neutral identity. Complete the details and publish them to show them on the sign-in screen, in the sidebar and in the browser tab.",
+    "readOnly": "You can view the company identity only. Editing needs the company identity management permission.",
+    "sections": {
+      "names": "Company names",
+      "registration": "Registration",
+      "contact": "Contact details and address",
+      "regional": "Regional settings",
+      "brand": "Brand colour",
+      "logos": "Logos",
+      "documents": "Printed documents",
+      "preview": "Preview before publishing",
+      "history": "Change history"
+    },
+    "fields": {
+      "legalNameAr": "Legal name in Arabic",
+      "legalNameEn": "Legal name in English",
+      "tradeNameAr": "Display name in Arabic",
+      "tradeNameEn": "Display name in English",
+      "shortNameAr": "Short name in Arabic",
+      "shortNameEn": "Short name in English",
+      "commercialRegistration": "Commercial registration number",
+      "taxRegistration": "Tax registration number",
+      "phone": "Phone",
+      "email": "Email",
+      "website": "Website",
+      "addressAr": "Address in Arabic",
+      "addressEn": "Address in English",
+      "country": "Country code",
+      "timeZone": "Time zone",
+      "baseCurrency": "Base currency",
+      "defaultLocale": "Default language",
+      "supportedLocales": "Available languages",
+      "primaryColor": "Primary colour",
+      "footerAr": "Document footer in Arabic",
+      "footerEn": "Document footer in English"
+    },
+    "hints": {
+      "shortName": "Shown in the browser tab and the authenticator app. Up to 40 characters.",
+      "website": "Starts with https",
+      "country": "Two letters, e.g. EG",
+      "currency": "Three letters, e.g. EGP",
+      "primaryColor": "A hex colour starting with #. Contrast is checked automatically; status colours never change.",
+      "optional": "Optional",
+      "image": "PNG or JPEG, up to 512 KB. Stored in this system's own database."
+    },
+    "locales": {
+      "ar": "Arabic",
+      "en": "English"
+    },
+    "logoSlots": {
+      "logo": "Main logo",
+      "compactLogo": "Compact logo",
+      "favicon": "Browser icon"
+    },
+    "logoSlotHints": {
+      "logo": "Shown on the sign-in screen and at the top of the sidebar.",
+      "compactLogo": "Shown when the sidebar is collapsed.",
+      "favicon": "Shown in the browser tab."
+    },
+    "noImage": "No image",
+    "uploadImage": "Upload image",
+    "replaceImage": "Replace image",
+    "uploading": "Uploading",
+    "imageUploaded": "The image was uploaded and is now in use.",
+    "imageTooLarge": "The image is larger than 512 KB.",
+    "imageWrongType": "Only PNG or JPEG images are accepted.",
+    "imagesAfterProfile": "Publish the company details first, then upload the logos.",
+    "useDefaultColor": "Use the default colour",
+    "colorDefault": "The approved default colour",
+    "colorAccepted": "The colour is accepted and meets the contrast requirements.",
+    "colorInvalid": "Enter a hex colour starting with #.",
+    "colorContrastFailed": "This colour cannot be used because it makes text or controls hard to read. Choose a darker colour.",
+    "publish": "Publish changes",
+    "create": "Create company identity",
+    "publishing": "Publishing",
+    "discard": "Discard changes",
+    "unpublished": "Unpublished changes",
+    "published": "The company identity was published. The changes now appear across the system.",
+    "version": "Version {{version}}",
+    "updatedAt": "Last updated {{date}}",
+    "changedBy": "By",
+    "noHistory": "No changes recorded yet.",
+    "previewSidebar": "Sidebar",
+    "previewSignIn": "Sign-in screen",
+    "previewDocument": "Document header",
+    "previewNote": "The preview shows the current draft. Nobody sees it until it is published.",
+    "documentTitle": "Unit reservation contract"
+  },
+  "filters": {
+    "all": "All",
+    "remove": "Remove filter: {{label}}",
+    "clearAll": "Clear all filters",
+    "searchInList": "Search this list",
+    "searchSubmit": "Search",
+    "active": "{{name}}: {{value}}"
+  },
+  "list": {
+    "open": "Open {{label}}"
   }
 }

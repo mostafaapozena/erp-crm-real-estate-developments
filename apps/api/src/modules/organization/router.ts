@@ -7,6 +7,7 @@ import {
   CreateTeamSchema,
   OrgLifecycleChangeSchema,
   OrgStatusSchema,
+  PeopleLookupQuerySchema,
   PlacementLifecycleSchema,
   RecordIdSchema,
   TransferPlacementSchema,
@@ -21,7 +22,7 @@ import {
 } from '@alola/contracts';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requirePermission, type GuardOptions } from '../../http/actor';
+import { requireAuthenticated, requirePermission, type GuardOptions } from '../../http/actor';
 import { requestContextOf, requireActor } from '../../http/request-context';
 import { validate, validated } from '../../http/validate';
 import type { OrganizationService, RequestContext } from './service';
@@ -99,6 +100,20 @@ export function organizationRouter(options: OrgRouterOptions): Router {
   const router = Router();
   const base = '/api/v1/organization';
   const service = () => options.getService();
+
+  /**
+   * Names for account references (ADR-0031). Any signed-in person may ask, but only about the
+   * references they hold, and only for a directory label and job title.
+   */
+  router.get(
+    '/people',
+    requireAuthenticated(options.guard),
+    validate({ query: PeopleLookupQuerySchema }),
+    async (_req, res) => {
+      const { ids } = validated<typeof PeopleLookupQuerySchema._output>(res, 'query');
+      res.json({ items: await service().lookupPeople(ids) });
+    },
+  );
 
   router.get('/chart', requirePermission('org.view', options.guard), async (_req, res) => {
     res.json(await service().chart(requireActor(res)));

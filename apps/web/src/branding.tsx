@@ -1,5 +1,5 @@
 import { SUPPORTED_LOCALES, type Locale, type PublicBranding } from '@alola/contracts';
-import { createContext, use, useEffect, useState, type ReactNode } from 'react';
+import { createContext, use, useCallback, useEffect, useState, type ReactNode } from 'react';
 
 /**
  * The deployment's branding, loaded at runtime (PLAT-023, ADR-0027).
@@ -27,6 +27,8 @@ export const NEUTRAL_BRANDING: PublicBranding = {
 const BRANDING_WAIT_MS = 1500;
 
 const BrandingContext = createContext<PublicBranding>(NEUTRAL_BRANDING);
+/** Re-reads branding — after Settings → Company identity publishes a change, so no reload is needed. */
+const BrandingReloadContext = createContext<() => Promise<void>>(() => Promise.resolve());
 
 function isBranding(value: unknown): value is PublicBranding {
   if (typeof value !== 'object' || value === null) return false;
@@ -93,17 +95,47 @@ export function BrandingProvider({
     };
   }, [initial]);
 
+  const reload = useCallback(async () => {
+    setBranding(await loadBranding());
+  }, []);
+
   if (!branding) return null;
-  return <BrandingContext value={branding}>{children}</BrandingContext>;
+  return (
+    <BrandingReloadContext value={reload}>
+      <BrandingContext value={branding}>{children}</BrandingContext>
+    </BrandingReloadContext>
+  );
+}
+
+export function useBrandingReload(): () => Promise<void> {
+  return use(BrandingReloadContext);
 }
 
 export function useBranding(): PublicBranding {
   return use(BrandingContext);
 }
 
-/** The display name in a language, or `undefined` when the deployment has not configured one. */
+/** The short name in a language, or `undefined` when the deployment has not configured one. */
 export function brandName(branding: PublicBranding, locale: Locale): string | undefined {
   return branding.shortName?.[locale];
+}
+
+/**
+ * The company's display (trade) name in a language — what the sidebar and the sign-in screen show —
+ * falling back to the short name, or `undefined` when nothing is configured.
+ */
+export function brandDisplayName(branding: PublicBranding, locale: Locale): string | undefined {
+  return branding.tradeName?.[locale] ?? branding.shortName?.[locale];
+}
+
+/** Up to two initials for a name, for the logo fallback and for avatars. Works for Arabic too. */
+export function initialsOf(name: string): string {
+  const words = name
+    .replace(/^(شركة|مؤسسة)\s+/u, '')
+    .split(/\s+/u)
+    .filter((word) => word.length > 0 && !/^(ال|و|لل|للت)$/u.test(word));
+  const letters = words.slice(0, 2).map((word) => [...word.replace(/^ال/u, '')][0] ?? '');
+  return letters.join('').toUpperCase();
 }
 
 /**

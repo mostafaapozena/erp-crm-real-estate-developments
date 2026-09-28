@@ -1,5 +1,8 @@
 import type { SearchHit, SearchResult, SearchType } from '@alola/contracts';
 import Autocomplete from '@mui/material/Autocomplete';
+import InputAdornment from '@mui/material/InputAdornment';
+import { Icon } from '@alola/ui';
+import { Search } from '@alola/ui/icons';
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -98,7 +101,7 @@ export function SearchBox() {
       }}
       noOptionsText={text.trim().length < 2 ? t('search.hint') : t('search.empty')}
       loadingText={t('states.loadingTitle')}
-      sx={{ inlineSize: { xs: '100%', sm: 280 } }}
+      sx={{ inlineSize: '100%' }}
       renderOption={(props, option) => {
         const { key, ...rest } = props as typeof props & { key: string };
         const namespace = STATUS_NAMESPACE[option.type];
@@ -121,7 +124,28 @@ export function SearchBox() {
         );
       }}
       renderInput={(params) => (
-        <TextField {...params} label={t('search.label')} placeholder={t('search.placeholder')} />
+        <TextField
+          {...params}
+          // The visible label stays short; the description says this searches the whole system,
+          // not the page underneath it.
+          label={t('search.label')}
+          placeholder={t('search.placeholder')}
+          slotProps={{
+            ...params.slotProps,
+            htmlInput: {
+              ...params.slotProps.htmlInput,
+              'aria-description': t('shell.globalSearch'),
+            },
+            input: {
+              ...params.slotProps.input,
+              startAdornment: (
+                <InputAdornment position="start" sx={{ color: 'text.secondary' }}>
+                  <Icon icon={Search} size={18} />
+                </InputAdornment>
+              ),
+            },
+          }}
+        />
       )}
     />
   );

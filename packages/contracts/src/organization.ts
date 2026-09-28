@@ -375,6 +375,49 @@ export const OrgChartSchema = z.strictObject({
 });
 export type OrgChart = z.infer<typeof OrgChartSchema>;
 
+/* ---------------------------------------------------------------- people lookup */
+
+/**
+ * Turning account references into names (the UI redesign, ADR-0031).
+ *
+ * Records carry opaque account references — a lead's assignee, a receipt's collector, a contract's
+ * sales owner. A screen must show the person, not `acc_…`. The lookup answers only for the
+ * references the caller already holds (they came from records the caller was authorized to read),
+ * and only with the organization directory label and job title — never contact details, login
+ * identifiers, placement or employee data.
+ */
+export const PEOPLE_LOOKUP_MAX = 100;
+
+export const AccountReferenceSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9_:.-]+$/, { message: 'ACCOUNT_REFERENCE_INVALID' });
+
+export const PeopleLookupQuerySchema = z.strictObject({
+  /** Comma-separated account references, at most `PEOPLE_LOOKUP_MAX`. */
+  ids: z
+    .string()
+    .min(1)
+    .max(PEOPLE_LOOKUP_MAX * 201)
+    .transform((value) => [...new Set(value.split(',').filter((id) => id.length > 0))])
+    .pipe(z.array(AccountReferenceSchema).min(1).max(PEOPLE_LOOKUP_MAX)),
+});
+
+export const PersonReferenceSchema = z.strictObject({
+  accountId: z.string().min(1).max(200),
+  /** The organization directory label of the person's active placement. */
+  displayName: EnteredNameSchema,
+  jobTitle: LocalizedLabelSchema.optional(),
+});
+export type PersonReference = z.infer<typeof PersonReferenceSchema>;
+
+/** References with no active placement are simply absent; the client shows a neutral fallback. */
+export const PeopleLookupResultSchema = z.strictObject({
+  items: z.array(PersonReferenceSchema),
+});
+export type PeopleLookupResult = z.infer<typeof PeopleLookupResultSchema>;
+
 export const ORG_AUDIT_ACTIONS = {
   legalEntityCreated: 'org.legalEntity.created',
   branchCreated: 'org.branch.created',

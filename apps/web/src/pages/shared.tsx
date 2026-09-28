@@ -1,8 +1,12 @@
 import type { Permission } from '@alola/contracts';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import InputAdornment from '@mui/material/InputAdornment';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import {
+  Icon,
   LtrIsolate,
   SectionCard,
   StateView,
@@ -11,11 +15,12 @@ import {
   type DataTableStatus,
   type StatusTone,
 } from '@alola/ui';
-import type { LucideIcon } from '@alola/ui/icons';
-import type { ReactNode } from 'react';
+import { Search, type LucideIcon } from '@alola/ui/icons';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import type { ApiError } from '../api/client';
 import { useSession } from '../api/session';
 import type { AsyncState } from '../api/useApi';
+import { useFormatters } from '../format';
 import { useLocale } from '../locale';
 
 /**
@@ -266,6 +271,144 @@ export function useTableLabels(): DataTableLabels {
     forbiddenTitle: t('states.forbiddenTitle'),
     forbiddenDescription: t('states.forbiddenDescription'),
   };
+}
+
+/**
+ * The foot of a paged list: how many of how many are shown, and the next page on request. The total
+ * is the server's count within the actor's scope, never the length of what happens to be loaded.
+ */
+export function ListFooter({
+  shown,
+  total,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+  error,
+}: {
+  shown: number;
+  total: number | undefined;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+  error?: ApiError | undefined;
+}) {
+  const { t } = useLocale();
+  const format = useFormatters();
+  return (
+    <>
+      <Typography variant="body2" color="text.secondary" component="span">
+        {t('pagination.showing', {
+          shown: format.number(shown),
+          total: format.number(total ?? shown),
+        })}
+      </Typography>
+      {hasMore ? (
+        <Button
+          variant="outlined"
+          color="inherit"
+          size="small"
+          onClick={onLoadMore}
+          disabled={loadingMore}
+        >
+          {loadingMore ? t('pagination.loadingMore') : t('pagination.showMore')}
+        </Button>
+      ) : null}
+      {error ? (
+        <Typography variant="body2" color="error" role="alert" component="span">
+          {t('states.errorDescription')}
+        </Typography>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The search field of one list. It filters **this list** on the server — its label says so, which is
+ * what tells it apart from the global search in the top bar. Enter submits; the value is kept.
+ */
+export function ListSearch({
+  value,
+  onSubmit,
+  label,
+  ltr = false,
+}: {
+  value: string;
+  onSubmit: (value: string) => void;
+  label?: string;
+  /** For codes and phone numbers, which are typed left to right in either language. */
+  ltr?: boolean;
+}) {
+  const { t } = useLocale();
+  const [draft, setDraft] = useState(value);
+  const [synced, setSynced] = useState(value);
+  if (synced !== value) {
+    setSynced(value);
+    setDraft(value);
+  }
+  return (
+    <Box
+      component="form"
+      role="search"
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault();
+        onSubmit(draft.trim());
+      }}
+      sx={{ display: 'flex', gap: 1 }}
+    >
+      <TextField
+        fullWidth
+        label={label ?? t('filters.searchInList')}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        slotProps={{
+          ...(ltr ? { htmlInput: { dir: 'ltr' } } : {}),
+          input: {
+            startAdornment: (
+              <InputAdornment position="start" sx={{ color: 'text.secondary' }}>
+                <Icon icon={Search} size={18} />
+              </InputAdornment>
+            ),
+          },
+        }}
+      />
+      <Button type="submit" variant="outlined" sx={{ flexShrink: 0 }}>
+        {t('filters.searchSubmit')}
+      </Button>
+    </Box>
+  );
+}
+
+/** A labelled select for a list filter, with an "All" option that clears it. */
+export function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+  minWidth = 170,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+  minWidth?: number;
+}) {
+  const { t } = useLocale();
+  return (
+    <TextField
+      select
+      label={label}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      sx={{ minWidth }}
+    >
+      <MenuItem value="">{t('filters.all')}</MenuItem>
+      {options.map((option) => (
+        <MenuItem key={option.value} value={option.value}>
+          {option.label}
+        </MenuItem>
+      ))}
+    </TextField>
+  );
 }
 
 /** A responsive grid of fields or cards — the layout every detail screen and dashboard uses. */

@@ -28,6 +28,7 @@ import { useApi, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { PersonName } from '../people';
 import { ExportButton } from './ExportButton';
 import { EnumChip, LEAD_TONES, RequirePermission, Verbatim, tableStatus } from './shared';
 
@@ -105,7 +106,7 @@ function LeadsScreen() {
       {
         key: 'owner',
         header: t('crm.assignedTo'),
-        render: (lead) => <Verbatim>{lead.assignedToAccountId}</Verbatim>,
+        render: (lead) => <PersonName accountId={lead.assignedToAccountId} />,
         secondary: true,
       },
     ],

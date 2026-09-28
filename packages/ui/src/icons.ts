@@ -16,6 +16,7 @@
  */
 export type { LucideIcon } from 'lucide-react';
 export {
+  AlarmClock,
   ArrowLeft,
   ArrowRight,
   BadgeCheck,

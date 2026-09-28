@@ -81,12 +81,6 @@ function OrganizationScreen() {
             </Typography>
           ),
       },
-      {
-        key: 'account',
-        header: t('auth.loginIdentifier'),
-        render: (row) => (row.accountId ? <Verbatim>{row.accountId}</Verbatim> : '—'),
-        secondary: true,
-      },
     ],
     [departments, jobTitles, names, t],
   );

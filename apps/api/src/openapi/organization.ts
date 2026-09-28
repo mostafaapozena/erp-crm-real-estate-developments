@@ -14,6 +14,7 @@ import {
   LegalEntityListSchema,
   LegalEntitySchema,
   OrgChartSchema,
+  PeopleLookupResultSchema,
   OrgLifecycleChangeSchema,
   PlacementHistoryListSchema,
   PlacementLifecycleSchema,
@@ -56,6 +57,7 @@ export const organizationComponents = {
   JobTitleList: JobTitleListSchema,
   CreateJobTitleRequest: CreateJobTitleSchema,
   Placement: PlacementSchema,
+  PeopleLookupResult: PeopleLookupResultSchema,
   PlacementList: PlacementListSchema,
   CreatePlacementRequest: CreatePlacementSchema,
   UpdatePlacementRequest: UpdatePlacementSchema,
@@ -132,6 +134,31 @@ export function organizationPaths(h: OpenApiHelpers): PathMap {
   });
 
   return {
+    '/api/v1/organization/people': {
+      get: {
+        operationId: 'lookupPeople',
+        summary: 'Names for account references the caller already holds',
+        description:
+          'Requires authentication only (ADR-0031). Returns the organization directory label and job ' +
+          'title of the active placement for each requested account reference — nothing else: no ' +
+          'contact detail, login identifier, placement or employee data. A reference with no active ' +
+          'placement is absent from the answer. At most 100 references per request.',
+        parameters: [
+          {
+            ...queryParameter(
+              'ids',
+              { type: 'string', maxLength: 20100 },
+              'Comma-separated account references',
+            ),
+            required: true,
+          },
+        ],
+        responses: {
+          '200': h.json('PeopleLookupResult', 'The people found'),
+          ...h.authorizedErrors,
+        },
+      },
+    },
     '/api/v1/organization/chart': {
       get: {
         operationId: 'getOrgChart',

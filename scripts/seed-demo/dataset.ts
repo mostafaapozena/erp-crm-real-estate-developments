@@ -33,9 +33,48 @@ export const DEMO_TIME_ZONE = 'Africa/Cairo';
 
 export const LEGAL_ENTITY = {
   code: 'LE-DEMO',
-  name: { ar: 'دار المستقبل للتطوير العقاري', en: 'Future House Development' },
+  name: { ar: 'شركة العلا للتطوير العقاري', en: 'ALOLA Developments' },
   taxNumber: 'DEMO-TAX-0001',
 } as const;
+
+/**
+ * Names the demonstration legal entity carried before the ALOLA identity was applied (2026-09-28).
+ * `seed:demo:identity` renames an entity only while it still carries one of these — a name someone
+ * has since changed through the product is theirs, and is left alone.
+ */
+export const SUPERSEDED_LEGAL_ENTITY_NAMES = [
+  { ar: 'دار المستقبل للتطوير العقاري', en: 'Future House Development' },
+] as const;
+
+/**
+ * The demonstration deployment's company profile (PLAT-022). Configuration, not source: the shell,
+ * the sign-in screen and the browser tab read it at runtime, and a client deployment writes its own
+ * through Settings → Company identity or `client:init`. Registration numbers and contact details are
+ * fictional, in the same style as the rest of this file.
+ */
+export const COMPANY_PROFILE = {
+  legalName: { ar: 'شركة العلا للتطوير العقاري', en: 'ALOLA Developments' },
+  tradeName: { ar: 'شركة العلا للتطوير العقاري', en: 'ALOLA Developments' },
+  shortName: { ar: 'العلا', en: 'ALOLA' },
+  commercialRegistration: 'DEMO-CR-0001',
+  taxRegistration: 'DEMO-TAX-0001',
+  otherIdentifiers: [],
+  address: { ar: 'القاهرة الجديدة، القاهرة، مصر', en: 'New Cairo, Cairo, Egypt' },
+  country: 'EG',
+  phone: '+20 2 0000 0100',
+  email: 'info@demo.invalid',
+  website: 'https://alola.demo.invalid',
+  defaultLocale: 'ar',
+  supportedLocales: ['ar', 'en'],
+  baseCurrency: DEMO_CURRENCY,
+  documentFooter: {
+    ar: 'شركة العلا للتطوير العقاري — مستند عرض تجريبي ببيانات وهمية',
+    en: 'ALOLA Developments — demonstration document with fictional data',
+  },
+} as const;
+
+/** The one seeded campaign headline that named the superseded company. */
+export const SUPERSEDED_CAMPAIGN_HEADLINE = 'دار المستقبل للتطوير العقاري';
 
 export const BRANCHES = [
   {
@@ -616,7 +655,7 @@ export const DEMO_CAMPAIGNS: DemoCampaign[] = [
     state: 'readyToPublish',
     startsInDays: -60,
     audienceSummary: 'عمليات البحث باسم الشركة وأسماء المشروعات.',
-    creativeHeadline: 'دار المستقبل للتطوير العقاري',
+    creativeHeadline: 'شركة العلا للتطوير العقاري',
     creativeBody: 'تعرف على مشروعاتنا في القاهرة الجديدة والإسكندرية.',
     demoMetrics: { impressions: 54000, reach: 38000, clicks: 6200, leads: 110, spend: 18700 },
   },

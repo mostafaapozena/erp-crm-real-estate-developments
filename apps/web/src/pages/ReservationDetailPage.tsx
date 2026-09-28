@@ -19,6 +19,7 @@ import { useApi, useIdempotencyKey, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { PersonName } from '../people';
 import {
   CardGrid,
   EnumChip,
@@ -194,7 +195,7 @@ function ReservationDetailScreen() {
               <Verbatim>{`${format.number(record.discountPercentage, 2)}%`}</Verbatim>
             </Field>
             <Field label={t('sales.salesOwner')}>
-              <Verbatim>{record.salesOwnerAccountId}</Verbatim>
+              <PersonName accountId={record.salesOwnerAccountId} showTitle />
             </Field>
             {record.cancellationReason ? (
               <Field label={t('fields.reason')}>{record.cancellationReason}</Field>

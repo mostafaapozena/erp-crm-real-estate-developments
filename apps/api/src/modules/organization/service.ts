@@ -25,6 +25,7 @@ import {
   type LegalEntity,
   type OrgChart,
   type OrgUnitKind,
+  type PersonReference,
   type Placement,
   type PlacementHistoryEntry,
   type PlacementLifecycle,
@@ -551,6 +552,47 @@ export class OrganizationService {
     return document
       ? { branchId: document.branchId, legalEntityId: document.legalEntityId }
       : undefined;
+  }
+
+  /**
+   * Names for account references the caller already holds (ADR-0031).
+   *
+   * Deliberately **not** scope-filtered, and deliberately narrow. A sales representative must see who
+   * owns a lead in their branch even when that colleague's placement is outside their own scope, and
+   * the answer is only what the organization directory already labels the person with: the display
+   * name and the job title of an **active** placement. No contact detail, login identifier, placement
+   * reference or employee data is returned, and nothing is returned for a reference that is not
+   * asked for — account references are random, so there is nothing to enumerate.
+   */
+  async lookupPeople(accountIds: readonly string[]): Promise<PersonReference[]> {
+    if (accountIds.length === 0) return [];
+    const ids = [...new Set(accountIds)];
+    for (const accountId of ids) assertSafeFilter({ accountId });
+    const placements = await this.placements
+      .find({ accountId: { $in: ids }, status: 'active' })
+      .sort({ startedOn: -1, placementId: 1 })
+      .limit(ids.length * 2)
+      .lean<PlacementDocument[]>()
+      .exec();
+    const titleIds = [...new Set(placements.map((placement) => placement.jobTitleId))];
+    const titles = titleIds.length
+      ? await this.jobTitles
+          .find({ jobTitleId: { $in: titleIds } })
+          .lean<JobTitleDocument[]>()
+          .exec()
+      : [];
+    const titleById = new Map(titles.map((title) => [title.jobTitleId, title.name]));
+    const people = new Map<string, PersonReference>();
+    for (const placement of placements) {
+      if (!placement.accountId || people.has(placement.accountId)) continue;
+      const jobTitle = titleById.get(placement.jobTitleId);
+      people.set(placement.accountId, {
+        accountId: placement.accountId,
+        displayName: placement.displayName,
+        ...(jobTitle ? { jobTitle: { ar: jobTitle.ar, en: jobTitle.en } } : {}),
+      });
+    }
+    return [...people.values()];
   }
 
   async getPlacementByAccount(accountId: string): Promise<Placement | undefined> {

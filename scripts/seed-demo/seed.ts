@@ -382,6 +382,7 @@ const SEED_PERMISSIONS: Permission[] = [
 ];
 
 const ADMINISTRATIVE = new Set<string>([
+  'company.profile.manage',
   'org.manage',
   'org.placement.manage',
   'security.account.create',
