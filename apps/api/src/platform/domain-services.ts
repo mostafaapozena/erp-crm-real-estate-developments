@@ -38,6 +38,7 @@ import { SalesService } from '../modules/sales';
 import { SecurityService } from '../modules/security';
 import { SettingsService, referenceItemImporter } from '../modules/settings';
 import { ImportService, readFirstSheet } from '../modules/imports';
+import { IntegrationService } from '../modules/integrations';
 import { TaskService } from '../modules/tasks';
 import { SearchService, type SearchProvider } from '../modules/search';
 import { AppError } from '../errors';
@@ -94,6 +95,7 @@ export interface DomainServices {
   tasks: () => TaskService;
   search: () => SearchService;
   imports: () => ImportService;
+  integrations: () => IntegrationService;
   /** The private file store; a `LocalDiskFileStore` only in development and test. */
   fileStore: PrivateFileStore;
 }
@@ -120,6 +122,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let taskService: TaskService | undefined;
   let searchService: SearchService | undefined;
   let importService: ImportService | undefined;
+  let integrationService: IntegrationService | undefined;
 
   /**
    * Encryption for MFA secrets (`SEC-017`).
@@ -478,6 +481,24 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     return importService;
   }
 
+  /**
+   * The integration foundation (INTEGRATION-001 … 005, ADR-0010). **No adapter is registered**: every
+   * provider reads `noAdapter`, its webhook endpoint answers 404, and an outbound operation is held.
+   * Credentials go through the same encryptor as MFA secrets, so they cannot be stored in staging or
+   * production until the KMS adapter exists (`SEC-033`).
+   */
+  function getIntegrationService(): IntegrationService {
+    const connection = requireConnection();
+    integrationService ??= new IntegrationService({
+      connection,
+      audit: getAuditService(),
+      encryptor: buildEncryptor(),
+      adapters: [],
+      logger,
+    });
+    return integrationService;
+  }
+
   function getOrganizationService(): OrganizationService {
     const connection = requireConnection();
     organizationService ??= new OrganizationService({
@@ -800,6 +821,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     tasks: getTaskService,
     search: getSearchService,
     imports: getImportService,
+    integrations: getIntegrationService,
     fileStore,
   };
 }

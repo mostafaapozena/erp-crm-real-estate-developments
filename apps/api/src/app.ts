@@ -11,6 +11,7 @@ import { attachActor, unauthenticatedResolver, type ActorResolver } from './http
 import { assertMutationAudited, auditRequestContext } from './http/audit-context';
 import { CORRELATION_HEADER, correlation, correlationIdOf } from './http/correlation';
 import { csrfOriginGuard } from './http/csrf';
+import { keepRawBody } from './http/raw-body';
 import { errorHandler, notFound } from './http/errors';
 import { rateLimit } from './http/rate-limit';
 import { buildOpenApiDocument } from './openapi';
@@ -101,7 +102,8 @@ export function createApp(deps: AppDependencies): Express {
   });
 
   app.use(rateLimit(deps.rateLimiter, (req) => `ip:${req.ip ?? 'unknown'}`));
-  app.use(express.json({ limit: JSON_BODY_LIMIT, strict: true }));
+  // Webhook paths keep the exact bytes as well, for signature verification (INTEGRATION-004).
+  app.use(express.json({ limit: JSON_BODY_LIMIT, strict: true, verify: keepRawBody }));
   app.use(csrfOriginGuard(deps.config.CORS_ALLOWED_ORIGINS));
 
   // SEC-025: the actor is resolved server-side, then every protected route checks permissions.

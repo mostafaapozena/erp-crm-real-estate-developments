@@ -30,6 +30,7 @@ import {
 } from '../modules/notifications/model';
 import { taskModel } from '../modules/tasks/model';
 import { exportRecordModel, importBatchModel } from '../modules/imports/model';
+import { connectionModel, outboxModel, webhookModel } from '../modules/integrations/model';
 import {
   branchModel,
   departmentModel,
@@ -116,6 +117,9 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     taskModel(connection),
     importBatchModel(connection),
     exportRecordModel(connection),
+    connectionModel(connection),
+    webhookModel(connection),
+    outboxModel(connection),
   ];
   const created: string[] = [];
   for (const model of models) {

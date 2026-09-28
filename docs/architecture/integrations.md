@@ -3,6 +3,15 @@
 Implements [ADR-0010](../decisions/adr-0010-integration-adapter-boundary.md) (adapter boundary) and
 [ADR-0011](../decisions/adr-0011-meta-operating-boundary.md) (Meta operating boundary).
 
+## 0. Foundation status (F10, 2026-09-28)
+
+The mechanism in this document exists: `apps/api/src/modules/integrations/` — registry with encrypted
+credentials, pinned-version recording, health and freshness, `POST /api/v1/webhooks/{provider}` with
+raw-body signature verification and a unique provider-event inbox, a leased processing sweep with a
+dead letter, and an idempotency-keyed outbox. **No adapter is registered**, so every provider below
+reads `noAdapter` and nothing is connected. Each adapter arrives with its business phase and its own
+contract tests; the provider-SDK lint rule of ADR-0010 is added with the first SDK.
+
 ## 1. Provider registry
 
 | Provider | Purpose | Direction | Phase | Status |

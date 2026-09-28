@@ -211,12 +211,26 @@ generated `.xlsx`), `apps/api/src/platform/csv.test.ts` (5), `apps/web/src/pages
 | CORE-IMPORT-002 | Every issue is reported by spreadsheet row and column (header problems as row 1; unknown list, product-bound list, bad code, missing label, one-language description, bad sort order, duplicate in the file, code already stored); a file with any issue cannot be committed and nothing is written; a code taken between preview and commit rolls the **whole** import back and leaves the batch pending; the full issue list downloads as formula-safe CSV; a batch is visible only to its uploader |
 | CORE-IMPORT-003 | `POST /exports` for leads and units needs `crm.lead.export` / `inventory.unit.export`; rows come from the owning module's scoped query (a branch-A exporter's file has no branch-B lead); a unit's price columns are **absent** without `inventory.unit.viewPricing`; a cell beginning `=`, `+`, `-`, `@`, tab or CR is neutralized; more than 5000 rows is refused (`EXPORT_TOO_LARGE`); each export is an append-only record plus an audit event; the file is reached only through a signed link that expires within minutes; `feature.exports` switches it off |
 
+### Implementation evidence — F10 (2026-09-28)
+
+Tests: `apps/api/src/modules/integrations/integrations.int-test.ts` (13, real MongoDB, a fake SMS adapter
+that connects to nothing) and `adapters.test.ts` (3). **No real adapter is registered in this build**;
+every provider slot reads `noAdapter`.
+
+| ID | Evidence |
+|---|---|
+| INTEGRATION-001 | Nine provider slots; credentials only under the adapter's declared names (`UNKNOWN_CREDENTIAL`, `MISSING_CREDENTIAL`), encrypted with the `Encryptor` under a provider-bound context; neither the response, the stored row nor the audit record contains a secret (the audit names the credentials only); optimistic version; with no encryption key configured — every environment before `SEC-033` outside development — nothing is stored; administrative `integration.view`/`manage`/`process` |
+| INTEGRATION-002 | The adapter's pinned API version is recorded with the credentials; a recorded version that differs from the running adapter's is reported as `versionMismatch`, never silently upgraded. Pinned versions in this build: **none** (no adapter) |
+| INTEGRATION-003 | A check records state, token validity and the last error code (never provider prose); `recordSync` sets the last sync; freshness reads `fresh`, `stale` after the adapter's window, or `unknown` |
+| INTEGRATION-004 | The signature is verified on the **raw bytes** (kept by the JSON parser for webhook paths only) before anything is parsed or stored; a wrong secret, a changed body, a capture older than five minutes and an unsigned request are `401`, audited, and store nothing; `verifyHmacSha256` compares in constant time; a provider with no adapter, no credentials or switched off has no endpoint (`404`) |
+| INTEGRATION-005 | A unique index on provider + provider event ID: a repeat is `200` acknowledged and discarded, one row stored; processing happens in the sweep, never in the provider's request; two parallel sweeps process each event once; a failing event backs off and is kept as `failed` after five attempts; the outbox records one operation per idempotency key, holds it while the provider is not connected, and passes the **same key** on every attempt |
+
 ## Current status summary
 
 | | Count |
 |---|---|
 | Phase 1 requirements registered | 113 |
-| Status `implemented` (code and passing tests) | **97** of the original 113, plus 13 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
+| Status `implemented` (code and passing tests) | **102** of the original 113, plus 13 of the 17 foundation additions — see per-row status in `docs/MEMORY.md` |
 | Status `approved` (not yet started) | see per-row status |
 | Status `verified` | **0** — nothing is gate-verified until Phase 1 review |
 | Gap requirements from discovery, status `proposed` | 9 (4 others already registered in Phase 1) |
@@ -484,11 +498,11 @@ adapter exists ([ADR-0023](decisions/adr-0023-password-hashing-and-session-token
 
 | ID | Requirement | Source | Notes |
 |---|---|---|---|
-| INTEGRATION-001 | Registry with encrypted provider configuration | ADR-0010 | Was `CORE-INTEGRATION-001` |
-| INTEGRATION-002 | Pinned API version per adapter, recorded in config and `MEMORY.md` | ADR-0010 | Was `CORE-INTEGRATION-002` |
-| INTEGRATION-003 | Health, token validity, last sync, last error, and data-freshness exposure | ADR-0010 | Was `CORE-INTEGRATION-003` |
-| INTEGRATION-004 | Webhook signature verification framework, applied before any processing | ADR-0010 | Was `CORE-INTEGRATION-004` |
-| INTEGRATION-005 | Provider event ID uniqueness; duplicates acknowledged and discarded | ADR-0010 | Was `CORE-INTEGRATION-005` |
+| INTEGRATION-001 | Registry with encrypted provider configuration | ADR-0010 | **implemented** 2026-09-28 (F10). Was `CORE-INTEGRATION-001` |
+| INTEGRATION-002 | Pinned API version per adapter, recorded in config and `MEMORY.md` | ADR-0010 | **implemented** 2026-09-28 (F10) — mechanism; no adapter pinned yet. Was `CORE-INTEGRATION-002` |
+| INTEGRATION-003 | Health, token validity, last sync, last error, and data-freshness exposure | ADR-0010 | **implemented** 2026-09-28 (F10). Was `CORE-INTEGRATION-003` |
+| INTEGRATION-004 | Webhook signature verification framework, applied before any processing | ADR-0010 | **implemented** 2026-09-28 (F10). Was `CORE-INTEGRATION-004` |
+| INTEGRATION-005 | Provider event ID uniqueness; duplicates acknowledged and discarded | ADR-0010 | **implemented** 2026-09-28 (F10). Was `CORE-INTEGRATION-005` |
 | INTEGRATION-006 | Idempotent job framework with backoff and dead-letter queue | ADR-0010 | Was `CORE-INTEGRATION-006` |
 
 ## CORE-NOTIFY — Notifications

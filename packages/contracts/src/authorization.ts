@@ -105,6 +105,15 @@ export const PERMISSIONS = [
   /** Run the reminder and escalation sweep by hand. Administrative. */
   'task.sweep',
 
+  // Integrations (INTEGRATION-001 … 005). All administrative: a provider connection speaks for the
+  // whole company, and its health reveals which providers the company uses.
+  /** See each provider's state and health — never a credential. */
+  'integration.view',
+  /** Store credentials, switch a provider off or on, run its check. */
+  'integration.manage',
+  /** Run the webhook-processing and outbox sweep by hand. */
+  'integration.process',
+
   // Security administration
   'security.role.view',
   'security.role.create',
@@ -223,6 +232,10 @@ export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
   /** Moving someone's whole workload changes who is accountable for it. */
   'task.reassign',
   'task.sweep',
+  /** A provider connection acts for the whole company, and its credentials are its keys. */
+  'integration.view',
+  'integration.manage',
+  'integration.process',
   /**
    * Organization structure is administrative because **every data scope resolves against it**
    * (SEC-026) and the reporting line decides where an overdue approval escalates (`APPROVAL-005`).

@@ -54,6 +54,7 @@ import { notificationComponents, notificationPaths } from './notifications';
 import { taskComponents, taskPaths } from './tasks';
 import { searchComponents, searchPaths } from './search';
 import { importComponents, importPaths } from './imports';
+import { integrationComponents, integrationPaths } from './integrations';
 import { numberingComponents, numberingPaths } from './numbering';
 import { organizationComponents, organizationPaths } from './organization';
 import { salesComponents, salesPaths } from './sales';
@@ -123,6 +124,7 @@ const components = {
   ...taskComponents,
   ...searchComponents,
   ...importComponents,
+  ...integrationComponents,
 } as const;
 
 type ComponentName = keyof typeof components;
@@ -285,6 +287,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     ...taskPaths(helpers),
     ...searchPaths(helpers),
     ...importPaths(helpers),
+    ...integrationPaths(helpers),
   };
   const schemas = Object.fromEntries(
     Object.entries(components).map(([name, schema]) => {

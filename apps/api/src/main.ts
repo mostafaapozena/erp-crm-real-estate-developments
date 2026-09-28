@@ -20,6 +20,7 @@ import { notificationRouter } from './modules/notifications';
 import { taskRouter } from './modules/tasks';
 import { searchRouter } from './modules/search';
 import { exportRouter, importRouter } from './modules/imports';
+import { integrationRouter, webhookRouter } from './modules/integrations';
 import { organizationRouter } from './modules/organization';
 import { salesRouter } from './modules/sales';
 import { securityRouter } from './modules/security';
@@ -218,6 +219,12 @@ const modules: ApiModule[] = [
   { basePath: '/search', router: searchRouter({ getService: services.search, guard }) },
   { basePath: '/imports', router: importRouter({ getService: services.imports, guard }) },
   { basePath: '/exports', router: exportRouter({ getService: services.imports, guard }) },
+  {
+    basePath: '/integrations',
+    router: integrationRouter({ getService: services.integrations, guard }),
+  },
+  // Public by nature: a webhook is authenticated by its signature, verified before anything else.
+  { basePath: '/webhooks', router: webhookRouter({ getService: services.integrations }) },
   {
     basePath: '/documents',
     router: documentRouter({

@@ -54,11 +54,10 @@ implemented or verified requirement.
   ([ADR-0020](decisions/adr-0020-local-docker-development-services.md)). Integration tier: **59 passed,
   0 failed, 0 skipped** (191 tests).
 - Gate status: **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Every mandatory verification check passes, but
-  **7 of 113** Phase 1 requirements are not started (`INTEGRATION-001`–`005`,
-  `CORE-DOC-003`/`005`), 9 are in progress, and the gate also requires a
+  **2 of 113** Phase 1 requirements are not started (`CORE-DOC-003`/`005`), 9 are in progress, and the gate also requires a
   stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
-- Requirements `implemented` (code + passing tests): **97 of 113** · `in-progress`: 9 · not started: 7 (as of F9, 2026-09-28)
+- Requirements `implemented` (code + passing tests): **102 of 113** · `in-progress`: 9 · not started: 2 (as of F10, 2026-09-28)
 
 ## Foundation completion (post-demo master prompt) — IN PROGRESS
 
@@ -97,8 +96,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
 | F6 Internal notifications | **complete** | `8ee6271` |
 | F7 Tasks and escalation | **complete** | `505b1e5` |
 | F8 Global search | **complete** | `e79b456` |
-| F9 Import and export | **complete** | the commit containing this row |
-| F10–F12 | not started | — |
+| F9 Import and export | **complete** | `fe2127c` |
+| F10 Integration foundation | **complete** | the commit containing this row |
+| F11–F12 | not started | — |
 
 ### F0 — what changed
 
@@ -354,10 +354,37 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
   OpenAPI 171 paths / 0 broken refs, **E2E 42 passed / 0 skipped**; 30 baseline demonstration
   collections unchanged.
 
+### F10 — what changed
+
+- `INTEGRATION-001`–`005` implemented: module `apps/api/src/modules/integrations/` (model, adapter
+  contract, service, routers), contracts `packages/contracts/src/integrations.ts`, routes
+  `/api/v1/integrations` (list, read, credentials, disable/enable, check, sweep) and the public
+  `POST /api/v1/webhooks/{provider}`. Administrative permissions `integration.view`, `.manage`,
+  `.process`.
+- **No adapter is registered** (`adapters: []` in `domain-services.ts`); every provider reads
+  `noAdapter`. Pinned API versions in this build: **none** (INTEGRATION-002 records them here as
+  adapters arrive).
+- Credentials go through the same `Encryptor` as MFA secrets — so in staging and production they
+  **cannot be stored** until the KMS adapter exists (`SEC-033`), by design.
+- `http/raw-body.ts`: the global JSON parser keeps the exact bytes for `/api/v1/webhooks/*` only, so
+  a signature is checked against what the provider sent. `WEBHOOK_MAX_BYTES` equals the 100 kB JSON
+  limit.
+- `verifyHmacSha256`/`signHmacSha256`: timestamped HMAC-SHA256 with a 300 s tolerance and
+  constant-time comparison, as a building block for adapters.
+- Processed inbox rows carry a 30-day `purgeAfter` TTL (operational delivery records; the business
+  record is the evidence). Outbox rows are never deleted.
+- `INTEGRATION-006` stays `in-progress`: the registry now exists, but no worker job consumes the
+  sweeps yet — that is F12.
+- ADR-0010's "a provider SDK import outside its adapter fails lint" is not enforced yet: no SDK exists.
+  Add the rule with the first adapter.
+- Measured at the F10 commit: lint, format, typecheck, i18n, secrets (428 files), ignored-source, links,
+  **unit 524**, **integration 474 passed / 0 failed / 0 skipped**, build, bundle, OpenAPI 179 paths / 0
+  broken refs, **E2E 42 passed / 0 skipped**; 30 baseline demonstration collections unchanged.
+
 ### Resume point
 
-Next package: **F10 — integration foundation** (`INTEGRATION-001`–`005`): adapter registry, outbox,
-webhook inbox with signature verification and replay protection. No provider is connected.
+Next package: **F11 — migrations, deployment configuration, client initialization** (`OPS-004`, `OPS-005`)
+with the client deployment checklist and the client data-intake checklist.
 
 ### Superseded resume note (F9, kept for traceability)
 
@@ -371,7 +398,7 @@ the same paths. Remaining: the reference-items importer, leads and units exporte
 
 - [ ] Phase 1 — *in progress: scaffolding, audit, authorization, identity/authentication, and the
       approval engine done; foundation packages F0–F7 done (organization, settings, numbering, documents,
-      notifications, tasks) F8 (search) and F9 (import/export) done; integration registry, PDF/QR not started*
+      notifications, tasks) F8 (search), F9 (import/export) and F10 (integration foundation) done; PDF/QR not started*
 - [ ] Phases 2–9 — not started. **Do not start Phase 2.**
 
 ## Recently completed — 2026-09-19
@@ -811,11 +838,11 @@ untouched.
 
 ### Phase 1 registry (113 IDs)
 
-**`implemented` (97):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+**`implemented` (102):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–008, 010, 011, 012 (11) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
 **SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2) ·
-**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6) · **CORE-TASK-001–005** (F7) · **CORE-SEARCH-001** (F8) · **CORE-IMPORT-001–002** (F9)
+**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6) · **CORE-TASK-001–005** (F7) · **CORE-SEARCH-001** (F8) · **CORE-IMPORT-001–002** (F9) · **INTEGRATION-001–005** (F10)
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -843,7 +870,7 @@ nothing while both hold; it becomes necessary only if a cookie ever needs `SameS
 `APPROVAL-005` left `in-progress` on 2026-09-27: with the organization foundation (F2) an overdue
 approval escalates through the real reporting line, and an unresolvable one is still reported as such.
 
-**Not started (7):** INTEGRATION-001–005 · CORE-DOC-003, 005
+**Not started (2):** CORE-DOC-003, 005
 
 ### Foundation additions (registered 2026-09-27, 17 IDs)
 
@@ -1079,7 +1106,7 @@ CORE-IMPORT-003 (F9)
 
 | ID | Blocker | Blocks |
 |---|---|---|
-| Phase 1 scope | 7 of 113 requirements not started; 9 in progress (F9) | **Phase 1 approval** (phase-gates §1) |
+| Phase 1 scope | 2 of 113 requirements not started; 9 in progress (F10) | **Phase 1 approval** (phase-gates §1) |
 | Stakeholder gate | Written approval outstanding. The demonstration is now **buildable and runnable** — `npm run seed:demo` — but has not been given | **Phase 1 approval** |
 | `SD-01`, `SD-02` | The real organization, roles, approval thresholds and segregation-of-duty rules. The demonstration seeds illustrative ones and closes neither | **Macro Phase 2** |
 | `SEC-033` | No KMS adapter, so staging and production cannot store an MFA secret | Any environment beyond development |

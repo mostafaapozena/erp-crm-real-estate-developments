@@ -357,6 +357,9 @@ anyone could consume numbers.
 | F6 | `notifications` | `_id_unique`, `_dedupe_unique`, `_inbox`, `_unread` (partial), `_due`, `_lease` | One row per recipient, channel and event; a type and parameters, never prose |
 | F6 | `notificationAttempts` | `_unique` (notification + attempt) | **Append-only** delivery attempts |
 | F6 | `notificationPreferences` | `_account_unique` | Per-account language and external-channel opt-in |
+| F10 | `integrationConnections` | `_provider_unique` | Encrypted credentials (ciphertext only), recorded API version, health |
+| F10 | `webhookInbox` | `_id_unique`, `_provider_event_unique`, `_due`, `_purge` (TTL) | One row per provider event; processed rows expire after 30 days |
+| F10 | `integrationOutbox` | `_id_unique`, `_key_unique`, `_due` | One row per idempotency key; never deleted |
 | F9 | `importBatches` | `_id_unique`, `_creator` | Every uploaded file's validated rows and issues; committed or discarded, never deleted |
 | F9 | `exportRecords` | `_id_unique`, `_creator` | Immutable record of each export: kind, rows, columns, file digest |
 | F7 | `tasks` | `_id_unique`, `_assignee`, `_escalatedTo`, `_link`, `_reminder_due`, `_overdue`, `_scope_branch`, `_scope_team`, `_calendar` | Completed or cancelled, never deleted; scope fields copied from the linked record |
