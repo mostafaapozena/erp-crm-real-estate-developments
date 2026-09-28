@@ -14,10 +14,10 @@ current gate is verified and explicitly approved** (`docs/PHASE-PROMPTS.md`).
 | | |
 |---|---|
 | Active phase | **1 — Discovery, architecture, core, security, localization, Light Mode** |
-| Sub-stage | Build half — foundation, audit, authorization, identity, and approvals implemented |
-| Status | **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Current verified status in `../MEMORY.md` |
+| Sub-stage | Foundation completion (F0–F12) done on 2026-09-28; the foundation gate report is in `../MEMORY.md` |
+| Status | **PHASE 1 NOT APPROVED.** Current verified status in `../MEMORY.md` |
 | Requirements `verified` | 0 — nothing is gate-verified before the Phase 1 review |
-| Blocking the phase gate | 24 of 113 requirements not started (`INTEGRATION-001`–`005`, `CORE-NOTIFY`, `CORE-TASK`, `CORE-DOC`, `CORE-SEARCH`, `CORE-IMPORT`), 10 in progress, and the gate needs a stakeholder demonstration and written approval. `D2` closed on 2026-09-21: the services run locally and the integration gate passes with zero skips |
+| Blocking the phase gate | 2 of 113 requirements not started (`CORE-DOC-003` PDF with embedded Arabic fonts, `CORE-DOC-005` QR verification), 8 in progress, and the gate needs a stakeholder demonstration and written approval |
 
 ## Delivery grouping: four macro phases
 
@@ -55,6 +55,13 @@ status and closed no gate, exactly as this section requires.
 Capabilities that depend on an unconnected provider — Meta, WhatsApp, payment providers — are simulated
 behind the adapter interface they will later use, and say so on screen in both languages
 ([ADR-0026](../decisions/adr-0026-demonstration-mode-boundary.md)).
+
+## After the foundation: five business master prompts
+
+The remaining engineering phases are delivered as five business master prompts, a grouping of
+registered work with no re-registration ([ADR-0029](../decisions/adr-0029-business-master-prompts.md)).
+The plan, with each prompt's scope, prerequisites, decisions and definition of done, is
+[business-master-prompts.md](business-master-prompts.md). **None of them is started.**
 
 ## Phase index
 

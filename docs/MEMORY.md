@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-23
+Last updated: 2026-09-28 (foundation gate)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -11,7 +11,11 @@ decisions → `dfc0ac5` development services + integration gate → `3d6bdf1` au
 **Macro Phase 1** — `b61b4df` delivery rebaseline (ADR-0025, ADR-0026) → `f16f8a0` `CORE-ORG` minimum →
 `5b2d89d` inventory → `a2d3ec6` CRM → `4f42474` reservations, contracts, schedules → `a514fb1`
 collections → `56857f3` marketing → `4806fef` web application → `98f1003` demonstration seed →
-`5cf39b8` end-to-end suite → documentation (the commit containing this file)
+`5cf39b8` end-to-end suite → `9cc3189` documentation → **Foundation completion** — `24fe608` F0 →
+`1270ac7` F1 → `748a8b6` F2 → `d64ec0c` F3 → `85cf2ca` F4 → `92d3110` F5 → `8ee6271` F6 → `505b1e5` F7 →
+`e79b456` F8 → `fe2127c` F9 → `17b6fef` F10 → `09dfb36` F11 → `ee3f7c4` F12 → `e8dacea` build-stable
+migration checksums → planning and foundation gate (the commit containing this file). Local only; the
+owner pushes.
 
 ## Project identity
 
@@ -59,7 +63,7 @@ implemented or verified requirement.
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
 - Requirements `implemented` (code + passing tests): **103 of 113** · `in-progress`: 8 · not started: 2 (as of F12, 2026-09-28)
 
-## Foundation completion (post-demo master prompt) — IN PROGRESS
+## Foundation completion (post-demo master prompt) — COMPLETE, stopped at the foundation gate
 
 Started 2026-09-27. Scope: Part A forensic audit, then work packages F0–F12 (stabilization, deployment
 model and company profile, organization, settings, number sequences, documents and templates,
@@ -398,6 +402,9 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
   a default only where safe, owner, blocking macro phase and status; four `proposed`, the rest `open`).
 - A schema with no declared index is not created by `ensureIndexes` (Mongoose creates the collection
   on the first index); the lock schema declares one for that reason.
+- **Corrected after the fact (`e8dacea`):** F11's checksum hashed the migration function's text,
+  which differs between `tsx` and the production bundle, so the built API reported a source-migrated
+  database as `mismatch`. It now hashes declared fields only — see "Foundation gate" below.
 - Measured at the F11 commit: lint, format, typecheck, i18n, secrets (441 files), ignored-source, links,
   **unit 524**, **integration 485 passed / 0 failed / 0 skipped**, build, bundle, **E2E 42 passed / 0
   skipped**; 30 baseline demonstration collections unchanged (new: one `schemaMigrations` row).
@@ -426,11 +433,98 @@ local commit per green package. **Business Master Prompts 1–5 are not started 
   carry version and commit), bundle budget, **E2E 42 passed / 0 skipped**; 30 baseline demonstration
   collections unchanged.
 
+### Planning (the commit containing this section)
+
+- [phases/business-master-prompts.md](phases/business-master-prompts.md): the five business master
+  prompts — scope by engineering phase and module, prerequisites, carried debt, decisions required,
+  definition of done — and [ADR-0029](decisions/adr-0029-business-master-prompts.md): a grouping only,
+  each prompt started on explicit instruction. `phases/README.md` "Current position" refreshed.
+
+### Foundation gate — final verification, 2026-09-28
+
+The gate was first reported with "every mandatory check passes" **before the built-API smoke had
+run**. When the smoke ran, it failed — see "What the smoke found" below. The table records what was
+measured after the fix. "Rerun" means measured after `e8dacea`; nothing in it is inherited.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Format | ✅ rerun |
+| 2 | Lint | ✅ rerun, 0 errors, 0 warnings |
+| 3 | Typecheck (strict, root + workspaces) | ✅ rerun |
+| 4 | Unit | ✅ rerun, **542 passed**, 39 files (530 + 12 migration-registry tests) |
+| 5 | Integration gate, real MongoDB + Redis | ✅ rerun, **498 passed / 0 failed / 0 skipped**, 27 files (490 + 8) |
+| 6 | i18n (keys and every displayed enumeration, both languages) | ✅ rerun |
+| 7 | Secret scan | ✅ rerun, 460 files before the documentation commit; rerun on the final tree |
+| 8 | Documentation links and integrity | ✅ rerun on the final tree |
+| 9 | Ignored-source check | ✅ rerun |
+| 10 | Dependency audit | ✅ rerun, 0 vulnerabilities (no dependency changed; only npm scripts were added) |
+| 11 | Production build (web, api, worker) | ✅ rerun |
+| 12 | Bundle budget | ✅ rerun; largest chunk `vendor-mui` 389.4 kB / 117.2 kB gzip (budget 650 / 210) |
+| 13 | OpenAPI | ✅ rerun, 180 paths, 0 broken references |
+| 14 | Built API smoke (`scratch/final-smoke.mjs`, port 4321) | ✅ rerun: live 200, **ready 200**, MongoDB up with transactions, Redis up, migrations `current`, `/me` and diagnostics 401 without a token, 180 OpenAPI paths, API process exited, port released |
+| 15 | Migration status, development database | ✅ `0001-foundation-baseline`; nothing pending, changed or unknown |
+| 16 | Migration checksum parity, source against the built API (`check:migrations:parity`, integration database) | ✅ new: source-applied schema reads `current`, readiness 200 |
+| 17 | Client file validation (`client:init --check`) | ✅ rerun |
+| 18 | End-to-end, built app + built API + real services — the demonstration journey, Arabic RTL, English LTR, Western digits | ✅ rerun, **42 passed / 0 failed / 0 skipped** |
+| 19 | Demonstration data | ✅ 30 baseline collections' counts unchanged since the Part A snapshot; reservations, contracts, instalments, receipts, instruments, reminders, approvals and the seed ledger byte-identical (content hashes) across the repair and the smoke. No seed or reset ran |
+| 20 | Arabic PDF | ✅ `89fade53…99f7b`, unchanged |
+| 21 | Secret files tracked by Git | ✅ none |
+| 22 | Client identity in user-facing text | ✅ none (product name only in code identifiers, ADR-0027) |
+| 23 | Git | ✅ `main`, clean after the documentation commit; nothing pushed, no remote added (the owner's `origin` untouched) |
+
+**What the smoke found.** The first smoke run never reached the API: it used port 4190, which Node's
+`fetch` refuses. The recovery session found that the script still used 4190, although the previous
+session reported that it had been changed. The corrected script, on port 4321 and now checking its
+own results, then showed a **real defect**: `/health/ready` answered **503** with
+`migrations: mismatch`. The migration checksum hashed `up.toString()`. `tsx` (used by
+`npm run db:migrate`) printed `()=>Promise.resolve()` and the production bundle printed
+`() => Promise.resolve()`, so a database migrated from source looked edited to the built API, and
+**no built API could ever report ready** against it. E2E missed it because nothing there asserts
+readiness, and the migration tests ran from source only.
+
+**The fix — `e8dacea` `fix: make migration checksums build-stable`.**
+
+- The checksum is now the SHA-256 of `["alola-migration-checksum/v2", id, revision, fingerprint]`.
+  Each migration declares `revision` (a positive integer) and `fingerprint` (printable ASCII). Neither
+  function text nor the description is hashed. The new module is
+  `apps/api/src/platform/migration-registry.ts`.
+- `validateMigrations` refuses a missing or malformed revision or fingerprint, and duplicate
+  identifiers (`MIGRATION_INVALID`), and keeps the ordering rules.
+- `schemaHealth` makes the readiness mapping testable. Pending, a genuine mismatch and unreadable
+  history still keep an instance not ready.
+- Tests: an esbuild bundle of the registry, minified and unminified, computes the same checksums as
+  source. The baseline checksum is pinned to `c7e83ede…9df83e`. Readiness is tested against real
+  recorded state, and the transition against real MongoDB.
+- `npm run check:migrations:parity` applies the list from source to the integration database and
+  requires the **built** API to report it `current` with 200.
+
+**Development metadata repair.** `npm run db:migrate:transition-checksum` does a development-only
+compare-and-set. It ran once on `real_estate_erp_dev`: row `0001-foundation-baseline`
+`19a7cdc2…e65e65` → `c7e83ede…9df83e`, outcome `updated`. A second run reported `unchanged`. The same
+row (same `_id`, `appliedAt` and `durationMs`) was kept, and no other field changed. The migration
+body did not run and nothing was deleted or recreated. The integration database had no migration
+row; the parity check recorded its baseline from source. No staging or production database exists.
+
+**Verdict: FOUNDATION GATE COMPLETE — the local, reusable foundation.** F0–F12 are built and committed,
+the checksum defect is fixed, and every check above passes. This is **not** production readiness.
+These remain explicit production blockers, unchanged:
+
+- `SEC-033` stays `in-progress`: no external KMS provider, so **no MFA secret or provider credential
+  can be stored outside development**; staging and production fail closed.
+- No object-storage adapter (`PLAT-017`), malware scanner (`SEC-005`) or secrets manager (`SEC-006`):
+  staging and production refuse document uploads.
+- `CORE-DOC-003` (PDF with embedded Arabic fonts) and `CORE-DOC-005` (QR verification) are not
+  started; they are planned into BMP-2.
+- The business decision register (BD-01–BD-24) is written; every entry is `open` or `proposed` —
+  none is approved.
+- **Phase 1 is not approved**: its gate still needs the stakeholder demonstration and written approval.
+
 ### Resume point
 
-Foundation packages F0–F12 are complete. Remaining before the foundation gate: the five
-business-master-prompt planning documents and their ADR, the final 22-item verification, and the
-final report. **Business Master Prompts 1–5 must not be started.**
+**Stop.** Business Master Prompts 1–5 are planned and **not started**; none may begin without the
+stakeholder's explicit instruction. Next actions belong to the stakeholder: review the foundation,
+answer the business decision register (at least BD-01–BD-04, BD-19, BD-22 for BMP-1), decide `SEC-033`'s
+KMS provider, and give the Phase 1 written approval or its conditions.
 
 ### Superseded resume note (F12, kept for traceability)
 
@@ -938,6 +1032,10 @@ CORE-IMPORT-003 (F9) · OPS-004, OPS-005 (F11) · OPS-006, OPS-007 (F12)
 
 ## Next exact task
 
+**Current (2026-09-28):** the foundation is complete and stopped at the foundation gate — see
+"Foundation gate" and "Resume point" above. Do not start Business Master Prompt 1 until instructed.
+The items below are the Macro Phase 1 list, kept for traceability; item 4's scope is now built.
+
 1. **Macro Phase 1 is complete and the session stopped for review.** Do not begin Macro Phase 2, and do
    not start Phase 2 of the engineering plan, until instructed.
 2. **To run the demonstration:** `npm run dev:services:up` → `npm run seed:demo` → `npm run dev:api` and
@@ -1123,13 +1221,17 @@ CORE-IMPORT-003 (F9) · OPS-004, OPS-005 (F11) · OPS-006, OPS-007 (F12)
 
 ## Database state
 
-- Schema version: 1 (audit records carry `schemaVersion`) · Migrations: none
+- Schema version: 1 (audit records carry `schemaVersion`) · Migrations (OPS-004): one,
+  `0001-foundation-baseline` (no-op), applied to the development and integration databases with the
+  build-stable checksum `c7e83ede…9df83e` (2026-09-28)
 - **Seed data: none in the product.** A fresh database still authenticates nobody and authorizes
   nobody: there is no default administrator, no seeded role, no seeded approval policy, and no
   self-registration. The demonstration data is written by `npm run seed:demo`, which **refuses to run
   outside a local development database** and is not part of the application.
-- Collections, 31 in total, created explicitly by `apps/api/src/platform/indexes.ts` at startup
-  (`autoIndex` is off); the full index list is in `architecture/security-model.md` §9:
+- Collections: 57 product collections in the development database as measured on 2026-09-28 (plus
+  `demoSeedLedger`), created explicitly by `apps/api/src/platform/indexes.ts` at startup
+  (`autoIndex` is off); the full index list is in `architecture/security-model.md` §9. The Macro
+  Phase 1 set of 31, kept for traceability:
   - security and platform (11): `auditEvents` (append-only), `roles`, `accountGrants`,
     `securityAccounts`, `authSessions`, `authRefreshTokens`, `accountTokens`, `approvalPolicies`,
     `approvalRequests`, `approvalDecisions` (append-only), `approvalDelegations`
@@ -1188,7 +1290,7 @@ CORE-IMPORT-003 (F9) · OPS-004, OPS-005 (F11) · OPS-006, OPS-007 (F12)
 | A module that forgets to act on an approved request leaves an approval that achieves nothing | Deliberate (ADR-0024 §2): the engine never executes the operation. Each consuming module needs its own test that it acts on the outcome |
 | A permission-based approver queue is bounded at 200 candidates | Logged when it truncates; a permission held by thousands of accounts is not a work queue. Narrow the stage rule instead |
 | **`SEC-033` (KMS) is not implemented**, so staging and production cannot store an MFA secret | Development and test use a configured local key, refused outside development. The KMS adapter is the blocker for enabling MFA anywhere real (ADR-0023 §6) |
-| Invitation and password-reset **delivery** does not exist | `CORE-NOTIFY`. An administrator issues and hands over the token meanwhile; the self-service request reveals nothing |
+| Invitation and password-reset **delivery** does not exist | `CORE-NOTIFY` exists since F6, but no e-mail or SMS provider is connected (BMP-5), so an administrator still issues and hands over the token; the self-service request reveals nothing |
 | The password blocklist is a short built-in list, not a breach corpus | Replace with a checked corpus when one is available (`SD-18` operational scope); it is a data change, not a redesign |
 | An account holding administrative permissions must carry an authenticator application | That is `SEC-017`. The administrative MFA reset exists as the recovery path and is itself audited and refused on the caller's own account |
 | Audit retention and archival are not implemented; the collection grows without bound | Retention policy is `SD-18`/Phase 9. The existing indexes already support time-range scans |
@@ -1199,7 +1301,7 @@ CORE-IMPORT-003 (F9) · OPS-004, OPS-005 (F11) · OPS-006, OPS-007 (F12)
 | Docker Desktop + WSL 2 are now prerequisites for the integration tier | Documented in environments.md §5; unit tests, lint, typecheck and build still need no services |
 | `C:` free space dropped from ~21 GB to ~17 GB during the session (not caused by this project's ~0.6 GB) | Re-check before large installs |
 
-## Handoff summary
+## Handoff summary — Macro Phase 1 (superseded by the foundation gate above, kept for traceability)
 
 **Macro Phase 1 (Client Demo MVP) is built, green, and stopped for review.** Eleven local commits on
 `main`, from the delivery rebaseline (`b61b4df`) to this documentation commit. Nothing is pushed,

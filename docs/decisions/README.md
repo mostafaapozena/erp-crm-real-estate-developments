@@ -51,6 +51,7 @@ silently violate a constraint whose reason was never written down.
 | [ADR-0026](adr-0026-demonstration-mode-boundary.md) | Demonstration mode: what is real, what is simulated, and how the difference is shown | Accepted | Integration, Governance |
 | [ADR-0027](adr-0027-single-tenant-per-deployment.md) | Single-tenant per deployment, multi-client product; configuration over forks; runtime branding | Accepted | Architecture, Deployment, Governance |
 | [ADR-0028](adr-0028-scheduled-maintenance-in-api.md) | Scheduled maintenance sweeps run in the API process, single-runner under a database lease | Accepted | Architecture, Operations |
+| [ADR-0029](adr-0029-business-master-prompts.md) | Five business master prompts group the remaining engineering phases; grouping only, each started on instruction | Accepted | Delivery, Governance |
 
 ## Open items
 
