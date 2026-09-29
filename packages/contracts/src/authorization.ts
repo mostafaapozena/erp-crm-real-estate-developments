@@ -82,6 +82,13 @@ export const PERMISSIONS = [
   /** Obtain a short-lived link to a document's file. Every issue is audited (CORE-DOC-006). */
   'document.download',
   'document.archive',
+  /**
+   * Generate a business PDF — quotation, reservation, contract summary, schedule, receipt, statement —
+   * from a record the actor can read (CORE-DOC-003). Each generation is a new, audited version.
+   */
+  'document.generate',
+  /** Revoke an issued document, so its verification page reports it revoked (CORE-DOC-005). Administrative. */
+  'document.revoke',
   /** Set a document's retention date or legal hold. Administrative. */
   'document.manageRetention',
   'template.view',
@@ -260,6 +267,8 @@ export const ADMINISTRATIVE_PERMISSIONS: readonly Permission[] = [
   'numbering.manage',
   /** Retention and legal hold decide what the organization keeps and for how long. */
   'document.manageRetention',
+  /** A revocation tells anyone who scans the document that it no longer stands. */
+  'document.revoke',
   /** A published template is the legal wording of every document generated from it. */
   'template.manage',
   'notification.viewDeliveries',

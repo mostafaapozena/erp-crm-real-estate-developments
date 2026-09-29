@@ -56,6 +56,7 @@ Implemented variables (Phase 1 scaffolding, `packages/config/src/env.ts`):
 | Database | `MONGODB_URI`, `MONGODB_DB_NAME` | staging and production; name containing `prod` refused elsewhere |
 | Redis | `REDIS_URL` | staging and production; always for the worker |
 | Worker | `WORKER_CONCURRENCY` | — |
+| Documents | `PUBLIC_APP_URL` (the origin document QR codes link to; unset: the first `CORS_ALLOWED_ORIGINS` entry), `VERIFY_RATE_LIMIT_PER_MINUTE` (default 20, public verifications per address) | `PUBLIC_APP_URL` for any deployment customers reach |
 | Files and encryption | `S3_BUCKET`, `S3_REGION`, `KMS_KEY_ID` | staging and production |
 | Development files | `FILE_STORAGE_DIR` (default `.local-storage`, ignored by Git) | development and test only; the disk store refuses to start elsewhere |
 

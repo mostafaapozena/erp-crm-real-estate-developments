@@ -48,6 +48,7 @@ import { collectionComponents, collectionPaths } from './collections';
 import { companyComponents, companyPaths } from './company';
 import { crmComponents, crmPaths } from './crm';
 import { documentComponents, documentPaths } from './documents';
+import { issuedDocumentComponents, issuedDocumentPaths } from './issued-documents';
 import { inventoryComponents, inventoryPaths } from './inventory';
 import { marketingComponents, marketingPaths } from './marketing';
 import { notificationComponents, notificationPaths } from './notifications';
@@ -121,6 +122,7 @@ const components = {
   ...settingsComponents,
   ...numberingComponents,
   ...documentComponents,
+  ...issuedDocumentComponents,
   ...notificationComponents,
   ...taskComponents,
   ...searchComponents,
@@ -285,6 +287,7 @@ export function buildOpenApiDocument(): Record<string, unknown> {
     ...settingsPaths(helpers),
     ...numberingPaths(helpers),
     ...documentPaths(helpers),
+    ...issuedDocumentPaths(helpers),
     ...notificationPaths(helpers),
     ...taskPaths(helpers),
     ...searchPaths(helpers),

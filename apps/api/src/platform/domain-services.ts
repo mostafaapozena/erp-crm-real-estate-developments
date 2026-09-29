@@ -43,6 +43,8 @@ import { NotificationReminderDelivery } from './reminder-delivery';
 import { APPROVAL_AUDIT_ACTIONS } from '@alola/contracts';
 import { OrganizationService } from '../modules/organization';
 import { QuotationService, SalesService, type DepositRule } from '../modules/sales';
+import { IssuanceService, type LoadedSource } from '../modules/issuance';
+import { withTransaction } from './transactions';
 import { SecurityService } from '../modules/security';
 import { SettingsService, referenceItemImporter } from '../modules/settings';
 import { ImportService, readFirstSheet } from '../modules/imports';
@@ -97,6 +99,7 @@ export interface DomainServices {
   opportunities: () => OpportunityService;
   sales: () => SalesService;
   quotations: () => QuotationService;
+  issuance: () => IssuanceService;
   collections: () => CollectionService;
   marketing: () => MarketingService;
   company: () => CompanyService;
@@ -129,6 +132,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let opportunityService: OpportunityService | undefined;
   let salesService: SalesService | undefined;
   let quotationService: QuotationService | undefined;
+  let issuanceService: IssuanceService | undefined;
   let collectionService: CollectionService | undefined;
   let marketingService: MarketingService | undefined;
   let companyService: CompanyService | undefined;
@@ -313,6 +317,19 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
           projectId: receipt.projectId,
           ownerAccountId: receipt.receivedByAccountId,
         };
+      }
+      case 'quotation': {
+        const [latest] = (await getQuotationService().revisions(actor, id)).items;
+        return latest
+          ? {
+              legalEntityId: latest.legalEntityId,
+              branchId: latest.branchId,
+              departmentId: latest.departmentId,
+              teamId: latest.teamId,
+              projectId: latest.projectId,
+              ownerAccountId: latest.salesOwnerAccountId,
+            }
+          : undefined;
       }
       case 'company':
         // Deployment-wide papers — the company's own registrations — for the all scope only.
@@ -978,6 +995,198 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   }
 
   /**
+   * Issued documents (CORE-DOC-003, CORE-DOC-005).
+   *
+   * Each source is read through its owning module's **scoped, field-restricted** getter for the actor
+   * generating it: an out-of-scope record is not found, and a restricted field the actor cannot see is
+   * simply absent from the data, so it cannot reach the PDF. A display name that is not a restricted
+   * field (the customer on a reservation or receipt) is read unscoped, exactly as the record's own
+   * screen names it.
+   */
+  function getIssuanceService(): IssuanceService {
+    const connection = requireConnection();
+    const customerName = async (customerId: string) =>
+      (await getCrmService().findCustomerUnscoped(customerId))?.name;
+    const load = async (
+      actor: Parameters<IssuanceService['issue']>[0],
+      type: Parameters<IssuanceService['issue']>[1]['type'],
+      sourceId: string,
+    ): Promise<LoadedSource> => {
+      switch (type) {
+        case 'quotation': {
+          const [q] = (await getQuotationService().revisions(actor, sourceId)).items;
+          if (!q) throw new AppError('NOT_FOUND', 404);
+          const project = await getInventoryService().findProjectUnscoped(q.projectId);
+          let recipientName = q.customerId ? await customerName(q.customerId) : undefined;
+          if (!recipientName && q.leadId) {
+            recipientName = await getCrmService()
+              .getLead(actor, q.leadId)
+              .then((lead) => lead.name)
+              .catch(() => undefined);
+          }
+          return {
+            data: {
+              type,
+              quotation: q,
+              ...(recipientName ? { recipientName } : {}),
+              ...(project ? { projectName: project.name } : {}),
+            },
+            owner: { type: 'quotation', id: q.quotationId },
+            businessReference: q.quotationNumber,
+            placement: q,
+            warnings: q.state === 'active' ? [] : [q.state],
+            restricted: [],
+            validUntil: q.validUntil,
+          };
+        }
+        case 'reservation': {
+          const r = await getSalesService().getReservation(actor, sourceId);
+          const unit = await getInventoryService().findUnitForUpdate(r.unitId);
+          const project = await getInventoryService().findProjectUnscoped(r.projectId);
+          const name = await customerName(r.customerId);
+          const ended = r.state === 'cancelled' || r.state === 'expired' || r.state === 'rejected';
+          return {
+            data: {
+              type,
+              reservation: r,
+              ...(name ? { customerName: name } : {}),
+              ...(unit ? { unitCode: unit.code } : {}),
+              ...(project ? { projectName: project.name } : {}),
+            },
+            owner: { type: 'reservation', id: r.reservationId },
+            businessReference: r.reservationNumber,
+            placement: { ...r, ownerAccountId: r.salesOwnerAccountId },
+            warnings: ended
+              ? ['cancelled']
+              : r.state === 'confirmed' || r.state === 'converted'
+                ? []
+                : ['notFinal'],
+            restricted: [],
+            registry: { kind: 'reservationForm', projectId: r.projectId },
+          };
+        }
+        case 'contractSummary':
+        case 'installmentSchedule': {
+          const contract = await getSalesService().getContract(actor, sourceId);
+          const installments = await getSalesService().listContractInstallments(actor, sourceId);
+          const warnings: LoadedSource['warnings'] = [];
+          if (contract.state === 'draft') warnings.push('draft');
+          if (contract.state === 'pendingApproval') warnings.push('notFinal');
+          if (contract.state === 'cancelled') warnings.push('cancelled');
+          if (contract.warnings.includes('identityMissing')) warnings.push('identityMissing');
+          // The identity is present only if this actor may see it — then the file must say so.
+          const printsIdentity =
+            type === 'contractSummary' && Boolean(contract.customerSnapshot?.identity);
+          return {
+            data: { type, contract, installments },
+            owner: { type: 'contract', id: contract.contractId },
+            businessReference: contract.contractNumber,
+            placement: { ...contract, ownerAccountId: contract.salesOwnerAccountId },
+            warnings,
+            restricted: printsIdentity ? ['crm.customer.viewIdentity'] : [],
+            registry: {
+              kind: type === 'contractSummary' ? 'contract' : 'installmentSchedule',
+              projectId: contract.projectId,
+            },
+          };
+        }
+        case 'receipt': {
+          const receipt = await getCollectionService().getReceipt(actor, sourceId);
+          const contract = await getSalesService().findContract(receipt.contractId);
+          const name = await customerName(receipt.customerId);
+          return {
+            data: {
+              type,
+              receipt,
+              ...(name ? { customerName: name } : {}),
+              ...(contract ? { contractNumber: contract.contractNumber } : {}),
+            },
+            owner: { type: 'receipt', id: receipt.receiptId },
+            businessReference: receipt.receiptNumber,
+            placement: { ...receipt, ownerAccountId: receipt.receivedByAccountId },
+            warnings: receipt.state === 'reversed' ? ['reversed'] : [],
+            restricted: [],
+            registry: { kind: 'receipt', projectId: receipt.projectId },
+          };
+        }
+        case 'customerStatement': {
+          const customer = await getCrmService().getCustomer(actor, sourceId);
+          const summary = await getSalesService().customerSummary(actor, sourceId);
+          const contracts = await getSalesService().listContracts(actor, {
+            customerId: sourceId,
+            limit: 100,
+          });
+          const receipts = await getCollectionService().listReceipts(actor, {
+            customerId: sourceId,
+            limit: 100,
+          });
+          const installments = await getSalesService().listInstallments(actor, {
+            customerId: sourceId,
+            limit: 200,
+          });
+          const open = new Set(['upcoming', 'due', 'partiallyPaid', 'overdue']);
+          return {
+            data: {
+              type,
+              customer,
+              summary,
+              contracts: contracts.items.filter(
+                (contract) => contract.state !== 'draft' && contract.state !== 'pendingApproval',
+              ),
+              receipts: receipts.items,
+              openInstallments: installments.items.filter((row) => open.has(row.state)),
+              statementNumber: '',
+            },
+            owner: { type: 'customer', id: customer.customerId },
+            businessReference: '',
+            placement: customer,
+            warnings: [],
+            restricted: [],
+            registry: { kind: 'customerStatement' },
+          };
+        }
+      }
+    };
+    issuanceService ??= new IssuanceService({
+      connection,
+      logger,
+      audit: getAuditService(),
+      documents: getDocumentService,
+      templates: getTemplateService,
+      sources: { load },
+      company: async () => {
+        const profile = await getCompanyService().getProfile();
+        if (!profile) return undefined;
+        const logo = await getCompanyService()
+          .activeAsset('logo')
+          .catch(() => undefined);
+        return {
+          version: profile.version,
+          legalName: profile.legalName,
+          tradeName: profile.tradeName,
+          shortName: profile.shortName,
+          ...(profile.commercialRegistration
+            ? { commercialRegistration: profile.commercialRegistration }
+            : {}),
+          ...(profile.taxRegistration ? { taxRegistration: profile.taxRegistration } : {}),
+          ...(profile.address ? { address: profile.address } : {}),
+          ...(profile.phone ? { phone: profile.phone } : {}),
+          ...(profile.email ? { email: profile.email } : {}),
+          ...(profile.documentFooter ? { documentFooter: profile.documentFooter } : {}),
+          ...(logo ? { logo: logo.data } : {}),
+          ...(profile.primaryColor ? { primaryColor: profile.primaryColor } : {}),
+          timeZone: profile.timeZone,
+        };
+      },
+      statementNumber: () =>
+        withTransaction(connection, (session) => getSalesService().allocateNumber('STM', session)),
+      publicBaseUrl: config.PUBLIC_APP_URL ?? config.CORS_ALLOWED_ORIGINS[0] ?? '',
+      today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
+    });
+    return issuanceService;
+  }
+
+  /**
    * Quotations (SALE-QUOTE-001). The unit is read through the actor's own scope and price visibility,
    * and nothing here can change a unit: a quotation never reserves inventory.
    */
@@ -1194,6 +1403,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     opportunities: getOpportunityService,
     sales: getSalesService,
     quotations: getQuotationService,
+    issuance: getIssuanceService,
     collections: getCollectionService,
     marketing: getMarketingService,
     company: getCompanyService,

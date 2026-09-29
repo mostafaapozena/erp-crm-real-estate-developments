@@ -29,6 +29,7 @@ import { MIGRATIONS } from './platform/migration-list';
 import { MigrationRunner, schemaHealth } from './platform/migrations';
 import { organizationRouter } from './modules/organization';
 import { salesRouter } from './modules/sales';
+import { issuanceRouter, verificationRouter } from './modules/issuance';
 import { securityRouter } from './modules/security';
 import { referenceDataRouter, settingsRouter } from './modules/settings';
 import type { ActorResolver } from './http/actor';
@@ -94,6 +95,21 @@ const rateLimiter = redis.client
       ...limits,
     })
   : memoryLimiter;
+
+/**
+ * The public document verification budget per address (CORE-DOC-005), on top of the global limit. A
+ * verification page is reachable without signing in, so it gets its own, tighter allowance.
+ */
+const verifyLimits = { points: config.VERIFY_RATE_LIMIT_PER_MINUTE, duration: 60 };
+const verifyMemoryLimiter = new RateLimiterMemory({ keyPrefix: 'rl-verify', ...verifyLimits });
+const verifyLimiter = redis.client
+  ? new RateLimiterRedis({
+      storeClient: redis.client,
+      keyPrefix: 'rl-verify',
+      insuranceLimiter: verifyMemoryLimiter,
+      ...verifyLimits,
+    })
+  : verifyMemoryLimiter;
 
 /**
  * Domain services need a live database. Until MongoDB is configured, their routes answer
@@ -319,6 +335,15 @@ const modules: ApiModule[] = [
   },
   { basePath: '/marketing', router: marketingRouter({ getService: getMarketingService, guard }) },
   { basePath: '/company', router: companyRouter({ getService: getCompanyService, guard }) },
+  {
+    basePath: '/issued-documents',
+    router: issuanceRouter({ getService: services.issuance, guard }),
+  },
+  // Public and read-only: what a scanned QR code opens (CORE-DOC-005).
+  {
+    basePath: '/public',
+    router: verificationRouter({ getService: services.issuance, limiter: verifyLimiter }),
+  },
   // Public and read-only: what the sign-in screen needs before anyone has signed in (PLAT-023).
   { basePath: '/branding', router: brandingRouter({ getService: getCompanyService }) },
   { basePath: '/settings', router: settingsRouter({ getService: getSettingsService, guard }) },

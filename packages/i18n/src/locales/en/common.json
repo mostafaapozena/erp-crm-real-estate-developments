@@ -1108,5 +1108,156 @@
     "superseded": "Replaced by a newer revision",
     "withdrawn": "Withdrawn",
     "expired": "Expired"
+  },
+  "pdf": {
+    "type": {
+      "quotation": "Quotation",
+      "reservation": "Reservation document",
+      "contractSummary": "Contract summary",
+      "installmentSchedule": "Instalment schedule",
+      "receipt": "Receipt",
+      "customerStatement": "Customer statement"
+    },
+    "company": {
+      "commercialRegistration": "Commercial registration",
+      "taxRegistration": "Tax number"
+    },
+    "verification": {
+      "caption": "Verify this document",
+      "hint": "Scan the code or open the link. The verification page shows only the document's status — no personal or financial details.",
+      "fingerprint": "Fingerprint"
+    },
+    "footer": {
+      "issued": "{{type}} — version {{version}} — issued {{date}}"
+    },
+    "page": "Page {{page}} of {{total}}",
+    "reference": {
+      "quotation": "Quotation number",
+      "reservation": "Reservation number",
+      "contract": "Contract number",
+      "receipt": "Receipt number",
+      "statement": "Statement number"
+    },
+    "subtitle": {
+      "quotation": "A priced offer for the unit and payment plan — revision {{revision}}",
+      "contractSummary": "An informational summary of the contract record, not the legal contract. Approved legal wording is supplied by the client.",
+      "contractWithWording": "Contract details with the approved wording published in the template registry.",
+      "asOf": "As of {{date}}"
+    },
+    "watermark": {
+      "draft": "DRAFT"
+    },
+    "heading": {
+      "details": "Details",
+      "price": "Price",
+      "plan": "Offered payment plan",
+      "proposedPlan": "Proposed payment plan",
+      "parties": "Parties",
+      "buyer": "Buyer, as recorded on the contract",
+      "unit": "Unit, as recorded on the contract",
+      "schedule": "Payment schedule",
+      "allocations": "Instalments paid by this receipt",
+      "customer": "Customer",
+      "position": "Financial position",
+      "contracts": "Contracts",
+      "openInstallments": "Instalments due and unpaid",
+      "receipts": "Receipts",
+      "terms": "Approved terms"
+    },
+    "field": {
+      "total": "Total",
+      "kind": "Kind",
+      "dueOn": "Due",
+      "amount": "Amount",
+      "paid": "Paid",
+      "state": "Status",
+      "scheduleTotal": "Schedule total",
+      "remaining": "Remaining",
+      "recipient": "Prepared for",
+      "revision": "Revision",
+      "validUntil": "Valid until",
+      "unit": "Unit",
+      "project": "Project",
+      "listPrice": "List price",
+      "agreedPrice": "Agreed price",
+      "discount": "Discount",
+      "maintenanceDeposit": "Maintenance deposit (not part of the unit price)",
+      "totalPayable": "Total payable",
+      "customer": "Customer",
+      "reservedOn": "Reserved on",
+      "expiresOn": "Expires on",
+      "reservationAmount": "Reservation amount",
+      "role": "Role",
+      "name": "Name",
+      "share": "Ownership share",
+      "phone": "Phone",
+      "email": "E-mail",
+      "city": "City",
+      "address": "Address",
+      "floor": "Floor",
+      "propertyType": "Unit type",
+      "area": "Area",
+      "finishing": "Finishing",
+      "contractTotal": "Contract total",
+      "reservationCredited": "Reservation amount credited",
+      "contractedOn": "Contract date",
+      "signing": "Signing",
+      "outstanding": "Outstanding",
+      "contract": "Contract",
+      "receivedOn": "Received on",
+      "method": "Payment method",
+      "transactionReference": "Transaction reference",
+      "asOf": "As of",
+      "contracts": "Contracts",
+      "contracted": "Total contracted",
+      "overdueCount": "Overdue instalments",
+      "overdueAmount": "Overdue amount",
+      "receipt": "Receipt"
+    },
+    "unit": {
+      "area": "{{area}} m²"
+    },
+    "value": {
+      "signedOn": "Signed on {{date}}"
+    },
+    "empty": {
+      "schedule": "No instalments.",
+      "contracts": "No contracts.",
+      "openInstallments": "No instalments due and unpaid.",
+      "receipts": "No receipts."
+    },
+    "note": {
+      "rescheduledExcluded": "Rescheduled and cancelled instalments are shown for history only and are not counted in the totals.",
+      "maintenanceDeposit": "The maintenance deposit is a separate amount added to the unit price, not part of it.",
+      "proposedPlan": "A proposed plan, not yet confirmed; the binding schedule is the one fixed when the contract is activated.",
+      "amendments": "The payment schedule was amended with approval ({{count}}). Replaced instalments are kept as rescheduled.",
+      "statement": "The statement reflects the records on its issue date. Later payments are not included."
+    },
+    "notice": {
+      "quotationNoReservation": "A quotation does not reserve the unit. The unit remains available to others until a reservation is recorded.",
+      "quotation": {
+        "superseded": "This quotation was replaced by a newer revision and is no longer valid.",
+        "withdrawn": "This quotation was withdrawn and is no longer valid.",
+        "expired": "This quotation has expired."
+      },
+      "reservation": {
+        "draft": "This reservation is not yet confirmed.",
+        "pendingApproval": "This reservation is awaiting approval and is not confirmed.",
+        "approved": "This reservation is approved and awaiting confirmation.",
+        "ended": "This reservation is no longer in force."
+      },
+      "draftContract": "A draft contract, not yet activated. It creates no obligation, and its payment schedule is proposed.",
+      "cancelledContract": "This contract is cancelled.",
+      "noApprovedWording": "No approved legal wording has been published for this document yet; this is a data summary only.",
+      "reversedReceipt": "This receipt was reversed and is not evidence of payment.",
+      "reversedReceiptOn": "This receipt was reversed on {{date}} and is not evidence of payment."
+    },
+    "signature": {
+      "customer": "Customer signature",
+      "buyer": "Buyer signature",
+      "company": "Company representative",
+      "stamp": "Company stamp",
+      "cashier": "Received by"
+    }
   }
 }

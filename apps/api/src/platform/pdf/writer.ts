@@ -1,6 +1,14 @@
 import { safePalette, type Palette } from '@alola/ui/brand';
 import PDFDocument from 'pdfkit';
-import { directionOf, lineWidth, visualPieces, wrap, type Direction, type Script } from './bidi';
+import {
+  directionOf,
+  lineWidth,
+  ltrIsolate,
+  visualPieces,
+  wrap,
+  type Direction,
+  type Script,
+} from './bidi';
 import { fontsFor, type FontKey, type Weight } from './fonts';
 import type { Block, FieldItem, PdfDocumentModel, TableColumn, TableRow, Tone } from './model';
 import { qrMatrix } from './qr';
@@ -222,7 +230,8 @@ class Writer {
   }
 
   private heading(text: string): void {
-    this.ensure(40);
+    // A heading never ends a page: it moves on with room for the first lines of what it introduces.
+    this.ensure(110);
     this.y += 6;
     const x0 = MARGIN.side;
     const x1 = PAGE.width - MARGIN.side;
@@ -468,10 +477,16 @@ class Writer {
       dir: 'ltr',
       color: this.palette.primaryPressed,
     });
-    this.drawText(`${verification.fingerprintLabel}: ${verification.fingerprint}`, tx0, tx1, ty, {
-      size: 7.5,
-      color: this.palette.mutedText,
-    });
+    this.drawText(
+      `${verification.fingerprintLabel}: ${ltrIsolate(verification.fingerprint)}`,
+      tx0,
+      tx1,
+      ty,
+      {
+        size: 7.5,
+        color: this.palette.mutedText,
+      },
+    );
     this.y += size + 10;
   }
 

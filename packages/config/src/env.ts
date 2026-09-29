@@ -149,6 +149,17 @@ export const apiEnvSchema = z.object({
   ),
   /** Seconds between scheduler ticks; each sweep also has its own interval. */
   MAINTENANCE_TICK_SECONDS: z.coerce.number().int().min(5).max(3600).default(30),
+  /**
+   * The web application's public origin, printed in every document QR code as
+   * `<PUBLIC_APP_URL>/verify/<token>` (CORE-DOC-005). Unset: the first `CORS_ALLOWED_ORIGINS` entry.
+   * A client deployment sets it to the address its customers can reach.
+   */
+  PUBLIC_APP_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().url().optional(),
+  ),
+  /** Public document verifications one address may make per minute, on top of the global limit. */
+  VERIFY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(600).default(20),
   S3_BUCKET: optionalString,
   S3_REGION: optionalString,
   /**

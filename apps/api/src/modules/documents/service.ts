@@ -3,6 +3,7 @@ import {
   DOCUMENT_AUDIT_ACTIONS,
   DOCUMENT_CONTENT_TYPES,
   DownloadLinkSchema,
+  PERMISSIONS,
   type ActorContext,
   type BusinessDate,
   type BusinessDocument,
@@ -14,6 +15,7 @@ import {
   MAX_SIGNED_URL_TTL_SECONDS,
   assertSafeFilter,
   buildScopeFilter,
+  can,
   sanitizeFileName,
   validateUpload,
   withScope,
@@ -86,6 +88,21 @@ export interface DocumentServiceOptions {
   now?: () => Date;
 }
 
+/**
+ * Documents whose required permissions the actor holds in full (SEC-029). Evaluated in the query, so a
+ * restricted document is absent from lists, searches and single reads alike — never fetched and then
+ * hidden.
+ */
+function heldFilter(actor: ActorContext): Record<string, unknown> {
+  const held = PERMISSIONS.filter((permission) => can(actor, permission));
+  return {
+    $or: [
+      { requiredPermissions: { $exists: false } },
+      { requiredPermissions: { $not: { $elemMatch: { $nin: held } } } },
+    ],
+  };
+}
+
 export const DOCUMENT_SCOPE_FIELDS: ScopeFieldMap = {
   owner: 'createdBy',
   assignee: 'ownerAccountId',
@@ -121,6 +138,9 @@ function toDocument(
         uploadedAt: iso(version.uploadedAt),
         uploadedBy: version.uploadedBy,
       })),
+    ...(document.requiredPermissions?.length
+      ? { restricted: [...document.requiredPermissions] }
+      : {}),
     ...(document.retainUntil ? { retainUntil: document.retainUntil } : {}),
     legalHold: document.legalHold,
     createdAt: iso(document.createdAt),
@@ -187,7 +207,9 @@ export class DocumentService {
 
   private scopedFilter(actor: ActorContext, extra: Record<string, unknown> = {}) {
     assertSafeFilter(extra);
-    return withScope(buildScopeFilter(actor, DOCUMENT_SCOPE_FIELDS), extra);
+    return {
+      $and: [withScope(buildScopeFilter(actor, DOCUMENT_SCOPE_FIELDS), extra), heldFilter(actor)],
+    };
   }
 
   private async findScoped(actor: ActorContext, documentId: string): Promise<DocumentDocument> {
@@ -219,10 +241,15 @@ export class DocumentService {
     term: string,
     limit: number,
   ): Promise<{ id: string; label: string }[]> {
-    const filter = withScope(buildScopeFilter(actor, DOCUMENT_SCOPE_FIELDS), {
-      state: 'active',
-      title: { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' },
-    });
+    const filter = {
+      $and: [
+        withScope(buildScopeFilter(actor, DOCUMENT_SCOPE_FIELDS), {
+          state: 'active',
+          title: { $regex: `^${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, $options: 'i' },
+        }),
+        heldFilter(actor),
+      ],
+    };
     const rows = await this.documents
       .find(filter, { documentId: 1, title: 1 })
       .sort({ title: 1 })
@@ -256,10 +283,12 @@ export class DocumentService {
     if (query.ownerType) requested['owner.type'] = query.ownerType;
     if (query.ownerId) requested['owner.id'] = query.ownerId;
     if (!query.includeArchived) requested['state'] = 'active';
-    let filter: Record<string, unknown> = withScope(
-      buildScopeFilter(actor, DOCUMENT_SCOPE_FIELDS),
-      requested,
-    );
+    let filter: Record<string, unknown> = {
+      $and: [
+        withScope(buildScopeFilter(actor, DOCUMENT_SCOPE_FIELDS), requested),
+        heldFilter(actor),
+      ],
+    };
     if (query.cursor) {
       const [time, id] = Buffer.from(query.cursor, 'base64url').toString('utf8').split('|');
       const at = time ? new Date(time) : undefined;
@@ -303,6 +332,7 @@ export class DocumentService {
     input: UploadDocumentQuery,
     file: { bytes: Uint8Array; declaredType: string },
     context: RequestContext,
+    options: { requiredPermissions?: readonly string[] } = {},
   ): Promise<BusinessDocument> {
     const owner = await this.options.resolveOwner(actor, input.ownerType, input.ownerId);
     if (!owner) throw notFound();
@@ -330,6 +360,9 @@ export class DocumentService {
             ...(owner.projectId ? { projectId: owner.projectId } : {}),
             ...(owner.ownerAccountId ? { ownerAccountId: owner.ownerAccountId } : {}),
             createdBy: actor.accountId,
+            ...(options.requiredPermissions?.length
+              ? { requiredPermissions: [...options.requiredPermissions].sort() }
+              : {}),
             state: 'active',
             currentVersion: 1,
             legalHold: false,

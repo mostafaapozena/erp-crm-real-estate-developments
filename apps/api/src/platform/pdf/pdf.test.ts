@@ -116,7 +116,8 @@ function model(locale: 'ar' | 'en', rows: TableRow[], logo?: Buffer): PdfDocumen
       url: 'https://erp.example.invalid/verify/abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG',
       caption: ar ? 'تحقق من صحة هذا المستند' : 'Verify this document',
       hint: ar ? 'امسح الرمز' : 'Scan the code',
-      fingerprint: '3F9A-12C4-77B0-E1D2',
+      // Digits first: unisolated inside an Arabic label, its groups used to come out reordered.
+      fingerprint: '1820-BA36-5537-8316',
       fingerprintLabel: ar ? 'البصمة' : 'Fingerprint',
     },
     pageLabel: (page, total) => (ar ? `صفحة ${page} من ${total}` : `Page ${page} of ${total}`),
@@ -150,6 +151,7 @@ describe('PDF output (CORE-DOC-003)', () => {
     expect(text).not.toContain('%24.62');
     expect(text).toContain('+20 100 555 0199');
     expect(text).toContain('+20 2 2555 0100');
+    expect(text).toContain('1820-BA36-5537-8316');
     expect(first?.runs.some((run) => run.text.includes('صفحة'))).toBe(true);
   });
 

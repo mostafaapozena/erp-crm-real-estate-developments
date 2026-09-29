@@ -45,6 +45,12 @@ export interface DocumentDocument {
   projectId?: string;
   ownerAccountId?: string;
   createdBy: string;
+  /**
+   * Permissions a reader must hold because the file prints restricted fields — a generated contract
+   * summary that shows the buyer's identity needs `crm.customer.viewIdentity` (SEC-029). A document
+   * is invisible to anyone missing one: not listed, not found, no link. Absent: no restriction.
+   */
+  requiredPermissions?: string[];
   state: (typeof DOCUMENT_STATES)[number];
   currentVersion: number;
   retainUntil?: string;
@@ -127,6 +133,7 @@ function documentSchema(): Schema<DocumentDocument> {
       projectId: { type: String, immutable: true },
       ownerAccountId: { type: String, immutable: true },
       createdBy: { type: String, required: true, immutable: true },
+      requiredPermissions: { type: [String], default: undefined, immutable: true },
       state: { type: String, required: true, enum: [...DOCUMENT_STATES] },
       currentVersion: { type: Number, required: true },
       retainUntil: { type: String },

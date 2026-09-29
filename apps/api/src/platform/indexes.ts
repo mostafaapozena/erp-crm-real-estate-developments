@@ -56,6 +56,7 @@ import {
   quotationModel,
   reservationModel,
 } from '../modules/sales/model';
+import { issuedDocumentModel } from '../modules/issuance/model';
 import {
   counterModel as numberCounterModel,
   issuedNumberModel,
@@ -108,6 +109,7 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     contractModel(connection),
     installmentModel(connection),
     quotationModel(connection),
+    issuedDocumentModel(connection),
     counterModel(connection),
     receiptModel(connection),
     instrumentModel(connection),

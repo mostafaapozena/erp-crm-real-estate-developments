@@ -17,6 +17,7 @@ export * from './notifications';
 export * from './tasks';
 export * from './search';
 export * from './imports';
+export * from './issued-documents';
 export * from './integrations';
 export * from './client-init';
 export * from './operations';

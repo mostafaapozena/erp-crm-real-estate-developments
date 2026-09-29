@@ -27,6 +27,7 @@ export const DOCUMENT_OWNER_TYPES = [
   'contract',
   'receipt',
   'company',
+  'quotation',
 ] as const;
 export const DocumentOwnerTypeSchema = z.enum(DOCUMENT_OWNER_TYPES);
 export type DocumentOwnerType = z.infer<typeof DocumentOwnerTypeSchema>;
@@ -65,6 +66,8 @@ export const BusinessDocumentSchema = z.strictObject({
   state: z.enum(DOCUMENT_STATES),
   currentVersion: z.number().int().positive(),
   versions: z.array(DocumentVersionSchema),
+  /** Permissions a reader needs because the file prints restricted fields (SEC-029). */
+  restricted: z.array(z.string()).optional(),
   /** Retained at least until this date; a legal hold keeps it regardless. */
   retainUntil: BusinessDateSchema.optional(),
   legalHold: z.boolean(),
