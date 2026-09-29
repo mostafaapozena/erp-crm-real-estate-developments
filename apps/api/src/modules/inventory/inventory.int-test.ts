@@ -15,7 +15,9 @@ import { createApp, type ApiModule } from '../../app';
 import type { ActorResolver } from '../../http/actor';
 import { noteAuditWrite } from '../../http/audit-context';
 import { ensureIndexes } from '../../platform/indexes';
+import { MAINTENANCE_ACTOR } from '../../platform/maintenance';
 import { configureMongoose } from '../../platform/mongo';
+import { withTransaction } from '../../platform/transactions';
 import { AUDIT_COLLECTION, AuditService } from '../audit';
 import {
   ACCOUNT_GRANTS_COLLECTION,
@@ -24,9 +26,17 @@ import {
   bootstrapGrant,
   bootstrapRole,
 } from '../security';
+import type { InventoryApprovalPort } from './approval-port';
+import { HoldService } from './holds';
+import { PriceService } from './pricing';
+import { PlanTemplateService } from './templates';
 import {
   BUILDINGS_COLLECTION,
+  HOLDS_COLLECTION,
+  PLAN_TEMPLATES_COLLECTION,
+  PRICE_VERSIONS_COLLECTION,
   PROJECTS_COLLECTION,
+  projectModel,
   UNITS_COLLECTION,
   UNIT_EVENTS_COLLECTION,
   unitEventModel,
@@ -62,7 +72,28 @@ describe.skipIf(!gate.available)(`inventory module — ${gate.reason}`, () => {
   let audit: AuditService;
   let security: SecurityService;
   let inventory: InventoryService;
+  let prices: PriceService;
+  let holds: HoldService;
+  let templates: PlanTemplateService;
   let app: Express;
+
+  /** The organization's calendar date and the wall clock, both under the test's control. */
+  let today = '2026-10-01';
+  let clock = new Date('2026-10-01T09:00:00.000Z');
+  /** The configured hold length (BD-29); `null` is not configured. */
+  let holdHours: number | null = 48;
+  /** Whether an approval policy applies, and the outcome the engine reports per request. */
+  let approvalPolicy = false;
+  const approvalStates = new Map<string, string>();
+  const approvals: InventoryApprovalPort = {
+    submit: (_actor, input) => {
+      if (!approvalPolicy) return Promise.resolve(undefined);
+      const requestId = `apr_${input.idempotencyKey.replace(/[^A-Za-z0-9]/g, '')}`;
+      approvalStates.set(requestId, 'pending');
+      return Promise.resolve({ requestId, state: 'pending' });
+    },
+    state: (requestId) => Promise.resolve(approvalStates.get(requestId)),
+  };
 
   const R_MANAGER = `${RUN}-r-manager`;
   const R_VIEWER_NO_PRICE = `${RUN}-r-viewer-noprice`;
@@ -72,6 +103,11 @@ describe.skipIf(!gate.available)(`inventory module — ${gate.reason}`, () => {
   const VIEWER_NO_PRICE = `${RUN}-viewer-noprice`;
   const VIEWER_PRICE = `${RUN}-viewer-price`;
   const PROJECT_SCOPED = `${RUN}-project-scoped`;
+  /** A representative scoped to their own work, placed in branch A (SEC-034). */
+  const REP_A = `${RUN}-rep-a`;
+  const REP_A_TWO = `${RUN}-rep-a-two`;
+  const REP_NOWHERE = `${RUN}-rep-nowhere`;
+  const R_REP = `${RUN}-r-rep`;
   const NO_GRANT = `${RUN}-no-grant`;
 
   const api = () => request(app);
@@ -81,6 +117,7 @@ describe.skipIf(!gate.available)(`inventory module — ${gate.reason}`, () => {
     return {
       get: (path: string) => withAccount(api().get(path)),
       post: (path: string) => withAccount(api().post(path).set('Origin', ALLOWED_ORIGIN)),
+      patch: (path: string) => withAccount(api().patch(path).set('Origin', ALLOWED_ORIGIN)),
     };
   };
 
@@ -157,6 +194,24 @@ describe.skipIf(!gate.available)(`inventory module — ${gate.reason}`, () => {
             : undefined,
         ),
     });
+    prices = new PriceService({
+      connection,
+      audit,
+      logger,
+      inventory,
+      approvals,
+      today: () => today as never,
+    });
+    holds = new HoldService({
+      connection,
+      audit,
+      logger,
+      inventory,
+      approvals,
+      holdHours: () => Promise.resolve(holdHours),
+      now: () => clock,
+    });
+    templates = new PlanTemplateService({ connection, audit, inventory });
 
     const manage: Permission[] = [
       'inventory.project.view',
@@ -164,7 +219,21 @@ describe.skipIf(!gate.available)(`inventory module — ${gate.reason}`, () => {
       'inventory.unit.view',
       'inventory.unit.manage',
       'inventory.unit.viewPricing',
+      'inventory.price.propose',
+      'inventory.hold.create',
+      'inventory.hold.manage',
+      'inventory.plan.manage',
     ];
+    await bootstrapRole(connection, {
+      key: R_REP,
+      name: label('representative'),
+      permissions: [
+        'inventory.project.view',
+        'inventory.unit.view',
+        'inventory.unit.viewPricing',
+        'inventory.hold.create',
+      ],
+    });
     await bootstrapRole(connection, {
       key: R_MANAGER,
       name: label('manager'),
@@ -199,7 +268,15 @@ describe.skipIf(!gate.available)(`inventory module — ${gate.reason}`, () => {
     };
 
     const modules: ApiModule[] = [
-      { basePath: '/inventory', router: inventoryRouter({ getService: () => inventory }) },
+      {
+        basePath: '/inventory',
+        router: inventoryRouter({
+          getService: () => inventory,
+          getPrices: () => prices,
+          getHolds: () => holds,
+          getTemplates: () => templates,
+        }),
+      },
     ];
     app = createApp({
       config: { CORS_ALLOWED_ORIGINS: [ALLOWED_ORIGIN], TRUST_PROXY_HOPS: 1, APP_ENV: 'test' },
@@ -219,6 +296,9 @@ describe.skipIf(!gate.available)(`inventory module — ${gate.reason}`, () => {
       UNITS_COLLECTION,
       BUILDINGS_COLLECTION,
       PROJECTS_COLLECTION,
+      PRICE_VERSIONS_COLLECTION,
+      HOLDS_COLLECTION,
+      PLAN_TEMPLATES_COLLECTION,
     ]) {
       await connection.collection(name).deleteMany({});
     }
@@ -233,9 +313,19 @@ describe.skipIf(!gate.available)(`inventory module — ${gate.reason}`, () => {
   });
 
   beforeEach(async () => {
-    for (const name of [UNIT_EVENTS_COLLECTION, UNITS_COLLECTION]) {
+    for (const name of [
+      UNIT_EVENTS_COLLECTION,
+      UNITS_COLLECTION,
+      PRICE_VERSIONS_COLLECTION,
+      HOLDS_COLLECTION,
+    ]) {
       await connection.collection(name).deleteMany({});
     }
+    today = '2026-10-01';
+    clock = new Date('2026-10-01T09:00:00.000Z');
+    holdHours = 48;
+    approvalPolicy = false;
+    approvalStates.clear();
   });
 
   describe('authorization and validation', () => {
@@ -601,6 +691,526 @@ describe.skipIf(!gate.available)(`inventory module — ${gate.reason}`, () => {
       const stored = await events.find({ unitId: unit.unitId }).lean().exec();
       expect(stored).toHaveLength(1);
       expect(stored[0]?.reason).toBeUndefined();
+    });
+  });
+
+  /* ------------------------------------------------------------ BMP-1 package 4 */
+
+  const context = { correlationId: `${RUN}-direct` };
+
+  async function grantRepresentatives(): Promise<void> {
+    for (const accountId of [REP_A, REP_A_TWO]) {
+      await bootstrapGrant(connection, {
+        accountId,
+        roleKeys: [R_REP],
+        scope: scope('assigned', { branchIds: [BRANCH_A] }),
+        updatedBy: 'test',
+      });
+    }
+    await bootstrapGrant(connection, {
+      accountId: REP_NOWHERE,
+      roleKeys: [R_REP],
+      scope: scope('assigned'),
+      updatedBy: 'test',
+    });
+  }
+
+  describe('catalogue scope for representatives (SEC-034)', () => {
+    it("lets an assigned-scope representative read their branch's inventory, and only it", async () => {
+      await grantRepresentatives();
+      const a = await makeProject(BRANCH_A);
+      const b = await makeProject(BRANCH_B);
+      const inside = await makeUnit(a.building.buildingId);
+      const outside = await makeUnit(b.building.buildingId);
+      const list = await as(REP_A).get('/api/v1/inventory/units?limit=50').expect(200);
+      expect(list.body.total).toBe(1);
+      expect(list.body.items[0].unitId).toBe(inside.unitId);
+      await as(REP_A).get(`/api/v1/inventory/units/${outside.unitId}`).expect(404);
+      const projects = await as(REP_A).get('/api/v1/inventory/projects').expect(200);
+      const visible = (projects.body.items as { projectId: string; branchId: string }[]).map(
+        (p) => p.projectId,
+      );
+      expect(visible).toContain(a.project.projectId);
+      expect(visible).not.toContain(b.project.projectId);
+      for (const item of projects.body.items as { branchId: string }[]) {
+        expect(item.branchId).toBe(BRANCH_A);
+      }
+    });
+
+    it('shows nothing to a narrow scope that names no place — never everything', async () => {
+      await grantRepresentatives();
+      const a = await makeProject(BRANCH_A);
+      await makeUnit(a.building.buildingId);
+      const list = await as(REP_NOWHERE).get('/api/v1/inventory/units?limit=50').expect(200);
+      expect(list.body.total).toBe(0);
+    });
+  });
+
+  describe('a person cannot free a committed unit (INV-STATUS-001)', () => {
+    it.each(['held', 'reserved'] as const)(
+      'refuses to move a %s unit to available by hand, and audits it',
+      async (status) => {
+        const { building } = await makeProject();
+        const unit = await makeUnit(building.buildingId);
+        await inventory.applyStatusChange(
+          (await security.resolveActor(MANAGER))!,
+          {
+            unitId: unit.unitId,
+            from: 'available',
+            to: status,
+            reason: 'committed by a workflow',
+            reservationId: 'rsv_manualstatustestaaaaaaaaaaaa01',
+          },
+          context,
+        );
+        const refused = await as(MANAGER)
+          .post(`/api/v1/inventory/units/${unit.unitId}/status`)
+          .send({ status: 'available', reason: 'trying to free it' })
+          .expect(409);
+        expect(refused.body.error.issues[0].code).toBe('STATUS_SET_BY_WORKFLOW');
+        const stored = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+        expect(stored).toMatchObject({
+          status,
+          heldByReservationId: 'rsv_manualstatustestaaaaaaaaaaaa01',
+        });
+      },
+    );
+  });
+
+  describe('editing projects, buildings and units (INV-PROJECT-001/002, INV-UNIT-001)', () => {
+    it('edits a unit’s attributes with the version read, and records it on the timeline', async () => {
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId, { bedrooms: 2, gardenArea: '40.5' });
+      const edited = await as(MANAGER)
+        .patch(`/api/v1/inventory/units/${unit.unitId}`)
+        .send({ bedrooms: 3, bathrooms: 2, reason: 'plan revised', expectedVersion: unit.version })
+        .expect(200);
+      expect(edited.body).toMatchObject({ bedrooms: 3, bathrooms: 2, gardenArea: '40.5' });
+      await as(MANAGER)
+        .patch(`/api/v1/inventory/units/${unit.unitId}`)
+        .send({ bedrooms: 4, reason: 'stale', expectedVersion: unit.version })
+        .expect(409);
+      // Area and price are what a customer signs for: not editable here.
+      await as(MANAGER)
+        .patch(`/api/v1/inventory/units/${unit.unitId}`)
+        .send({ area: '200', reason: 'bigger', expectedVersion: unit.version + 1 })
+        .expect(400);
+      const history = await as(MANAGER)
+        .get(`/api/v1/inventory/units/${unit.unitId}/history`)
+        .expect(200);
+      expect(history.body.items[0].kind).toBe('attributesChanged');
+    });
+
+    it('edits a project written before BMP-1 at version 1, and refuses a stale one', async () => {
+      const { project } = await makeProject();
+      await projectModel(connection).collection.updateOne(
+        { projectId: project.projectId },
+        { $unset: { version: '' } },
+      );
+      const edited = await as(MANAGER)
+        .patch(`/api/v1/inventory/projects/${project.projectId}`)
+        .send({ status: 'onHold', reason: 'permit review', expectedVersion: 1 })
+        .expect(200);
+      expect(edited.body).toMatchObject({ status: 'onHold', version: 2 });
+      await as(MANAGER)
+        .patch(`/api/v1/inventory/projects/${project.projectId}`)
+        .send({ status: 'selling', reason: 'stale', expectedVersion: 1 })
+        .expect(409);
+    });
+
+    it('refuses to lower a building below its highest unit', async () => {
+      const { building } = await makeProject();
+      await makeUnit(building.buildingId, { floor: 9 });
+      const refused = await as(MANAGER)
+        .patch(`/api/v1/inventory/buildings/${building.buildingId}`)
+        .send({ floors: 5, reason: 'redesign', expectedVersion: 1 })
+        .expect(409);
+      expect(refused.body.error.issues[0].code).toBe('FLOOR_BELOW_UNITS');
+      await as(MANAGER)
+        .patch(`/api/v1/inventory/buildings/${building.buildingId}`)
+        .send({ floors: 10, reason: 'redesign', expectedVersion: 1 })
+        .expect(200);
+    });
+  });
+
+  describe('search, matrix and comparison (INV-SEARCH-001 … 003)', () => {
+    it('filters by area, bedrooms and price, and refuses a price filter to those who may not see prices', async () => {
+      const { building } = await makeProject();
+      await makeUnit(building.buildingId, { area: '90', bedrooms: 2, basePrice: egp('1800000') });
+      await makeUnit(building.buildingId, { area: '140', bedrooms: 3, basePrice: egp('2900000') });
+      await makeUnit(building.buildingId, { area: '200', bedrooms: 4, basePrice: egp('4100000') });
+      const byArea = await as(VIEWER_NO_PRICE)
+        .get('/api/v1/inventory/units?areaMin=100&areaMax=180')
+        .expect(200);
+      expect(byArea.body.total).toBe(1);
+      const byRooms = await as(VIEWER_NO_PRICE)
+        .get('/api/v1/inventory/units?bedrooms=4')
+        .expect(200);
+      expect(byRooms.body.total).toBe(1);
+      const byPrice = await as(VIEWER_PRICE)
+        .get('/api/v1/inventory/units?priceMin=2000000&priceMax=4100000')
+        .expect(200);
+      expect(byPrice.body.total).toBe(2);
+      const refused = await as(VIEWER_NO_PRICE)
+        .get('/api/v1/inventory/units?priceMax=2000000')
+        .expect(403);
+      expect(refused.body.error.issues[0].code).toBe('PRICE_FILTER_NOT_PERMITTED');
+    });
+
+    it('draws the matrix highest floor first, counts by status, and prices only for those who may see them', async () => {
+      const { project, building } = await makeProject();
+      await makeUnit(building.buildingId, { floor: 1 });
+      await makeUnit(building.buildingId, { floor: 7 });
+      const withdrawn = await makeUnit(building.buildingId, { floor: 7 });
+      await as(MANAGER)
+        .post(`/api/v1/inventory/units/${withdrawn.unitId}/status`)
+        .send({ status: 'unavailable', reason: 'show unit' })
+        .expect(200);
+      const matrix = await as(VIEWER_NO_PRICE)
+        .get(`/api/v1/inventory/projects/${project.projectId}/matrix`)
+        .expect(200);
+      const floors = matrix.body.buildings[0].floors as { floor: number; units: object[] }[];
+      expect(floors.map((row) => row.floor)).toEqual([7, 1]);
+      expect(floors[0]?.units).toHaveLength(2);
+      expect(matrix.body.counts).toMatchObject({ available: 2, unavailable: 1 });
+      expect(JSON.stringify(matrix.body)).not.toContain('currentPrice');
+      const priced = await as(VIEWER_PRICE)
+        .get(`/api/v1/inventory/projects/${project.projectId}/matrix`)
+        .expect(200);
+      expect(priced.body.buildings[0].floors[0].units[0].currentPrice).toEqual(egp('3000000'));
+    });
+
+    it('compares units in the order asked, and refuses one outside the scope as not found', async () => {
+      await grantRepresentatives();
+      const a = await makeProject(BRANCH_A);
+      const b = await makeProject(BRANCH_B);
+      const first = await makeUnit(a.building.buildingId);
+      const second = await makeUnit(a.building.buildingId);
+      const foreign = await makeUnit(b.building.buildingId);
+      const compared = await as(REP_A)
+        .get(`/api/v1/inventory/units/compare?ids=${second.unitId},${first.unitId}`)
+        .expect(200);
+      expect((compared.body.items as { unitId: string }[]).map((u) => u.unitId)).toEqual([
+        second.unitId,
+        first.unitId,
+      ]);
+      await as(REP_A)
+        .get(`/api/v1/inventory/units/compare?ids=${first.unitId},${foreign.unitId}`)
+        .expect(404);
+      await as(REP_A).get(`/api/v1/inventory/units/compare?ids=${first.unitId}`).expect(400);
+    });
+  });
+
+  describe('price versions (INV-PRICE-001 … 003)', () => {
+    const propose = (
+      unitId: string,
+      price: string,
+      effectiveFrom = today,
+      key = `${Math.random()}`,
+    ) =>
+      as(MANAGER)
+        .post(`/api/v1/inventory/units/${unitId}/prices`)
+        .send({
+          price: egp(price),
+          effectiveFrom,
+          reason: 'quarterly price list',
+          idempotencyKey: `price-${key}`.padEnd(12, 'x'),
+        });
+
+    it('applies a change effective today when no policy applies, updating price and price per square metre', async () => {
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId, { area: '100', basePrice: egp('3000000') });
+      const response = await propose(unit.unitId, '3300000').expect(201);
+      expect(response.body).toMatchObject({
+        state: 'effective',
+        changePercentage: '10',
+        previousPrice: egp('3000000'),
+      });
+      const read = await as(VIEWER_PRICE).get(`/api/v1/inventory/units/${unit.unitId}`).expect(200);
+      expect(read.body.currentPrice).toEqual(egp('3300000'));
+      expect(read.body.basePrice).toEqual(egp('3000000'));
+      expect(read.body.pricePerSquareMeter.amount).toBe('33000');
+      const history = await as(VIEWER_PRICE)
+        .get(`/api/v1/inventory/units/${unit.unitId}/history`)
+        .expect(200);
+      expect(history.body.items[0]).toMatchObject({
+        kind: 'priceChanged',
+        sourceType: 'priceVersion',
+      });
+    });
+
+    it('refuses a past date, the same price, and a second open change', async () => {
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId);
+      const past = await propose(unit.unitId, '3100000', '2026-09-30').expect(400);
+      expect(past.body.error.issues[0].code).toBe('PRICE_DATE_IN_PAST');
+      await propose(unit.unitId, '3000000').expect(400);
+      await propose(unit.unitId, '3200000', '2026-11-01').expect(201);
+      const second = await propose(unit.unitId, '3250000', '2026-12-01').expect(409);
+      expect(second.body.error.issues[0].code).toBe('PRICE_CHANGE_PENDING');
+    });
+
+    it('schedules a future change and applies it when the sweep reaches its date', async () => {
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId);
+      const scheduled = await propose(unit.unitId, '2850000', '2026-11-01').expect(201);
+      expect(scheduled.body.state).toBe('scheduled');
+      expect((await prices.sweep(MAINTENANCE_ACTOR, context)).applied).toBe(0);
+      today = '2026-11-01';
+      expect((await prices.sweep(MAINTENANCE_ACTOR, context)).applied).toBe(1);
+      // Idempotent: a second run applies nothing again.
+      expect((await prices.sweep(MAINTENANCE_ACTOR, context)).applied).toBe(0);
+      const read = await as(VIEWER_PRICE).get(`/api/v1/inventory/units/${unit.unitId}`).expect(200);
+      expect(read.body.currentPrice).toEqual(egp('2850000'));
+    });
+
+    it('waits for approval when a policy applies, then applies on approval or ends on rejection', async () => {
+      approvalPolicy = true;
+      const { building } = await makeProject();
+      const approved = await makeUnit(building.buildingId);
+      const refused = await makeUnit(building.buildingId);
+      const first = await propose(approved.unitId, '2700000').expect(201);
+      expect(first.body.state).toBe('pendingApproval');
+      const unchanged = await as(VIEWER_PRICE)
+        .get(`/api/v1/inventory/units/${approved.unitId}`)
+        .expect(200);
+      // No price takes effect before its approval.
+      expect(unchanged.body.currentPrice).toEqual(egp('3000000'));
+      approvalStates.set(first.body.approvalRequestId as string, 'approved');
+      expect(
+        await prices.syncApproval(
+          MAINTENANCE_ACTOR,
+          first.body.approvalRequestId as string,
+          context,
+        ),
+      ).toBe('applied');
+      const read = await as(VIEWER_PRICE)
+        .get(`/api/v1/inventory/units/${approved.unitId}`)
+        .expect(200);
+      expect(read.body.currentPrice).toEqual(egp('2700000'));
+
+      const second = await propose(refused.unitId, '2500000').expect(201);
+      approvalStates.set(second.body.approvalRequestId as string, 'rejected');
+      expect((await prices.sweep(MAINTENANCE_ACTOR, context)).settled).toBe(1);
+      const versions = await as(VIEWER_PRICE)
+        .get(`/api/v1/inventory/units/${refused.unitId}/prices`)
+        .expect(200);
+      expect(versions.body.items[0].state).toBe('rejected');
+    });
+
+    it('replays an idempotent proposal and hides the history from those who may not see prices', async () => {
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId);
+      const first = await propose(unit.unitId, '3100000', today, 'replay-one').expect(201);
+      const again = await propose(unit.unitId, '3100000', today, 'replay-one').expect(200);
+      expect(again.body.priceVersionId).toBe(first.body.priceVersionId);
+      await propose(unit.unitId, '3200000', today, 'replay-one').expect(409);
+      await as(VIEWER_NO_PRICE).get(`/api/v1/inventory/units/${unit.unitId}/prices`).expect(403);
+    });
+  });
+
+  describe('timed holds (INV-HOLD-001, 002)', () => {
+    const takeHold = (accountId: string, unitId: string, key = `${Math.random()}`) =>
+      as(accountId)
+        .post('/api/v1/inventory/holds')
+        .send({ unitId, idempotencyKey: `hold-${key}`.padEnd(12, 'x') });
+
+    it('refuses every hold while no hold length is configured (BD-29)', async () => {
+      holdHours = null;
+      await grantRepresentatives();
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId);
+      const refused = await takeHold(REP_A, unit.unitId).expect(409);
+      expect(refused.body.error.issues[0].code).toBe('HOLD_DURATION_NOT_CONFIGURED');
+      const stored = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(stored?.status).toBe('available');
+    });
+
+    it('lets exactly one of two simultaneous holds win', async () => {
+      await grantRepresentatives();
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId);
+      const results = await Promise.all([
+        takeHold(REP_A, unit.unitId),
+        takeHold(REP_A_TWO, unit.unitId),
+      ]);
+      expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+      const stored = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(stored?.status).toBe('held');
+      expect(
+        await connection.collection(HOLDS_COLLECTION).countDocuments({ state: 'active' }),
+      ).toBe(1);
+    });
+
+    it('lets only the holder or a manager release, and returns the unit', async () => {
+      await grantRepresentatives();
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId);
+      const hold = await takeHold(REP_A, unit.unitId).expect(201);
+      const refused = await as(REP_A_TWO)
+        .post(`/api/v1/inventory/holds/${hold.body.holdId as string}/release`)
+        .send({ reason: 'not mine to release' })
+        .expect(403);
+      expect(refused.body.error.issues[0].code).toBe('NOT_HOLDER');
+      await as(REP_A)
+        .post(`/api/v1/inventory/holds/${hold.body.holdId as string}/release`)
+        .send({ reason: 'customer declined' })
+        .expect(200);
+      const stored = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(stored?.status).toBe('available');
+      expect(stored?.heldByHoldId).toBeUndefined();
+    });
+
+    it('expires an overdue hold on the sweep and returns the unit, once', async () => {
+      await grantRepresentatives();
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId);
+      await takeHold(REP_A, unit.unitId).expect(201);
+      clock = new Date('2026-10-03T08:59:00.000Z');
+      expect((await holds.sweep(MAINTENANCE_ACTOR, context)).expired).toBe(0);
+      clock = new Date('2026-10-03T09:01:00.000Z');
+      expect((await holds.sweep(MAINTENANCE_ACTOR, context)).expired).toBe(1);
+      expect((await holds.sweep(MAINTENANCE_ACTOR, context)).expired).toBe(0);
+      const stored = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(stored?.status).toBe('available');
+    });
+
+    it('extends at once without a policy, and through approval with one', async () => {
+      await grantRepresentatives();
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId);
+      const hold = await takeHold(REP_A, unit.unitId).expect(201);
+      const extended = await as(REP_A)
+        .post(`/api/v1/inventory/holds/${hold.body.holdId as string}/extend`)
+        .send({ reason: 'customer travelling', expectedVersion: 1 })
+        .expect(200);
+      expect(extended.body.expiresAt).toBe('2026-10-05T09:00:00.000Z');
+      expect(extended.body.extensions).toBe(1);
+
+      approvalPolicy = true;
+      const pending = await as(REP_A)
+        .post(`/api/v1/inventory/holds/${hold.body.holdId as string}/extend`)
+        .send({ reason: 'still travelling', expectedVersion: extended.body.version as number })
+        .expect(200);
+      expect(pending.body.extensionApprovalRequestId).toBeDefined();
+      expect(pending.body.expiresAt).toBe('2026-10-05T09:00:00.000Z');
+      approvalStates.set(pending.body.extensionApprovalRequestId as string, 'approved');
+      expect((await holds.sweep(MAINTENANCE_ACTOR, context)).extended).toBe(1);
+      const read = await as(REP_A)
+        .get(`/api/v1/inventory/holds/${hold.body.holdId as string}`)
+        .expect(200);
+      expect(read.body).toMatchObject({ expiresAt: '2026-10-07T09:00:00.000Z', extensions: 2 });
+    });
+
+    it("hands a hold's unit to a reservation inside the reservation's transaction", async () => {
+      await grantRepresentatives();
+      const { building } = await makeProject();
+      const unit = await makeUnit(building.buildingId);
+      const hold = await takeHold(REP_A, unit.unitId).expect(201);
+      const reservationId = 'rsv_holdconversiontestaaaaaaaaa01';
+      await withTransaction(connection, async (session) =>
+        holds.convert(
+          (await security.resolveActor(REP_A))!,
+          hold.body.holdId as string,
+          reservationId,
+          { unitId: unit.unitId },
+          context,
+          session,
+        ),
+      );
+      const stored = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(stored).toMatchObject({ status: 'held', heldByReservationId: reservationId });
+      expect(stored?.heldByHoldId).toBeUndefined();
+      const read = await as(REP_A)
+        .get(`/api/v1/inventory/holds/${hold.body.holdId as string}`)
+        .expect(200);
+      expect(read.body).toMatchObject({ state: 'converted', reservationId });
+      // A converted hold neither expires nor releases the unit again.
+      clock = new Date('2026-12-01T00:00:00.000Z');
+      expect((await holds.sweep(MAINTENANCE_ACTOR, context)).expired).toBe(0);
+    });
+  });
+
+  describe('payment-plan templates (INV-PLAN-001)', () => {
+    it('previews a template on a unit with a schedule that reconciles to the piastre', async () => {
+      const { project, building } = await makeProject();
+      const unit = await makeUnit(building.buildingId, { basePrice: egp('1000000.01') });
+      const created = await as(MANAGER)
+        .post('/api/v1/inventory/plan-templates')
+        .send({
+          code: nextCode('PT'),
+          name: label('Ten percent over three years'),
+          projectIds: [project.projectId],
+          legalEntityId: LEGAL_ENTITY,
+          downPaymentPercent: '10',
+          installmentCount: 12,
+          frequency: 'quarterly',
+          firstInstallmentAfterMonths: 3,
+        })
+        .expect(201);
+      const listed = await as(VIEWER_PRICE)
+        .get(`/api/v1/inventory/plan-templates?projectId=${project.projectId}`)
+        .expect(200);
+      expect(listed.body.items).toHaveLength(1);
+      const preview = await as(VIEWER_PRICE)
+        .post(`/api/v1/inventory/plan-templates/${created.body.templateId as string}/preview`)
+        .send({ unitId: unit.unitId, contractDate: '2026-10-01' })
+        .expect(200);
+      expect(preview.body.plan.downPayment).toEqual(egp('100000'));
+      expect(preview.body.plan.firstDueOn).toBe('2027-01-01');
+      expect(preview.body.schedule.rows).toHaveLength(13);
+      expect(preview.body.schedule.rowsTotal).toEqual(preview.body.schedule.total);
+    });
+
+    it('refuses a retired template and one the unit’s project is not eligible for', async () => {
+      const first = await makeProject();
+      const second = await makeProject();
+      const unit = await makeUnit(second.building.buildingId);
+      const onlyFirst = await as(MANAGER)
+        .post('/api/v1/inventory/plan-templates')
+        .send({
+          code: nextCode('PT'),
+          name: label('First project only'),
+          projectIds: [first.project.projectId],
+          legalEntityId: LEGAL_ENTITY,
+          downPaymentPercent: '20',
+          installmentCount: 8,
+          frequency: 'semiAnnual',
+          firstInstallmentAfterMonths: 6,
+        })
+        .expect(201);
+      const ineligible = await as(VIEWER_PRICE)
+        .post(`/api/v1/inventory/plan-templates/${onlyFirst.body.templateId as string}/preview`)
+        .send({ unitId: unit.unitId, contractDate: '2026-10-01' })
+        .expect(409);
+      expect(ineligible.body.error.issues[0].code).toBe('TEMPLATE_NOT_ELIGIBLE');
+      await as(MANAGER)
+        .post(`/api/v1/inventory/plan-templates/${onlyFirst.body.templateId as string}/retire`)
+        .send({ reason: 'replaced by the 2027 plan' })
+        .expect(200);
+      const firstUnit = await makeUnit(first.building.buildingId);
+      await as(VIEWER_PRICE)
+        .post(`/api/v1/inventory/plan-templates/${onlyFirst.body.templateId as string}/preview`)
+        .send({ unitId: firstUnit.unitId, contractDate: '2026-10-01' })
+        .expect(409);
+    });
+
+    it('refuses percentages that add up to more than the whole price', async () => {
+      const { project } = await makeProject();
+      await as(MANAGER)
+        .post('/api/v1/inventory/plan-templates')
+        .send({
+          code: nextCode('PT'),
+          name: label('Impossible'),
+          projectIds: [project.projectId],
+          legalEntityId: LEGAL_ENTITY,
+          downPaymentPercent: '60',
+          finalPaymentPercent: '50',
+          installmentCount: 4,
+          frequency: 'annual',
+          firstInstallmentAfterMonths: 12,
+        })
+        .expect(400);
     });
   });
 });

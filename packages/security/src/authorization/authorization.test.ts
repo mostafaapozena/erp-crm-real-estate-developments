@@ -24,7 +24,13 @@ import {
 import { assertWritableFields, restrictDocument, restrictedFieldsFor } from './fields';
 import { assertPermission, can, canAll, effectivePermissions, resolvePermissions } from './policy';
 import { assertSafeFilter } from './sanitize';
-import { MATCH_NOTHING, buildScopeFilter, isMatchNothing, withScope } from './scope';
+import {
+  MATCH_NOTHING,
+  buildCatalogueScopeFilter,
+  buildScopeFilter,
+  isMatchNothing,
+  withScope,
+} from './scope';
 
 /**
  * Overrides are typed as the schema's **input**, so a scope may be written as `{ level: 'team' }` and the
@@ -158,6 +164,55 @@ describe('data scope filters (SEC-026, SEC-027)', () => {
     });
     expect(withScope({}, { action: 'x' })).toEqual({ action: 'x' });
     expect(withScope({ ownerId: 'account-1' }, {})).toEqual({ ownerId: 'account-1' });
+  });
+});
+
+describe('catalogue scope for ownerless resources (SEC-034)', () => {
+  const catalogue = { branch: 'branchId', project: 'projectId', legalEntity: 'legalEntityId' };
+
+  it.each(['self', 'assigned', 'team', 'department'] as const)(
+    'reads a narrow %s scope as the catalogue of the places it references',
+    (level) => {
+      expect(
+        buildCatalogueScopeFilter(actor({ scope: { level, branchIds: ['br1'] } }), catalogue),
+      ).toEqual({ branchId: { $in: ['br1'] } });
+      expect(
+        buildCatalogueScopeFilter(
+          actor({ scope: { level, branchIds: ['br1'], projectIds: ['p1'] } }),
+          catalogue,
+        ),
+      ).toEqual({ $or: [{ projectId: { $in: ['p1'] } }, { branchId: { $in: ['br1'] } }] });
+    },
+  );
+
+  it('matches nothing when a narrow scope carries no place — never everything', () => {
+    for (const level of ['self', 'assigned', 'team', 'department'] as const) {
+      expect(
+        isMatchNothing(buildCatalogueScopeFilter(actor({ scope: { level } }), catalogue)),
+      ).toBe(true);
+    }
+  });
+
+  it('leaves the place-shaped levels exactly as the ordinary scope filter builds them', () => {
+    for (const scope of [
+      { level: 'all' as const },
+      { level: 'branch' as const, branchIds: ['br1'] },
+      { level: 'project' as const, projectIds: ['p1'] },
+      { level: 'legalEntity' as const, legalEntityIds: ['le1'] },
+      { level: 'branch' as const },
+    ]) {
+      const subject = actor({ scope });
+      expect(buildCatalogueScopeFilter(subject, catalogue)).toEqual(
+        buildScopeFilter(subject, catalogue),
+      );
+    }
+  });
+
+  it('does not change what the same actor sees of owned records', () => {
+    const representative = actor({ scope: { level: 'assigned', branchIds: ['br1'] } });
+    expect(
+      buildScopeFilter(representative, { assignee: 'assigneeId', branch: 'branchId' }),
+    ).toEqual({ assigneeId: 'account-1' });
   });
 });
 

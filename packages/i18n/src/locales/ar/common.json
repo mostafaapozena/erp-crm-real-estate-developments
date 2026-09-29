@@ -1026,5 +1026,29 @@
     "reservation": "حجز",
     "won": "تم البيع",
     "lost": "خسارة"
+  },
+  "unitEventKind": {
+    "created": "إنشاء الوحدة",
+    "statusChanged": "تغيير الحالة",
+    "priceChanged": "تغيير السعر",
+    "attributesChanged": "تعديل المواصفات"
+  },
+  "priceVersionState": {
+    "pendingApproval": "بانتظار الموافقة",
+    "scheduled": "مجدول",
+    "effective": "ساري",
+    "superseded": "سابق",
+    "rejected": "مرفوض",
+    "cancelled": "ملغى"
+  },
+  "holdState": {
+    "active": "حجز مؤقت ساري",
+    "released": "أُلغي الحجز المؤقت",
+    "expired": "انتهت مدة الحجز المؤقت",
+    "converted": "تحول إلى حجز"
+  },
+  "planTemplateState": {
+    "active": "مفعّل",
+    "retired": "موقوف"
   }
 }

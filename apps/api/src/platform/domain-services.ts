@@ -24,7 +24,14 @@ import { CompanyService } from '../modules/company';
 import { DocumentService, TemplateService, type OwnerResolver } from '../modules/documents';
 import { CrmService, OpportunityService, leadImporter } from '../modules/crm';
 import { AuthThrottle, IdentityService } from '../modules/identity';
-import { InventoryService } from '../modules/inventory';
+import {
+  HoldService,
+  InventoryService,
+  PlanTemplateService,
+  PriceService,
+  type InventoryApprovalPort,
+} from '../modules/inventory';
+import { MAINTENANCE_ACTOR } from './maintenance';
 import { MarketingService } from '../modules/marketing';
 import { NumberingService } from '../modules/numbering';
 import {
@@ -83,6 +90,9 @@ export interface DomainServices {
   approval: () => ApprovalService;
   organization: () => OrganizationService;
   inventory: () => InventoryService;
+  prices: () => PriceService;
+  holds: () => HoldService;
+  planTemplates: () => PlanTemplateService;
   crm: () => CrmService;
   opportunities: () => OpportunityService;
   sales: () => SalesService;
@@ -111,6 +121,9 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let approvalService: ApprovalService | undefined;
   let organizationService: OrganizationService | undefined;
   let inventoryService: InventoryService | undefined;
+  let priceService: PriceService | undefined;
+  let holdService: HoldService | undefined;
+  let planTemplateService: PlanTemplateService | undefined;
   let crmService: CrmService | undefined;
   let opportunityService: OpportunityService | undefined;
   let salesService: SalesService | undefined;
@@ -249,6 +262,14 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
           legalEntityId: project.legalEntityId,
           branchId: project.branchId,
           projectId: project.projectId,
+        };
+      }
+      case 'building': {
+        const building = await getInventoryService().getBuilding(actor, id);
+        return {
+          legalEntityId: building.legalEntityId,
+          branchId: building.branchId,
+          projectId: building.projectId,
         };
       }
       case 'unit': {
@@ -534,6 +555,91 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   }
 
   /**
+   * The approval engine as a module sees it (ADR-0024): `submit` resolves to nothing when no policy
+   * applies — the normal case until `SD-02` supplies one — and `state` reads the outcome. One port,
+   * shared by every module that asks for approval, so the "no policy is not an error" rule lives once.
+   */
+  const approvalPort: InventoryApprovalPort = {
+    submit: async (actor, input, context) => {
+      try {
+        const result = await getApprovalService().submit(actor, input, context);
+        return { requestId: result.request.requestId, state: result.request.state };
+      } catch (error) {
+        if (error instanceof NoApplicablePolicyError) return undefined;
+        throw error;
+      }
+    },
+    state: async (requestId) => {
+      try {
+        return (await getApprovalService().findRequestOutcome(requestId))?.state;
+      } catch {
+        return undefined;
+      }
+    },
+  };
+
+  /** Unit price versions (INV-PRICE-001, 003): changes wait for approval where a policy applies. */
+  function getPriceService(): PriceService {
+    const connection = requireConnection();
+    priceService ??= new PriceService({
+      connection,
+      audit: getAuditService(),
+      logger,
+      inventory: getInventoryService(),
+      approvals: approvalPort,
+      today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
+    });
+    return priceService;
+  }
+
+  /** Timed customer holds (INV-HOLD-001, 002). Their length is `BD-29`; none is assumed. */
+  function getHoldService(): HoldService {
+    const connection = requireConnection();
+    holdService ??= new HoldService({
+      connection,
+      audit: getAuditService(),
+      logger,
+      inventory: getInventoryService(),
+      approvals: approvalPort,
+      holdHours: () => getSettingsService().valueOf<number>('sales.unitHoldHours'),
+    });
+    return holdService;
+  }
+
+  /** Payment-plan templates (INV-PLAN-001). */
+  function getPlanTemplateService(): PlanTemplateService {
+    const connection = requireConnection();
+    planTemplateService ??= new PlanTemplateService({
+      connection,
+      audit: getAuditService(),
+      inventory: getInventoryService(),
+    });
+    return planTemplateService;
+  }
+
+  /**
+   * A decided approval is acted on at once by the module that asked for it (ADR-0024 §2: the engine
+   * records, the owning module acts). The maintenance sweep settles the same requests again, so an
+   * outcome lost here — a crash between the decision and this call — is applied on the next run.
+   */
+  async function settleApprovalOutcome(requestId: string): Promise<void> {
+    const context = { correlationId: `approval-outcome-${requestId}`, route: 'approval/outcome' };
+    for (const settle of [
+      () => getPriceService().syncApproval(MAINTENANCE_ACTOR, requestId, context),
+      () => getHoldService().syncApproval(MAINTENANCE_ACTOR, requestId, context),
+    ]) {
+      try {
+        await settle();
+      } catch (error) {
+        logger.warn(
+          { err: error, code: 'APPROVAL_OUTCOME_NOT_SETTLED', requestId },
+          'An approval outcome could not be applied now; the maintenance sweep will retry it.',
+        );
+      }
+    }
+  }
+
+  /**
    * CRM. "Today" is the calendar date in the **organization** timezone, not the server's (ADR-0008):
    * a follow-up due today must mean today where the sales team is, and a business date is never
    * converted through a timezone once it is stored.
@@ -646,6 +752,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
               dedupeKey: `approval:${event.requestId}:${event.stageOrder}:pending`,
             });
           } else if (event.requesterAccountId) {
+            await settleApprovalOutcome(event.requestId);
             await notifications.notify({
               type: 'approval.decided',
               recipients: { accountIds: [event.requesterAccountId] },
@@ -710,25 +817,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
         advanceLead: (actor, leadId, to, reason, context, session) =>
           getCrmService().advanceStageInternal(actor, leadId, to, reason, context, session),
       },
-      approvals: {
-        submit: async (actor, input, context) => {
-          try {
-            const result = await getApprovalService().submit(actor, input, context);
-            return { requestId: result.request.requestId, state: result.request.state };
-          } catch (error) {
-            // No policy configured for this operation is the normal case until `SD-02` supplies one.
-            if (error instanceof NoApplicablePolicyError) return undefined;
-            throw error;
-          }
-        },
-        state: async (requestId) => {
-          try {
-            return (await getApprovalService().findRequestOutcome(requestId))?.state;
-          } catch {
-            return undefined;
-          }
-        },
-      },
+      approvals: approvalPort,
       today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
     });
     return salesService;
@@ -869,6 +958,9 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     approval: getApprovalService,
     organization: getOrganizationService,
     inventory: getInventoryService,
+    prices: getPriceService,
+    holds: getHoldService,
+    planTemplates: getPlanTemplateService,
     crm: getCrmService,
     opportunities: getOpportunityService,
     sales: getSalesService,

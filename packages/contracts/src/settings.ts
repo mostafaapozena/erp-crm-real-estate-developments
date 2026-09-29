@@ -75,6 +75,16 @@ export const SETTING_DEFINITIONS = {
     defaultValue: null,
     decision: 'BD-27',
   },
+  /**
+   * Hours a timed customer hold keeps a unit before it returns to sale (BD-29, conflict C-06). Not
+   * configured, no hold can be taken: a guessed length would release units nobody expected to lose.
+   */
+  'sales.unitHoldHours': {
+    category: 'sales',
+    schema: z.number().int().min(1).max(720),
+    defaultValue: null,
+    decision: 'BD-29',
+  },
   'sales.reservationValidityDays': {
     category: 'sales',
     schema: z.number().int().min(1).max(365),

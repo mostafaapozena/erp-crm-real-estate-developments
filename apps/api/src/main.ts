@@ -163,6 +163,15 @@ const sweeps: SweepDefinition[] = [
       counts(await services.approval().escalateOverdue(actor, context)),
   },
   {
+    // Due price versions, expired holds, and decided price and hold-extension approvals.
+    name: 'inventory.sweep',
+    intervalSeconds: 300,
+    run: async (actor, context) => ({
+      ...counts(await services.prices().sweep(actor, context)),
+      ...counts(await services.holds().sweep(actor, context)),
+    }),
+  },
+  {
     name: 'installments.refresh',
     intervalSeconds: 3600,
     run: async (actor, context) =>
@@ -272,7 +281,16 @@ const modules: ApiModule[] = [
     basePath: '/organization',
     router: organizationRouter({ getService: getOrganizationService, guard }),
   },
-  { basePath: '/inventory', router: inventoryRouter({ getService: getInventoryService, guard }) },
+  {
+    basePath: '/inventory',
+    router: inventoryRouter({
+      getService: getInventoryService,
+      getPrices: services.prices,
+      getHolds: services.holds,
+      getTemplates: services.planTemplates,
+      guard,
+    }),
+  },
   {
     basePath: '/crm',
     router: crmRouter({

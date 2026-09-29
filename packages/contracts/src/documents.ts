@@ -21,6 +21,7 @@ export const DOCUMENT_OWNER_TYPES = [
   'lead',
   'customer',
   'project',
+  'building',
   'unit',
   'reservation',
   'contract',

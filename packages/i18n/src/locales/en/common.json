@@ -1018,5 +1018,29 @@
     "reservation": "Reservation",
     "won": "Won",
     "lost": "Lost"
+  },
+  "unitEventKind": {
+    "created": "Unit created",
+    "statusChanged": "Status changed",
+    "priceChanged": "Price changed",
+    "attributesChanged": "Details updated"
+  },
+  "priceVersionState": {
+    "pendingApproval": "Awaiting approval",
+    "scheduled": "Scheduled",
+    "effective": "In force",
+    "superseded": "Superseded",
+    "rejected": "Rejected",
+    "cancelled": "Cancelled"
+  },
+  "holdState": {
+    "active": "Hold active",
+    "released": "Hold released",
+    "expired": "Hold expired",
+    "converted": "Became a reservation"
+  },
+  "planTemplateState": {
+    "active": "Active",
+    "retired": "Retired"
   }
 }

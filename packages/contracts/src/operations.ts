@@ -37,6 +37,7 @@ export const MAINTENANCE_SWEEPS = [
   'approvals.escalate',
   'installments.refresh',
   'integrations.sweep',
+  'inventory.sweep',
 ] as const;
 export const MaintenanceSweepSchema = z.enum(MAINTENANCE_SWEEPS);
 export type MaintenanceSweep = z.infer<typeof MaintenanceSweepSchema>;

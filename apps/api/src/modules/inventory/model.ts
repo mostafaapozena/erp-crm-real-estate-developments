@@ -1,5 +1,8 @@
 import {
   FINISHING_STATUSES,
+  HOLD_STATES,
+  PLAN_TEMPLATE_STATES,
+  PRICE_VERSION_STATES,
   PROJECT_STATUSES,
   PROPERTY_TYPES,
   UNIT_STATUSES,
@@ -23,6 +26,9 @@ export const PROJECTS_COLLECTION = 'inventoryProjects';
 export const BUILDINGS_COLLECTION = 'inventoryBuildings';
 export const UNITS_COLLECTION = 'inventoryUnits';
 export const UNIT_EVENTS_COLLECTION = 'inventoryUnitEvents';
+export const PRICE_VERSIONS_COLLECTION = 'inventoryPriceVersions';
+export const HOLDS_COLLECTION = 'inventoryHolds';
+export const PLAN_TEMPLATES_COLLECTION = 'inventoryPlanTemplates';
 
 export class UnitUndeletableError extends Error {
   readonly code = 'CONFLICT';
@@ -60,6 +66,8 @@ export interface ProjectDocument {
   description?: StoredLocalizedLabel;
   status: (typeof PROJECT_STATUSES)[number];
   currency: string;
+  /** Absent on a record from before BMP-1, which reads as version 1. */
+  version?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,6 +81,7 @@ export interface BuildingDocument {
   name: StoredLocalizedLabel;
   zone?: StoredLocalizedLabel;
   floors: number;
+  version?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -88,6 +97,12 @@ export interface UnitDocument {
   propertyType: (typeof PROPERTY_TYPES)[number];
   usageType: (typeof USAGE_TYPES)[number];
   area: Types.Decimal128;
+  gardenArea?: Types.Decimal128;
+  roofArea?: Types.Decimal128;
+  bedrooms?: number;
+  bathrooms?: number;
+  parkingSpaces?: number;
+  storageRooms?: number;
   basePrice: StoredMoney;
   currentPrice: StoredMoney;
   pricePerSquareMeter: StoredMoney;
@@ -96,6 +111,7 @@ export interface UnitDocument {
   view?: StoredLocalizedLabel;
   paymentPlanSummary?: StoredLocalizedLabel;
   heldByReservationId?: string;
+  heldByHoldId?: string;
   contractId?: string;
   version: number;
   createdAt: Date;
@@ -106,7 +122,7 @@ export interface UnitEventDocument {
   eventId: string;
   unitId: string;
   projectId: string;
-  kind: 'created' | 'statusChanged' | 'priceChanged';
+  kind: 'created' | 'statusChanged' | 'priceChanged' | 'attributesChanged';
   fromStatus?: string;
   toStatus?: string;
   reason?: string;
@@ -114,6 +130,73 @@ export interface UnitEventDocument {
   sourceId?: string;
   actorAccountId?: string;
   occurredAt: Date;
+}
+
+/**
+ * One proposed price for one unit (INV-PRICE-001). A version is written once and then only moves
+ * through its states; its price, date and reason are never edited.
+ */
+export interface PriceVersionDocument {
+  priceVersionId: string;
+  unitId: string;
+  projectId: string;
+  legalEntityId: string;
+  branchId: string;
+  sequence: number;
+  price: StoredMoney;
+  previousPrice: StoredMoney;
+  changePercentage: string;
+  effectiveFrom: string;
+  state: (typeof PRICE_VERSION_STATES)[number];
+  reason: string;
+  approvalRequestId?: string;
+  idempotencyKey: string;
+  idempotencyFingerprint: string;
+  proposedBy: string;
+  proposedAt: Date;
+  appliedAt?: Date;
+  updatedAt: Date;
+}
+
+/** A timed customer hold (INV-HOLD-001). Released, expired or converted — never deleted. */
+export interface HoldDocument {
+  holdId: string;
+  unitId: string;
+  projectId: string;
+  legalEntityId: string;
+  branchId: string;
+  customerId?: string;
+  opportunityId?: string;
+  holderAccountId: string;
+  state: (typeof HOLD_STATES)[number];
+  expiresAt: Date;
+  extensions: number;
+  note?: string;
+  releaseReason?: string;
+  reservationId?: string;
+  extensionApprovalRequestId?: string;
+  idempotencyKey: string;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** A payment-plan template (INV-PLAN-001). Retired, never edited or deleted. */
+export interface PlanTemplateDocument {
+  templateId: string;
+  code: string;
+  name: StoredLocalizedLabel;
+  projectIds: string[];
+  legalEntityId: string;
+  downPaymentPercent: string;
+  installmentCount: number;
+  frequency: 'monthly' | 'quarterly' | 'semiAnnual' | 'annual';
+  firstInstallmentAfterMonths: number;
+  finalPaymentPercent?: string;
+  state: (typeof PLAN_TEMPLATE_STATES)[number];
+  createdBy: string;
+  createdAt: Date;
+  retiredAt?: Date;
 }
 
 const MUTATING_QUERY_OPS = [
@@ -154,6 +237,7 @@ function projectSchema(): Schema<ProjectDocument> {
       description: { type: localizedLabel },
       status: { type: String, required: true, enum: [...PROJECT_STATUSES] },
       currency: { type: String, required: true, immutable: true },
+      version: { type: Number },
       createdAt: { type: Date, required: true, immutable: true },
       updatedAt: { type: Date, required: true },
     },
@@ -184,6 +268,7 @@ function buildingSchema(): Schema<BuildingDocument> {
       name: { type: localizedLabel, required: true },
       zone: { type: localizedLabel },
       floors: { type: Number, required: true },
+      version: { type: Number },
       createdAt: { type: Date, required: true, immutable: true },
       updatedAt: { type: Date, required: true },
     },
@@ -216,6 +301,12 @@ function unitSchema(): Schema<UnitDocument> {
       propertyType: { type: String, required: true, enum: [...PROPERTY_TYPES] },
       usageType: { type: String, required: true, enum: [...USAGE_TYPES] },
       area: { type: Schema.Types.Decimal128, required: true },
+      gardenArea: { type: Schema.Types.Decimal128 },
+      roofArea: { type: Schema.Types.Decimal128 },
+      bedrooms: { type: Number },
+      bathrooms: { type: Number },
+      parkingSpaces: { type: Number },
+      storageRooms: { type: Number },
       basePrice: { type: money, required: true },
       currentPrice: { type: money, required: true },
       pricePerSquareMeter: { type: money, required: true },
@@ -224,6 +315,7 @@ function unitSchema(): Schema<UnitDocument> {
       view: { type: localizedLabel },
       paymentPlanSummary: { type: localizedLabel },
       heldByReservationId: { type: String },
+      heldByHoldId: { type: String },
       contractId: { type: String },
       version: { type: Number, required: true },
       createdAt: { type: Date, required: true, immutable: true },
@@ -313,6 +405,158 @@ function unitEventSchema(): Schema<UnitEventDocument> {
   return schema;
 }
 
+function priceVersionSchema(): Schema<PriceVersionDocument> {
+  const schema = new Schema<PriceVersionDocument>(
+    {
+      priceVersionId: { type: String, required: true, immutable: true },
+      unitId: { type: String, required: true, immutable: true },
+      projectId: { type: String, required: true, immutable: true },
+      legalEntityId: { type: String, required: true, immutable: true },
+      branchId: { type: String, required: true, immutable: true },
+      sequence: { type: Number, required: true, immutable: true },
+      // What was proposed is evidence: the price, its date and its reason never change.
+      price: { type: money, required: true, immutable: true },
+      previousPrice: { type: money, required: true, immutable: true },
+      changePercentage: { type: String, required: true, immutable: true },
+      effectiveFrom: { type: String, required: true, immutable: true },
+      state: { type: String, required: true, enum: [...PRICE_VERSION_STATES] },
+      reason: { type: String, required: true, immutable: true },
+      approvalRequestId: { type: String },
+      idempotencyKey: { type: String, required: true, immutable: true },
+      idempotencyFingerprint: { type: String, required: true, immutable: true },
+      proposedBy: { type: String, required: true, immutable: true },
+      proposedAt: { type: Date, required: true, immutable: true },
+      appliedAt: { type: Date },
+      updatedAt: { type: Date, required: true },
+    },
+    {
+      collection: PRICE_VERSIONS_COLLECTION,
+      strict: 'throw',
+      versionKey: false,
+      timestamps: false,
+    },
+  );
+  for (const operation of DELETE_OPS) {
+    schema.pre(operation, function rejectDelete() {
+      throw new UnitUndeletableError(operation);
+    });
+  }
+  schema.index({ priceVersionId: 1 }, { unique: true, name: 'inventoryPriceVersions_id_unique' });
+  schema.index(
+    { unitId: 1, sequence: 1 },
+    { unique: true, name: 'inventoryPriceVersions_unit_sequence_unique' },
+  );
+  schema.index(
+    { idempotencyKey: 1 },
+    { unique: true, name: 'inventoryPriceVersions_idempotency_unique' },
+  );
+  /** At most one proposal waiting per unit, so two changes cannot race to be applied. */
+  schema.index(
+    { unitId: 1 },
+    {
+      unique: true,
+      name: 'inventoryPriceVersions_openPerUnit_unique',
+      partialFilterExpression: { state: { $in: ['pendingApproval', 'scheduled'] } },
+    },
+  );
+  schema.index({ state: 1, effectiveFrom: 1 }, { name: 'inventoryPriceVersions_due' });
+  schema.index({ approvalRequestId: 1 }, { name: 'inventoryPriceVersions_approval' });
+  return schema;
+}
+
+function holdSchema(): Schema<HoldDocument> {
+  const schema = new Schema<HoldDocument>(
+    {
+      holdId: { type: String, required: true, immutable: true },
+      unitId: { type: String, required: true, immutable: true },
+      projectId: { type: String, required: true, immutable: true },
+      legalEntityId: { type: String, required: true, immutable: true },
+      branchId: { type: String, required: true, immutable: true },
+      customerId: { type: String, immutable: true },
+      opportunityId: { type: String, immutable: true },
+      holderAccountId: { type: String, required: true, immutable: true },
+      state: { type: String, required: true, enum: [...HOLD_STATES] },
+      expiresAt: { type: Date, required: true },
+      extensions: { type: Number, required: true },
+      note: { type: String, immutable: true },
+      releaseReason: { type: String },
+      reservationId: { type: String },
+      extensionApprovalRequestId: { type: String },
+      idempotencyKey: { type: String, required: true, immutable: true },
+      version: { type: Number, required: true },
+      createdAt: { type: Date, required: true, immutable: true },
+      updatedAt: { type: Date, required: true },
+    },
+    { collection: HOLDS_COLLECTION, strict: 'throw', versionKey: false, timestamps: false },
+  );
+  for (const operation of DELETE_OPS) {
+    schema.pre(operation, function rejectDelete() {
+      throw new UnitUndeletableError(operation);
+    });
+  }
+  schema.index({ holdId: 1 }, { unique: true, name: 'inventoryHolds_id_unique' });
+  schema.index({ idempotencyKey: 1 }, { unique: true, name: 'inventoryHolds_idempotency_unique' });
+  /** One active hold per unit: the database settles a race the status update already settles. */
+  schema.index(
+    { unitId: 1 },
+    {
+      unique: true,
+      name: 'inventoryHolds_activePerUnit_unique',
+      partialFilterExpression: { state: 'active' },
+    },
+  );
+  schema.index({ state: 1, expiresAt: 1 }, { name: 'inventoryHolds_expiry' });
+  schema.index({ holderAccountId: 1, state: 1 }, { name: 'inventoryHolds_holder_state' });
+  schema.index({ legalEntityId: 1, branchId: 1, state: 1 }, { name: 'inventoryHolds_scope' });
+  schema.index({ projectId: 1, state: 1 }, { name: 'inventoryHolds_project_state' });
+  schema.index({ extensionApprovalRequestId: 1 }, { name: 'inventoryHolds_extension_approval' });
+  return schema;
+}
+
+function planTemplateSchema(): Schema<PlanTemplateDocument> {
+  const schema = new Schema<PlanTemplateDocument>(
+    {
+      templateId: { type: String, required: true, immutable: true },
+      code: { type: String, required: true, immutable: true },
+      name: { type: localizedLabel, required: true, immutable: true },
+      projectIds: { type: [String], required: true, immutable: true },
+      legalEntityId: { type: String, required: true, immutable: true },
+      downPaymentPercent: { type: String, required: true, immutable: true },
+      installmentCount: { type: Number, required: true, immutable: true },
+      frequency: {
+        type: String,
+        required: true,
+        immutable: true,
+        enum: ['monthly', 'quarterly', 'semiAnnual', 'annual'],
+      },
+      firstInstallmentAfterMonths: { type: Number, required: true, immutable: true },
+      finalPaymentPercent: { type: String, immutable: true },
+      state: { type: String, required: true, enum: [...PLAN_TEMPLATE_STATES] },
+      createdBy: { type: String, required: true, immutable: true },
+      createdAt: { type: Date, required: true, immutable: true },
+      retiredAt: { type: Date },
+    },
+    {
+      collection: PLAN_TEMPLATES_COLLECTION,
+      strict: 'throw',
+      versionKey: false,
+      timestamps: false,
+    },
+  );
+  for (const operation of DELETE_OPS) {
+    schema.pre(operation, function rejectDelete() {
+      throw new UnitUndeletableError(operation);
+    });
+  }
+  schema.index({ templateId: 1 }, { unique: true, name: 'inventoryPlanTemplates_id_unique' });
+  schema.index(
+    { legalEntityId: 1, code: 1 },
+    { unique: true, name: 'inventoryPlanTemplates_entity_code_unique' },
+  );
+  schema.index({ state: 1, projectIds: 1 }, { name: 'inventoryPlanTemplates_state_project' });
+  return schema;
+}
+
 function model<T>(connection: Connection, name: string, build: () => Schema<T>): Model<T> {
   return (connection.models[name] as Model<T> | undefined) ?? connection.model<T>(name, build());
 }
@@ -331,4 +575,16 @@ export function unitModel(connection: Connection): Model<UnitDocument> {
 
 export function unitEventModel(connection: Connection): Model<UnitEventDocument> {
   return model(connection, UNIT_EVENTS_COLLECTION, unitEventSchema);
+}
+
+export function priceVersionModel(connection: Connection): Model<PriceVersionDocument> {
+  return model(connection, PRICE_VERSIONS_COLLECTION, priceVersionSchema);
+}
+
+export function holdModel(connection: Connection): Model<HoldDocument> {
+  return model(connection, HOLDS_COLLECTION, holdSchema);
+}
+
+export function planTemplateModel(connection: Connection): Model<PlanTemplateDocument> {
+  return model(connection, PLAN_TEMPLATES_COLLECTION, planTemplateSchema);
 }

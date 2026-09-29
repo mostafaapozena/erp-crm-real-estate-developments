@@ -421,6 +421,16 @@ mandatory second factor (SEC-017).
 | 2 | `crmConsents` | `_id_unique`, `_customer_channel_latest` | **Append-only** per-channel consent statements; the latest per channel is in force and is what `CORE-NOTIFY` checks before any external message |
 | 2 | `crmOwnershipChanges` | `_id_unique`, `_subject_time`, `_to_time` | **Append-only** ownership history of customers, leads and opportunities, with reason and actor |
 | 3 | `crmOpportunities` | `_id_unique`, `_created_keyset`, `_customer_stage`, `_lead`, `_reservation`, `_owner_stage`, scope indexes | Never deleted; `reservation` and `won` are set only by the sales workflow; attribution copied from the lead is immutable |
+| 4 | `inventoryPriceVersions` | `_id_unique`, `_unit_sequence_unique`, `_idempotency_unique`, `_openPerUnit_unique` (partial), `_due`, `_approval` | Price, date and reason immutable; one open change per unit; never deleted |
+| 4 | `inventoryHolds` | `_id_unique`, `_idempotency_unique`, `_activePerUnit_unique` (partial), `_expiry`, `_holder_state`, `_scope`, `_project_state`, `_extension_approval` | Released, expired or converted — never deleted |
+| 4 | `inventoryPlanTemplates` | `_id_unique`, `_entity_code_unique`, `_state_project` | Terms immutable; retired, never edited or deleted |
+
+**Catalogue scope (SEC-034, package 4).** Projects, buildings, units, prices and holds belong to no
+person, so an actor whose scope level describes *whose work* they see (`self`, `assigned`, `team`,
+`department`) reads the catalogue of the places their assignment names — projects, branches, legal
+entities — through `buildCatalogueScopeFilter`. An assignment naming no place still matches nothing.
+Owned records (leads, customers, opportunities, reservations) keep the ordinary filter, so a
+representative sees their own leads and their branch's units at the same time.
 
 `crmCustomers` gained duplicate-candidate indexes (`_entity_email`, `_entity_identity`, both
 non-unique) and team/department scope indexes; `crmActivities` gained customer and opportunity

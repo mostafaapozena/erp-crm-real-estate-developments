@@ -687,22 +687,22 @@ one: it builds the configurable policy, stores *not configured* by default, and 
 
 | ID | Requirement | Owner | Decision | Status |
 |---|---|---|---|---|
-| SEC-034 | Resource-level scope policy: an ownerless catalogue resource (project, building, unit, price, plan template) resolves an actor's `self`/`assigned`/`team`/`department` scope to the organization references that scope carries, and fails closed when it carries none — never by inventing an owner | BMP-1 | — | approved |
-| INV-PROJECT-001 | Project master data — bilingual name, city, description, status, currency, placement from the branch — created and edited with optimistic concurrency and an audit record | BMP-1 | `SD-01` | approved |
-| INV-PROJECT-002 | Building and phase structure under a project, with floor count; a unit's floor is bounded by its building | BMP-1 | — | approved |
-| INV-PROJECT-003 | Project, building and unit document attachments through `CORE-DOC`, scoped by the owning record | BMP-1 | — | approved |
-| INV-UNIT-001 | Unit master data: code, property and usage type, floor, areas, view, finishing, bedrooms, bathrooms, parking and storage; non-commercial attributes editable with concurrency and audit | BMP-1 | — | approved |
-| INV-STATUS-001 | Unit state machine enforced atomically: a commitment (hold, reservation, contract) changes only through its owning workflow; a person may only withdraw or restore an uncommitted unit | BMP-1 | `SD-03` | approved |
-| INV-STATUS-002 | Append-only unit history naming the source of every change | BMP-1 | — | approved |
-| INV-PRICE-001 | Effective-dated, versioned unit prices with history; a version is never edited after it takes effect | BMP-1 | `SD-05` | approved |
-| INV-PRICE-002 | Price visibility is a field restriction on every read, list, comparison, matrix and export | BMP-1 | — | approved |
-| INV-PRICE-003 | A price change submits to the approval engine when a policy applies, and takes effect only when approved | BMP-1 | `BD-31` | approved |
-| INV-PLAN-001 | Payment-plan templates with project eligibility and decimal-safe preview; a template is versioned by retirement, never edited in use | BMP-1 | `SD-05`, `BD-32` | approved |
-| INV-HOLD-001 | Timed customer holds with atomic conflict prevention, expiry sweep, and conversion into a reservation | BMP-1 | `BD-29` | approved |
-| INV-HOLD-002 | Hold release with reason, and extension (through approval where a policy applies), with history | BMP-1 | `BD-29` | approved |
-| INV-SEARCH-001 | Scoped unit search and filtering by project, building, type, usage, status, floor, area and price (price filters only with price visibility) | BMP-1 | — | approved |
-| INV-SEARCH-002 | Availability matrix: building × floor grid of unit statuses, scoped | BMP-1 | — | approved |
-| INV-SEARCH-003 | Unit comparison of up to four units, field-restricted | BMP-1 | — | approved |
+| SEC-034 | Resource-level scope policy: an ownerless catalogue resource (project, building, unit, price, plan template) resolves an actor's `self`/`assigned`/`team`/`department` scope to the organization references that scope carries, and fails closed when it carries none — never by inventing an owner | BMP-1 | — | implemented |
+| INV-PROJECT-001 | Project master data — bilingual name, city, description, status, currency, placement from the branch — created and edited with optimistic concurrency and an audit record | BMP-1 | `SD-01` | implemented |
+| INV-PROJECT-002 | Building and phase structure under a project, with floor count; a unit's floor is bounded by its building | BMP-1 | — | implemented |
+| INV-PROJECT-003 | Project, building and unit document attachments through `CORE-DOC`, scoped by the owning record | BMP-1 | — | in-progress |
+| INV-UNIT-001 | Unit master data: code, property and usage type, floor, areas, view, finishing, bedrooms, bathrooms, parking and storage; non-commercial attributes editable with concurrency and audit | BMP-1 | — | implemented |
+| INV-STATUS-001 | Unit state machine enforced atomically: a commitment (hold, reservation, contract) changes only through its owning workflow; a person may only withdraw or restore an uncommitted unit | BMP-1 | `SD-03` | implemented |
+| INV-STATUS-002 | Append-only unit history naming the source of every change | BMP-1 | — | implemented |
+| INV-PRICE-001 | Effective-dated, versioned unit prices with history; a version is never edited after it takes effect | BMP-1 | `SD-05` | implemented |
+| INV-PRICE-002 | Price visibility is a field restriction on every read, list, comparison, matrix and export | BMP-1 | — | implemented |
+| INV-PRICE-003 | A price change submits to the approval engine when a policy applies, and takes effect only when approved | BMP-1 | `BD-31` | implemented |
+| INV-PLAN-001 | Payment-plan templates with project eligibility and decimal-safe preview; a template is versioned by retirement, never edited in use | BMP-1 | `SD-05`, `BD-32` | implemented |
+| INV-HOLD-001 | Timed customer holds with atomic conflict prevention, expiry sweep, and conversion into a reservation | BMP-1 | `BD-29` | in-progress |
+| INV-HOLD-002 | Hold release with reason, and extension (through approval where a policy applies), with history | BMP-1 | `BD-29` | implemented |
+| INV-SEARCH-001 | Scoped unit search and filtering by project, building, type, usage, status, floor, area and price (price filters only with price visibility) | BMP-1 | — | implemented |
+| INV-SEARCH-002 | Availability matrix: building × floor grid of unit statuses, scoped | BMP-1 | — | in-progress |
+| INV-SEARCH-003 | Unit comparison of up to four units, field-restricted | BMP-1 | — | in-progress |
 | CRM-PERSON-001 | Customer as individual or company; entered name with optional name in the other script; normalized phones and e-mail | BMP-1 | — | implemented |
 | CRM-PERSON-002 | Identity (national ID, passport, commercial registration, tax number) held as a field restriction: absent from every payload without the permission, never logged, redacted in audit | BMP-1 | `BD-34` | implemented |
 | CRM-PERSON-003 | Address, preferred language and channel, and per-channel consent with its source and date | BMP-1 | `SD-09` | implemented |
@@ -721,7 +721,7 @@ one: it builds the configurable policy, stores *not configured* by default, and 
 | CRM-OWNER-001 | Ownership transfer of customers and opportunities with reason, append-only history and audit | BMP-1 | — | implemented |
 | CRM-OWNER-002 | Ownership retention by meaningful activity, and ownership disputes | BMP-1 | `SD-04`, `BD-28` | blocked |
 | CRM-ACTIVITY-001 | Calls, messages, meetings, visits and notes on leads, customers and opportunities; follow-ups; tasks linked through `CORE-TASK` | BMP-1 | — | in-progress |
-| CRM-MATCH-001 | Requirement-to-unit matching: available units in scope matching project, type and budget (budget matching only with price visibility) | BMP-1 | — | approved |
+| CRM-MATCH-001 | Requirement-to-unit matching: available units in scope matching project, type and budget (budget matching only with price visibility) | BMP-1 | — | in-progress |
 | CRM-LOSS-001 | Lost, disqualified and on-hold reasons from reference data; a nurture flag | BMP-1 | — | implemented |
 | CRM-REPORT-001 | Pipeline, conversion, ageing and owner performance computed inside the actor's scope | BMP-1 | — | in-progress |
 | CRM-OPP-001 | Opportunity as its own aggregate — several per customer — with target project, unit type, budget, expected value, expected close date and owner; probability only when configured per stage | BMP-1 | `BD-27` | implemented |
@@ -788,6 +788,31 @@ Tests: `crm.int-test.ts` §"opportunities" (real MongoDB), `settings.test.ts` (t
 | CRM-PIPE-001 | Opportunity transitions permissive in the middle, strict at the ends; stale version refused; every move on the timeline in order |
 | CRM-LEAD-005 | Conversion opens an opportunity carrying the lead's source, campaign, project, type and budget, in the conversion's transaction; without `crm.opportunity.manage` the whole conversion is refused and nothing changes |
 | CRM-OWNER-001 | Opportunity assignment with the lead's eligibility rules and history |
+
+### Implementation evidence — BMP-1 package 4, inventory and pricing (2026-09-29)
+
+Tests: `inventory.int-test.ts` (real MongoDB), `security/authorization.test.ts` §"catalogue scope",
+`contracts/inventory.test.ts`, `inventory/approval-port.test.ts`.
+
+| ID | Evidence |
+|---|---|
+| SEC-034 | `buildCatalogueScopeFilter`: `self`/`assigned`/`team`/`department` read the catalogue of the projects, branches or legal entities the assignment names, and match nothing when it names none; place-shaped levels unchanged. Used by every inventory read, hold and matrix. An `assigned` representative with branch A sees branch A's units only; one naming no place sees none |
+| INV-PROJECT-001 | `PATCH /inventory/projects/{id}` with reason and version; a project with no stored version edits at version 1 |
+| INV-PROJECT-002 | `PATCH /inventory/buildings/{id}`; floors below the highest unit refused (`FLOOR_BELOW_UNITS`) |
+| INV-PROJECT-003 | in progress — `building` added as a document owner type beside `project` and `unit`; upload screens are package 8 |
+| INV-UNIT-001 | Garden and roof areas, bedrooms, bathrooms, parking, storage; `PATCH /inventory/units/{id}` refuses area and price (400), records `attributesChanged` on the timeline |
+| INV-STATUS-001 | Manual moves limited to `available ↔ unavailable`; freeing a held or reserved unit by hand is `STATUS_SET_BY_WORKFLOW`, audited, and changes nothing — **fixes the discovery defect** |
+| INV-STATUS-002 | Hold, conversion and price events carry their source (`hold`, `reservation`, `priceVersion`) |
+| INV-PRICE-001 | `inventoryPriceVersions`: immutable price/date/reason; one open change per unit (partial unique index); past dates refused; future versions applied by `inventory.sweep` once, idempotently |
+| INV-PRICE-002 | Price history, proposal and the price filter need `inventory.unit.viewPricing` (403 without); matrix and comparison omit prices without it |
+| INV-PRICE-003 | `inventory.unit.priceChange` submitted to the approval engine; the unit keeps its price until approval; approval applies, rejection ends the version |
+| INV-PLAN-001 | `inventoryPlanTemplates`, retired never edited; preview uses `planFromTemplate` + `buildInstallmentSchedule`; ineligible project and retired template refused; percentages over 100 % refused |
+| INV-HOLD-001 | in progress — `inventoryHolds`: refused while `sales.unitHoldHours` (`BD-29`) is not configured; one of two simultaneous holds wins; expiry sweep returns the unit once; `convert` hands the unit to a reservation inside its transaction. The reservation side is package 5 |
+| INV-HOLD-002 | Release by the holder or `inventory.hold.manage` only (`NOT_HOLDER`); extension at once or through `inventory.hold.extension` approval; never shortens a hold |
+| INV-SEARCH-001 | Area, bedroom and price filters; price filters refused without price visibility (`PRICE_FILTER_NOT_PERMITTED`) |
+| INV-SEARCH-002 | in progress — `GET /inventory/projects/{id}/matrix`: highest floor first, status counts from the same scoped rows; screen in package 8 |
+| INV-SEARCH-003 | in progress — `GET /inventory/units/compare`: 2–4 units in the order asked; one out of scope makes it 404; screen in package 8 |
+| CRM-MATCH-001 | in progress — matching is the unit search with the lead's project, type, rooms and (with price visibility) budget; the lead's "matching units" panel is package 8 |
 
 ---
 

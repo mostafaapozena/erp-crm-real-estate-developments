@@ -84,10 +84,10 @@ idempotent seed extensions.
 
 | Package | State | Commit |
 |---|---|---|
-| 1 Scope consolidation, ADR-0032, discovery IDs, decisions, Arabic questionnaire | **complete** | the commit containing this row |
+| 1 Scope consolidation, ADR-0032, discovery IDs, decisions, Arabic questionnaire | **complete** | `6faac98` |
 | 2 CRM and customer completion | **complete** | `9a8eb7b` |
-| 3 Opportunities and ownership | **complete** | the commit containing this row |
-| 4 Inventory and pricing | not started | — |
+| 3 Opportunities and ownership | **complete** | `d79330c` |
+| 4 Inventory and pricing | **complete** | the commit containing this row |
 | 5 Reservations and approvals | not started | — |
 | 6 Contracts and schedules | not started | — |
 | 7 Arabic/English PDF documents and QR verification | not started | — |
@@ -157,6 +157,35 @@ idempotent seed extensions.
 - Weighted pipeline: Σ expected value × rate ÷ 100 in decimal arithmetic, rounded to 2 places at the
   end and written with exactly two decimals (the money helpers otherwise drop trailing zeros).
 - Measured: unit **610 passed**; CRM integration **64 passed**; full integration gate **543 passed / 0 failed / 0 skipped**, 27 files.
+
+### Package 4 — inventory and pricing
+
+- **SEC-034 catalogue scope** (`packages/security/src/authorization/scope.ts`,
+  `buildCatalogueScopeFilter`): every inventory read (projects, buildings, units, matrix, comparison,
+  holds) now uses it. This retires the Macro Phase 1 debt "a scope level applies to an account, not to a
+  resource" — a representative can be `assigned` for leads and still read their branch's units. The
+  demonstration roles are still branch-scoped; moving them is the seed extension's decision.
+- **Discovery defect fixed:** the manual unit-status route now allows only `available ↔ unavailable`
+  (`STATUS_SET_BY_WORKFLOW` otherwise, audited).
+- Module `apps/api/src/modules/inventory/`: `pricing.ts` (`PriceService`), `holds.ts`
+  (`HoldService`), `templates.ts` (`PlanTemplateService`), `approval-port.ts`; new collections
+  `inventoryPriceVersions`, `inventoryHolds`, `inventoryPlanTemplates`; unit attributes, project and
+  building versions (absent → 1), `heldByHoldId`; `applyStatusChange` can require the holder
+  (`expectHoldId`/`expectReservationId`) so a workflow only frees what it took.
+- Contracts: `planFromTemplate` (half-up percentages, down payment on the contract date),
+  `UNIT_EVENT_KINDS`, `MANUAL_UNIT_TRANSITIONS`; document owner type `building`.
+- Permissions `inventory.price.propose`, `inventory.hold.create`, `inventory.hold.manage`,
+  `inventory.plan.manage`. Setting `sales.unitHoldHours` (`BD-29`, default `null` → no hold can be
+  taken). Approval operations `inventory.unit.priceChange`, `inventory.hold.extension`.
+- Composition root: one shared `approvalPort` (sales now uses it too); `settleApprovalOutcome`
+  applies a decided price or extension request when the engine publishes the decision, as
+  `system:maintenance`; new maintenance sweep `inventory.sweep` (every 300 s: due prices, expired
+  holds, decided approvals) — the safety net when an outcome is missed.
+- Known display defect for package 8: the unit page timeline shows price and attribute events as
+  "available" because it reads only statuses; `unitEventKind` labels now exist for the fix.
+- Measured: unit **628 passed** (the two web timeouts seen once under load pass standalone), inventory
+  integration **45 passed**, OpenAPI **209 paths / 0 broken references**; full integration gate
+  **567 passed / 0 failed / 0 skipped**, 27 files.
 
 ## Foundation completion (post-demo master prompt) — COMPLETE, stopped at the foundation gate
 

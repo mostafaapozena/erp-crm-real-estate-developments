@@ -152,6 +152,14 @@ export const PERMISSIONS = [
   'inventory.unit.viewPricing',
   /** Take units out of the system as a file (CORE-IMPORT-003). Prices only with viewPricing too. */
   'inventory.unit.export',
+  /** Propose or cancel a unit price version; it takes effect through approval where a policy applies (INV-PRICE-003). */
+  'inventory.price.propose',
+  /** Take a timed customer hold on an available unit, and act on one's own holds (INV-HOLD-001). */
+  'inventory.hold.create',
+  /** Release or extend anyone's hold inside one's scope (INV-HOLD-002). */
+  'inventory.hold.manage',
+  /** Create and retire payment-plan templates (INV-PLAN-001). */
+  'inventory.plan.manage',
 
   // CRM (`CRM-*`)
   'crm.customer.view',

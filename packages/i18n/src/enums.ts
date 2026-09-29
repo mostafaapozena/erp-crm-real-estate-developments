@@ -7,7 +7,11 @@ import {
   DUPLICATE_MATCHES,
   IDENTITY_TYPES,
   LEAD_AGE_BANDS,
+  HOLD_STATES,
   OPPORTUNITY_STAGES,
+  PLAN_TEMPLATE_STATES,
+  PRICE_VERSION_STATES,
+  UNIT_EVENT_KINDS,
   QUALIFICATION_PURPOSES,
   QUALIFICATION_TIMEFRAMES,
   CAMPAIGN_OBJECTIVES,
@@ -93,6 +97,10 @@ export const DISPLAYED_ENUMS: Readonly<Record<string, readonly string[]>> = {
   leadAgeBand: LEAD_AGE_BANDS,
   duplicateMatch: DUPLICATE_MATCHES,
   opportunityStage: OPPORTUNITY_STAGES,
+  unitEventKind: UNIT_EVENT_KINDS,
+  priceVersionState: PRICE_VERSION_STATES,
+  holdState: HOLD_STATES,
+  planTemplateState: PLAN_TEMPLATE_STATES,
 };
 
 export interface EnumLabelProblem {

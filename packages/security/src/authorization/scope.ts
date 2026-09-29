@@ -68,6 +68,38 @@ export function buildScopeFilter(actor: ActorContext, fields: ScopeFieldMap): Sc
   }
 }
 
+/**
+ * The scope filter for an **ownerless catalogue resource** — a project, building, unit, price or
+ * payment-plan template (SEC-034).
+ *
+ * `self`, `assigned`, `team` and `department` describe *whose work* an actor sees. A catalogue record
+ * belongs to nobody, so under `buildScopeFilter` those levels resolve to nothing, and a representative
+ * who may see only their own leads could never reach the unit they are selling. The fix is not to give
+ * units an owner: it is to read the actor's narrow level as "the catalogue of the place I work", from
+ * the organization references their scope assignment already carries — projects, then branches, then
+ * legal entities, whichever are present. An assignment carrying none still matches nothing.
+ *
+ * `project`, `branch`, `legalEntity` and `all` are unchanged: they already describe a place.
+ */
+export function buildCatalogueScopeFilter(actor: ActorContext, fields: ScopeFieldMap): ScopeFilter {
+  const level: ScopeLevel = actor.scope.level;
+  if (level !== 'self' && level !== 'assigned' && level !== 'team' && level !== 'department') {
+    return buildScopeFilter(actor, fields);
+  }
+  const clauses: ScopeFilter[] = [];
+  if (fields.project && actor.scope.projectIds.length > 0) {
+    clauses.push({ [fields.project]: { $in: [...actor.scope.projectIds] } });
+  }
+  if (fields.branch && actor.scope.branchIds.length > 0) {
+    clauses.push({ [fields.branch]: { $in: [...actor.scope.branchIds] } });
+  }
+  if (fields.legalEntity && actor.scope.legalEntityIds.length > 0) {
+    clauses.push({ [fields.legalEntity]: { $in: [...actor.scope.legalEntityIds] } });
+  }
+  if (clauses.length === 0) return MATCH_NOTHING;
+  return clauses.length === 1 ? (clauses[0] as ScopeFilter) : { $or: clauses };
+}
+
 /** Combine a scope filter with an already-validated query filter. */
 export function withScope(scopeFilter: ScopeFilter, queryFilter: ScopeFilter = {}): ScopeFilter {
   if (isMatchNothing(scopeFilter)) {
