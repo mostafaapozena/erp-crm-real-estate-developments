@@ -59,6 +59,14 @@
     "CODE_TAKEN": "هذا الرمز مستخدم بالفعل.",
     "PROJECT_OUTSIDE_LEGAL_ENTITY": "المشروع لا يتبع الكيان القانوني المختار.",
     "LEGAL_ENTITY_NOT_VISIBLE": "الكيان القانوني خارج نطاق صلاحياتك.",
-    "PERCENTAGES_EXCEED_WHOLE": "مجموع النسب يتجاوز 100%."
+    "PERCENTAGES_EXCEED_WHOLE": "مجموع النسب يتجاوز 100%.",
+    "RESERVATION_VALIDITY_NOT_CONFIGURED": "لم تُحدَّد مدة صلاحية الحجز بعد في الإعدادات.",
+    "VALIDITY_SET_BY_POLICY": "مدة الصلاحية تحددها الإعدادات ولا تُدخل يدويًا.",
+    "OPPORTUNITY_CUSTOMER_MISMATCH": "الفرصة البيعية تخص عميلًا آخر.",
+    "DISCOUNT_ABOVE_MAXIMUM": "الخصم يتجاوز الحد المسموح، ولا توجد سياسة موافقة لتجاوزه.",
+    "DEPOSIT_BELOW_MINIMUM": "مبلغ الحجز أقل من الحد الأدنى، ولا توجد سياسة موافقة لاستثنائه.",
+    "INVALID_TRANSITION": "لا يمكن تنفيذ هذا الإجراء في الحالة الحالية.",
+    "CANCELLATION_PENDING": "يوجد طلب إلغاء بانتظار الموافقة.",
+    "RESERVATION_NOT_LIVE": "هذا الحجز لم يعد ساريًا."
   }
 }

@@ -1,7 +1,9 @@
 import {
   ContractSchema,
   InstallmentSchema,
+  LIVE_RESERVATION_STATES,
   ReservationSchema,
+  SALES_APPROVAL_OPERATIONS,
   SALES_AUDIT_ACTIONS,
   addDays,
   addMoney,
@@ -24,6 +26,7 @@ import {
   type ContractQuery,
   type CreateContract,
   type CreateReservation,
+  type ExtendReservation,
   type CustomerFinancialSummary,
   type Installment,
   type InstallmentPage,
@@ -41,12 +44,14 @@ import {
   assertSafeFilter,
   buildChangeSummary,
   buildScopeFilter,
+  can,
   withScope,
   type Logger,
   type ScopeFieldMap,
 } from '@alola/security';
 import { createHash } from 'node:crypto';
 import type { ClientSession, Connection, Types } from 'mongoose';
+import { DomainError, conflict, invalid } from '../../platform/audit-port';
 import { newId } from '../../platform/ids';
 import { fromDecimal128, toDecimal128 } from '../../platform/money-storage';
 import { withTransaction } from '../../platform/transactions';
@@ -61,6 +66,13 @@ import {
   type StoredMoney,
   type StoredPaymentPlan,
 } from './model';
+import {
+  combinedOutcome,
+  minimumDepositFor,
+  requiredApprovals,
+  reservationExceptions,
+  type DepositRule,
+} from './reservation-rules';
 
 /**
  * Sales service — `SALE-*` demonstration slice (ADR-0025).
@@ -120,6 +132,8 @@ export interface UnitPort {
         code: string;
         status: string;
         currentPrice?: Money;
+        heldByHoldId?: string;
+        heldByReservationId?: string;
       }
     | undefined
   >;
@@ -134,10 +148,75 @@ export interface UnitPort {
       sourceId?: string;
       reservationId?: string | null;
       contractId?: string | null;
+      holdId?: string | null;
+      /** Move the unit only if this reservation still holds it. */
+      expectReservationId?: string;
     },
     context: RequestContext,
     session?: ClientSession,
   ): Promise<unknown>;
+}
+
+/** Timed holds, as a reservation converts one (INV-HOLD-001). */
+export interface HoldPort {
+  find(
+    holdId: string,
+    session?: ClientSession,
+  ): Promise<
+    { holdId: string; unitId: string; state: string; holderAccountId: string } | undefined
+  >;
+  convert(
+    actor: ActorContext,
+    holdId: string,
+    reservationId: string,
+    expected: { unitId: string },
+    context: RequestContext,
+    session: ClientSession,
+  ): Promise<void>;
+}
+
+/** Opportunities, as a reservation advances one (CRM-OPP-002). */
+export interface OpportunityPort {
+  /** Scoped to the actor: an opportunity they cannot see is not found. */
+  find(
+    actor: ActorContext,
+    opportunityId: string,
+  ): Promise<{ opportunityId: string; customerId: string; stage: string }>;
+  advance(
+    actor: ActorContext,
+    opportunityId: string,
+    to: 'reservation' | 'won' | 'negotiation',
+    links: { reservationId?: string; contractId?: string },
+    reason: string,
+    context: RequestContext,
+    session: ClientSession,
+  ): Promise<void>;
+}
+
+/**
+ * The configured commercial rules (`BD-01`, `BD-02`, `BD-03`). `null` is **not configured**: validity
+ * then refuses every reservation, and the deposit and discount limits enforce nothing.
+ */
+export interface ReservationPolicies {
+  validityDays(): Promise<number | null>;
+  minimumDeposit(): Promise<DepositRule | null>;
+  maximumDiscountPercent(): Promise<string | null>;
+}
+
+/**
+ * Official numbering (CORE-DOC-001, SALE-RESERVE-006). Resolves to nothing when no format is active
+ * for the type — the deployment has not decided one (`BD-19`) — and the legacy series continues.
+ */
+export interface NumberPort {
+  issue(
+    input: {
+      type: 'reservation' | 'contract';
+      issueDate: BusinessDate;
+      projectId: string;
+      source: { type: string; id: string };
+    },
+    session: ClientSession,
+  ): Promise<string | undefined>;
 }
 
 /** What sales needs from CRM: the customer behind a reservation, and the lead's pipeline stage. */
@@ -177,6 +256,15 @@ export interface ApprovalPort {
     context: RequestContext,
   ): Promise<{ requestId: string; state: string } | undefined>;
   state(requestId: string): Promise<string | undefined>;
+  /** Whether a published policy would govern the operation — asked before anything is written. */
+  applies?(
+    actor: ActorContext,
+    input: {
+      operationType: string;
+      scope: Record<string, string | undefined>;
+      context: { amount?: Money; percentage?: string; isException?: boolean };
+    },
+  ): Promise<boolean>;
 }
 
 export class SalesNotFoundError extends Error {
@@ -232,8 +320,6 @@ export const INSTALLMENT_SCOPE_FIELDS: ScopeFieldMap = {
   legalEntity: 'legalEntityId',
 };
 
-const DISCOUNT_APPROVAL_OPERATION = 'sales.reservation.discount';
-
 const iso = (date: Date) => date.toISOString();
 
 function toMoney(stored: StoredMoney): Money {
@@ -250,6 +336,9 @@ function toPlan(stored: StoredPaymentPlan): PaymentPlan {
     installmentCount: stored.installmentCount,
     frequency: stored.frequency,
     firstDueOn: stored.firstDueOn as BusinessDate,
+    ...(stored.downPaymentDueOn
+      ? { downPaymentDueOn: stored.downPaymentDueOn as BusinessDate }
+      : {}),
     ...(stored.finalPayment ? { finalPayment: toMoney(stored.finalPayment) } : {}),
   };
 }
@@ -260,6 +349,7 @@ function fromPlan(plan: PaymentPlan): StoredPaymentPlan {
     installmentCount: plan.installmentCount,
     frequency: plan.frequency,
     firstDueOn: plan.firstDueOn,
+    ...(plan.downPaymentDueOn ? { downPaymentDueOn: plan.downPaymentDueOn } : {}),
     ...(plan.finalPayment ? { finalPayment: fromMoney(plan.finalPayment) } : {}),
   };
 }
@@ -270,13 +360,19 @@ function toReservation(d: ReservationDocument): Reservation {
     reservationNumber: d.reservationNumber,
     customerId: d.customerId,
     ...(d.leadId ? { leadId: d.leadId } : {}),
+    ...(d.opportunityId ? { opportunityId: d.opportunityId } : {}),
+    ...(d.holdId ? { holdId: d.holdId } : {}),
     unitId: d.unitId,
     projectId: d.projectId,
     reservedOn: d.reservedOn,
     expiresOn: d.expiresOn,
     reservationAmount: toMoney(d.reservationAmount),
     agreedPrice: toMoney(d.agreedPrice),
+    ...(d.listPrice ? { listPrice: toMoney(d.listPrice) } : {}),
     discountPercentage: d.discountPercentage,
+    ...(d.minimumDeposit ? { minimumDeposit: toMoney(d.minimumDeposit) } : {}),
+    exceptions: d.exceptions ?? [],
+    approvals: approvalsOf(d),
     paymentPlan: toPlan(d.paymentPlan),
     salesOwnerAccountId: d.salesOwnerAccountId,
     legalEntityId: d.legalEntityId,
@@ -287,11 +383,26 @@ function toReservation(d: ReservationDocument): Reservation {
     ...(d.approvalRequestId ? { approvalRequestId: d.approvalRequestId } : {}),
     ...(d.contractId ? { contractId: d.contractId } : {}),
     ...(d.cancellationReason ? { cancellationReason: d.cancellationReason } : {}),
+    refundHandoff: d.refundHandoff ?? 'notApplicable',
+    ...(d.pendingExtension ? { pendingExtension: d.pendingExtension } : {}),
+    ...(d.pendingCancellation ? { pendingCancellation: d.pendingCancellation } : {}),
+    extensions: d.extensions ?? 0,
     ...(d.notes ? { notes: d.notes } : {}),
     version: d.version,
     createdAt: iso(d.createdAt),
     updatedAt: iso(d.updatedAt),
   });
+}
+
+/**
+ * The approvals a reservation waits on. A record from before BMP-1 carries only `approvalRequestId`,
+ * which was always the discount approval.
+ */
+function approvalsOf(d: ReservationDocument): { operationType: string; requestId: string }[] {
+  if (d.approvals && d.approvals.length > 0) return d.approvals;
+  return d.approvalRequestId
+    ? [{ operationType: SALES_APPROVAL_OPERATIONS.discount, requestId: d.approvalRequestId }]
+    : [];
 }
 
 function toContract(d: ContractDocument): Contract {
@@ -377,6 +488,12 @@ export interface SalesServiceOptions {
   crm: CrmPort;
   /** Absent means no approval control is configured, which is the state until `SD-02` supplies one. */
   approvals?: ApprovalPort;
+  holds?: HoldPort;
+  opportunities?: OpportunityPort;
+  /** Absent means every rule is not configured — and so no reservation can be made (`BD-01`). */
+  policies?: ReservationPolicies;
+  /** Absent means the legacy series numbers every document. */
+  numbers?: NumberPort;
   today: () => BusinessDate;
 }
 
@@ -405,7 +522,9 @@ export class SalesService {
    * from a count: a count would reuse a number the moment anything is filtered out.
    */
   private async nextNumber(prefix: string, session?: ClientSession): Promise<string> {
-    const year = new Date().getUTCFullYear();
+    // The year of the organization's calendar, not the server's UTC clock: a reservation made on the
+    // evening of 31 December in Cairo belongs to that year (ADR-0008).
+    const year = this.options.today().slice(0, 4);
     const key = `${prefix}-${year}`;
     const counter = await this.counters
       .findOneAndUpdate(
@@ -417,6 +536,28 @@ export class SalesService {
       .exec();
     const value = counter?.value ?? 1;
     return `${prefix}-${year}-${String(value).padStart(5, '0')}`;
+  }
+
+  /**
+   * The official number of a reservation or contract: from the deployment's active format through
+   * CORE-DOC-001, or — while none is active (`BD-19`) — the next number of the legacy series, which the
+   * demonstration records already use.
+   */
+  private async documentNumber(
+    type: 'reservation' | 'contract',
+    source: { id: string; projectId: string },
+    session: ClientSession,
+  ): Promise<string> {
+    const official = await this.options.numbers?.issue(
+      {
+        type,
+        issueDate: this.options.today(),
+        projectId: source.projectId,
+        source: { type, id: source.id },
+      },
+      session,
+    );
+    return official ?? this.nextNumber(type === 'reservation' ? 'RSV' : 'CTR', session);
   }
 
   /* ------------------------------------------------------------- preview */
@@ -446,6 +587,59 @@ export class SalesService {
     return toReservation(existing);
   }
 
+  private audit(
+    actor: ActorContext,
+    entry: {
+      action: string;
+      outcome?: 'succeeded' | 'denied';
+      reservationId: string;
+      reason?: string;
+      changes?: { path: string; from?: string; to?: string }[];
+    },
+    context: RequestContext,
+    session?: ClientSession,
+  ): Promise<unknown> {
+    return this.options.audit.record(
+      {
+        action: entry.action,
+        outcome: entry.outcome ?? 'succeeded',
+        actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
+        target: { type: 'reservation', id: entry.reservationId },
+        ...(entry.changes ? { changes: entry.changes } : {}),
+        ...(entry.reason ? { reason: entry.reason } : {}),
+        context,
+      },
+      session ? { session } : {},
+    );
+  }
+
+  private approvalScope(r: {
+    branchId: string;
+    projectId: string;
+    legalEntityId: string;
+    teamId?: string | undefined;
+    departmentId?: string | undefined;
+  }): Record<string, string | undefined> {
+    return {
+      branchId: r.branchId,
+      projectId: r.projectId,
+      legalEntityId: r.legalEntityId,
+      ...(r.teamId ? { teamId: r.teamId } : {}),
+      ...(r.departmentId ? { departmentId: r.departmentId } : {}),
+    };
+  }
+
+  /**
+   * SALE-RESERVE-001 … 006, SALE-DISCOUNT-001 / 002.
+   *
+   * Everything a reservation needs is checked **before** anything is written: validity must be
+   * configured (`BD-01`), the deposit and discount limits are applied when configured (`BD-02`,
+   * `BD-03`), and an exception is refused outright when no policy can approve it. Then the
+   * reservation, its number, the unit's hold (or the conversion of the actor's timed hold), the
+   * lead's and the opportunity's stages and the audit record commit in **one transaction**. The
+   * approvals it needs are requested after the commit, so no approval ever points at a reservation that
+   * does not exist.
+   */
   async createReservation(
     actor: ActorContext,
     input: CreateReservation,
@@ -457,9 +651,20 @@ export class SalesService {
       agreedPrice: input.agreedPrice,
       reservationAmount: input.reservationAmount,
       paymentPlan: input.paymentPlan,
+      opportunityId: input.opportunityId ?? null,
+      holdId: input.holdId ?? null,
     });
     const replay = await this.replayReservation(input.idempotencyKey, print);
     if (replay) return { reservation: replay, replayed: true };
+
+    const policies = this.options.policies;
+    const validity = (await policies?.validityDays()) ?? null;
+    // No validity decided means no reservation: an invented period would release units nobody
+    // expected to lose, or hold them longer than the business allows.
+    if (validity === null) throw conflict('RESERVATION_VALIDITY_NOT_CONFIGURED');
+    if (input.holdDays !== undefined && input.holdDays !== validity) {
+      throw invalid('VALIDITY_SET_BY_POLICY', ['holdDays']);
+    }
 
     const unit = await this.options.units.find(input.unitId);
     if (!unit) throw new SalesNotFoundError('unit');
@@ -470,14 +675,39 @@ export class SalesService {
       // neither, and the money would post to the wrong books.
       throw new SalesValidationError('legalEntityMismatch');
     }
-    if (unit.status !== 'available') throw new SalesConflictError('unitNotAvailable');
+
+    if (input.holdId) {
+      const hold = await this.options.holds?.find(input.holdId);
+      if (!hold || hold.unitId !== unit.unitId || hold.state !== 'active') {
+        throw conflict('HOLD_NOT_ACTIVE', ['holdId']);
+      }
+      if (hold.holderAccountId !== actor.accountId && !can(actor, 'inventory.hold.manage')) {
+        throw new DomainError('FORBIDDEN', [{ path: ['holdId'], code: 'NOT_HOLDER' }]);
+      }
+      if (unit.status !== 'held' || unit.heldByHoldId !== input.holdId) {
+        throw conflict('HOLD_NOT_ACTIVE', ['holdId']);
+      }
+    } else if (unit.status !== 'available') {
+      throw conflict('UNIT_NOT_AVAILABLE', ['unitId']);
+    }
+
+    if (input.opportunityId) {
+      const opportunity = await this.options.opportunities?.find(actor, input.opportunityId);
+      if (!opportunity) throw new SalesNotFoundError('opportunity');
+      if (opportunity.customerId !== input.customerId) {
+        throw invalid('OPPORTUNITY_CUSTOMER_MISMATCH', ['opportunityId']);
+      }
+      if (['reservation', 'won', 'lost'].includes(opportunity.stage)) {
+        throw conflict('OPPORTUNITY_NOT_OPEN', ['opportunityId']);
+      }
+    }
+
     if (isNegativeMoney(input.agreedPrice) || isNegativeMoney(input.reservationAmount)) {
       throw new SalesValidationError('negativeAmount');
     }
     if (compareMoney(input.reservationAmount, input.agreedPrice) > 0) {
       throw new SalesValidationError('reservationAbovePrice');
     }
-
     // Validate the plan **before** anything is written: a plan that cannot produce a reconciling
     // schedule must not be able to hold a unit while someone works out why.
     buildInstallmentSchedule(input.agreedPrice, input.paymentPlan);
@@ -494,35 +724,103 @@ export class SalesService {
             4,
           ).amount
         : '0';
+    // A price above the list is not a discount; the percentage never goes negative for a rule.
+    const discountForRules = discountPercentage.startsWith('-') ? '0' : discountPercentage;
+
+    const minimumDeposit = minimumDepositFor(
+      (await policies?.minimumDeposit()) ?? null,
+      input.agreedPrice,
+    );
+    if (minimumDeposit === null) throw invalid('CURRENCY_MISMATCH', ['reservationAmount']);
+    const exceptions = reservationExceptions({
+      discountPercentage: discountForRules,
+      maximumDiscountPercent: (await policies?.maximumDiscountPercent()) ?? null,
+      reservationAmount: input.reservationAmount,
+      minimumDeposit,
+    });
+    const required = requiredApprovals({ discountPercentage: discountForRules, exceptions });
+    const placement = {
+      branchId: unit.branchId,
+      projectId: unit.projectId,
+      legalEntityId: unit.legalEntityId,
+      ...(actor.scope.teamIds[0] ? { teamId: actor.scope.teamIds[0] } : {}),
+      ...(actor.scope.departmentIds[0] ? { departmentId: actor.scope.departmentIds[0] } : {}),
+    };
+    const approvalContext = (exception: boolean) => ({
+      amount: input.agreedPrice,
+      percentage: discountForRules,
+      ...(exception ? { isException: true } : {}),
+    });
+    // An exception is granted only by an approval, never by the absence of a control.
+    for (const need of required.filter((entry) => entry.exception)) {
+      const applies =
+        (await this.options.approvals?.applies?.(actor, {
+          operationType: need.operationType,
+          scope: this.approvalScope(placement),
+          context: approvalContext(true),
+        })) ?? false;
+      if (!applies) {
+        const issue =
+          need.operationType === SALES_APPROVAL_OPERATIONS.priceOverride
+            ? 'DISCOUNT_ABOVE_MAXIMUM'
+            : 'DEPOSIT_BELOW_MINIMUM';
+        await this.audit(
+          actor,
+          {
+            action: SALES_AUDIT_ACTIONS.reservationRefused,
+            outcome: 'denied',
+            reservationId: 'not-created',
+            reason: `refused: ${issue}, no approval policy applies`,
+          },
+          context,
+        );
+        throw conflict(issue, [
+          issue === 'DISCOUNT_ABOVE_MAXIMUM' ? 'agreedPrice' : 'reservationAmount',
+        ]);
+      }
+    }
 
     const reservationId = newId('rsv');
     const today = this.options.today();
-    const expiresOn = addDays(today, input.holdDays);
+    const expiresOn = addDays(today, validity);
 
     let reservation: Reservation;
     try {
       reservation = await withTransaction(this.connection, async (session) => {
-        const reservationNumber = await this.nextNumber('RSV', session);
+        const reservationNumber = await this.documentNumber(
+          'reservation',
+          { id: reservationId, projectId: unit.projectId },
+          session,
+        );
         const now = new Date();
         const document: ReservationDocument = {
           reservationId,
           reservationNumber,
           customerId: input.customerId,
           ...(input.leadId ? { leadId: input.leadId } : {}),
+          ...(input.opportunityId ? { opportunityId: input.opportunityId } : {}),
+          ...(input.holdId ? { holdId: input.holdId } : {}),
           unitId: unit.unitId,
           projectId: unit.projectId,
           reservedOn: today,
           expiresOn,
           reservationAmount: fromMoney(input.reservationAmount),
           agreedPrice: fromMoney(input.agreedPrice),
+          ...(listPrice ? { listPrice: fromMoney(listPrice) } : {}),
           discountPercentage,
+          ...(minimumDeposit ? { minimumDeposit: fromMoney(minimumDeposit) } : {}),
+          exceptions,
+          approvals: [],
           paymentPlan: fromPlan(input.paymentPlan),
           salesOwnerAccountId: actor.accountId,
           legalEntityId: unit.legalEntityId,
           branchId: unit.branchId,
-          ...(actor.scope.teamIds[0] ? { teamId: actor.scope.teamIds[0] } : {}),
-          ...(actor.scope.departmentIds[0] ? { departmentId: actor.scope.departmentIds[0] } : {}),
+          ...(placement.teamId ? { teamId: placement.teamId } : {}),
+          ...(placement.departmentId ? { departmentId: placement.departmentId } : {}),
           state: 'draft',
+          refundHandoff: 'notApplicable',
+          extensions: 0,
+          ...(input.notes ? { notes: input.notes } : {}),
           idempotencyKey: input.idempotencyKey,
           idempotencyFingerprint: print,
           version: 1,
@@ -532,23 +830,33 @@ export class SalesService {
         const [created] = await this.reservations.create([document], { session });
         if (!created) throw new SalesConflictError('reservationNotCreated');
 
-        // The hold and the reservation commit together. This is the whole point of the transaction:
-        // a hold without a reservation is a unit nobody can sell, and the reverse is a double sale.
-        await this.options.units.changeStatus(
-          actor,
-          {
-            unitId: unit.unitId,
-            from: 'available',
-            to: 'held',
-            reason: `reservation ${reservationNumber}`,
-            sourceType: 'reservation',
-            sourceId: reservationId,
+        // The unit and the reservation commit together: a hold without a reservation is a unit
+        // nobody can sell, and the reverse is a double sale.
+        if (input.holdId) {
+          await this.options.holds?.convert(
+            actor,
+            input.holdId,
             reservationId,
-          },
-          context,
-          session,
-        );
-
+            { unitId: unit.unitId },
+            context,
+            session,
+          );
+        } else {
+          await this.options.units.changeStatus(
+            actor,
+            {
+              unitId: unit.unitId,
+              from: 'available',
+              to: 'held',
+              reason: `reservation ${reservationNumber}`,
+              sourceType: 'reservation',
+              sourceId: reservationId,
+              reservationId,
+            },
+            context,
+            session,
+          );
+        }
         if (input.leadId && this.options.crm.advanceLead) {
           await this.options.crm.advanceLead(
             actor,
@@ -559,190 +867,340 @@ export class SalesService {
             session,
           );
         }
-
-        await this.options.audit.record(
+        if (input.opportunityId) {
+          await this.options.opportunities?.advance(
+            actor,
+            input.opportunityId,
+            'reservation',
+            { reservationId },
+            `reservation ${reservationNumber}`,
+            context,
+            session,
+          );
+        }
+        await this.audit(
+          actor,
           {
             action: SALES_AUDIT_ACTIONS.reservationCreated,
-            outcome: 'succeeded',
-            actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
-            target: { type: 'reservation', id: reservationId },
+            reservationId,
             changes: buildChangeSummary(undefined, {
               reservationNumber,
               unitId: unit.unitId,
               customerId: input.customerId,
               discountPercentage,
+              exceptions: exceptions.join(',') || 'none',
             }),
-            context,
           },
-          { session },
+          context,
+          session,
         );
         return toReservation(created.toObject());
       });
     } catch (error) {
-      // A racing retry of the same key: return the original rather than reporting a failure.
+      // A racing retry of the same key returns the original; anyone else lost the unit.
       if (isDuplicateKey(error)) {
         const stored = await this.replayReservation(input.idempotencyKey, print);
         if (stored) return { reservation: stored, replayed: true };
-        throw new SalesConflictError('unitAlreadyReserved');
+        throw conflict('UNIT_NOT_AVAILABLE', ['unitId']);
+      }
+      if ((error as { name?: string }).name === 'UnitTransitionError') {
+        throw conflict('UNIT_NOT_AVAILABLE', ['unitId']);
       }
       throw error;
     }
 
-    // Approval is requested **after** the hold commits, so a provider or policy failure cannot leave
-    // a unit half-held. A reservation with no applicable policy stays a draft, which is correct: the
-    // absence of a configured control is not an approval (ADR-0024).
-    const approved = await this.requestDiscountApproval(actor, reservation, context);
-    return { reservation: approved, replayed: false };
+    const submitted = await this.requestApprovals(actor, reservation, required, context);
+    return { reservation: submitted, replayed: false };
   }
 
-  private async requestDiscountApproval(
+  /**
+   * Ask for each approval the reservation needs. With none submitted it stays a draft a person
+   * confirms — for a discount, the absence of a configured control is not an approval and not an error
+   * either (ADR-0024). An exception whose policy vanished between the check and the request can no
+   * longer be approved, so the reservation is cancelled and its unit released.
+   */
+  private async requestApprovals(
     actor: ActorContext,
     reservation: Reservation,
+    required: { operationType: string; exception: boolean }[],
     context: RequestContext,
   ): Promise<Reservation> {
-    if (!this.options.approvals) return reservation;
-    if (reservation.discountPercentage === '0') return reservation;
-
-    const submitted = await this.options.approvals.submit(
-      actor,
-      {
-        operationType: DISCOUNT_APPROVAL_OPERATION,
-        source: { type: 'reservation', id: reservation.reservationId },
-        scope: {
-          branchId: reservation.branchId,
-          projectId: reservation.projectId,
-          legalEntityId: reservation.legalEntityId,
-          ...(reservation.teamId ? { teamId: reservation.teamId } : {}),
-          ...(reservation.departmentId ? { departmentId: reservation.departmentId } : {}),
-        },
-        context: {
-          amount: reservation.agreedPrice,
-          percentage: reservation.discountPercentage,
-        },
-        summary: [
-          {
-            label: { ar: 'رقم الحجز', en: 'Reservation number' },
-            value: reservation.reservationNumber,
-          },
-          {
-            label: { ar: 'نسبة الخصم', en: 'Discount percentage' },
-            value: reservation.discountPercentage,
-          },
-        ],
-        idempotencyKey: `reservation-discount-${reservation.reservationId}`,
-      },
-      context,
-    );
-    if (!submitted) return reservation;
-
-    const updated = await this.reservations
-      .findOneAndUpdate(
-        { reservationId: reservation.reservationId, state: 'draft' },
+    if (required.length === 0 || !this.options.approvals) return reservation;
+    const approvals: { operationType: string; requestId: string }[] = [];
+    let exceptionUnavailable = false;
+    for (const need of required) {
+      const submitted = await this.options.approvals.submit(
+        actor,
         {
-          $set: {
-            state: 'pendingApproval',
-            approvalRequestId: submitted.requestId,
-            updatedAt: new Date(),
+          operationType: need.operationType,
+          source: { type: 'reservation', id: reservation.reservationId },
+          scope: this.approvalScope(reservation),
+          context: {
+            amount: reservation.agreedPrice,
+            percentage: reservation.discountPercentage.startsWith('-')
+              ? '0'
+              : reservation.discountPercentage,
+            ...(need.exception ? { isException: true } : {}),
           },
-          $inc: { version: 1 },
+          summary: [
+            {
+              label: { ar: 'رقم الحجز', en: 'Reservation number' },
+              value: reservation.reservationNumber,
+            },
+            {
+              label: { ar: 'نسبة الخصم', en: 'Discount percentage' },
+              value: `${reservation.discountPercentage}%`,
+            },
+            {
+              label: { ar: 'مبلغ الحجز', en: 'Reservation amount' },
+              value: `${reservation.reservationAmount.amount} ${reservation.reservationAmount.currency}`,
+            },
+          ],
+          idempotencyKey: `reservation-${need.operationType}-${reservation.reservationId}`,
         },
-        { new: true },
-      )
+        context,
+      );
+      if (submitted)
+        approvals.push({ operationType: need.operationType, requestId: submitted.requestId });
+      else if (need.exception) exceptionUnavailable = true;
+    }
+    if (exceptionUnavailable) {
+      return this.endReservation(
+        actor,
+        reservation,
+        'cancelled',
+        'exception approval unavailable',
+        SALES_AUDIT_ACTIONS.reservationCancelled,
+        context,
+      );
+    }
+    if (approvals.length === 0) return reservation;
+
+    const updated = await withTransaction(this.connection, async (session) => {
+      const result = await this.reservations
+        .findOneAndUpdate(
+          { reservationId: reservation.reservationId, state: 'draft' },
+          {
+            $set: {
+              state: 'pendingApproval',
+              approvals,
+              approvalRequestId: approvals[0]?.requestId,
+              updatedAt: new Date(),
+            },
+            $inc: { version: 1 },
+          },
+          { returnDocument: 'after', session },
+        )
+        .lean<ReservationDocument>()
+        .exec();
+      if (!result) return undefined;
+      await this.audit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.reservationApprovalRequested,
+          reservationId: reservation.reservationId,
+          reason: approvals.map((entry) => entry.operationType).join(', '),
+        },
+        context,
+        session,
+      );
+      return result;
+    });
+    if (!updated) return reservation;
+    // A policy that settles at once (an automatic approval) is honoured straight away.
+    await this.syncApproval(actor, approvals[0]?.requestId ?? '', context);
+    return this.findReservationOrThrow(reservation.reservationId);
+  }
+
+  private async findReservationOrThrow(reservationId: string): Promise<Reservation> {
+    const document = await this.reservations
+      .findOne({ reservationId })
       .lean<ReservationDocument>()
       .exec();
-    if (!updated) return reservation;
-
-    await this.options.audit.record({
-      action: SALES_AUDIT_ACTIONS.reservationApprovalRequested,
-      outcome: 'succeeded',
-      actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
-      target: { type: 'reservation', id: reservation.reservationId },
-      reason: `discount ${reservation.discountPercentage}%`,
-      context,
-    });
-    return toReservation(updated);
+    if (!document) throw new SalesNotFoundError('reservation');
+    return toReservation(document);
   }
 
-  async confirmReservation(
+  /**
+   * Act on a decided approval (ADR-0024 §2: the engine records, the owning module acts). Settles a
+   * reservation's own approvals, a pending extension, or a pending cancellation. Idempotent: every
+   * move is conditional on the state it read.
+   */
+  async syncApproval(
     actor: ActorContext,
-    reservationId: string,
+    requestId: string,
     context: RequestContext,
-  ): Promise<Reservation> {
-    const current = await this.getReservation(actor, reservationId);
+  ): Promise<'approved' | 'rejected' | 'extended' | 'cancelled' | 'refused' | 'unchanged'> {
+    if (!requestId || !this.options.approvals) return 'unchanged';
+    assertSafeFilter({ requestId });
+    const document = await this.reservations
+      .findOne({
+        $or: [
+          { 'approvals.requestId': requestId },
+          { approvalRequestId: requestId },
+          { 'pendingExtension.requestId': requestId },
+          { 'pendingCancellation.requestId': requestId },
+        ],
+      })
+      .lean<ReservationDocument>()
+      .exec();
+    if (!document) return 'unchanged';
+    const current = toReservation(document);
+    const approvals = this.options.approvals;
 
-    /**
-     * Maker-checker, enforced where it matters: a reservation whose discount is awaiting a decision
-     * cannot be confirmed by anyone, including the person who raised it. The approval engine owns the
-     * decision; this module only observes the outcome and acts (ADR-0024 §2).
-     */
-    if (current.state === 'pendingApproval') {
-      const state = current.approvalRequestId
-        ? await this.options.approvals?.state(current.approvalRequestId)
-        : undefined;
-      if (state !== 'approved') {
-        await this.options.audit.record({
-          action: SALES_AUDIT_ACTIONS.reservationRefused,
-          outcome: 'denied',
-          actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
-          target: { type: 'reservation', id: reservationId },
-          reason: `confirmation refused: approval is ${state ?? 'unresolved'}`,
+    if (current.pendingExtension?.requestId === requestId) {
+      const state = await approvals.state(requestId);
+      if (state === 'approved') {
+        await this.applyExtension(
+          actor,
+          current,
+          current.pendingExtension.days,
+          current.pendingExtension.reason,
           context,
-        });
-        throw new SalesConflictError('approvalNotGranted');
+        );
+        return 'extended';
       }
-    } else if (current.state !== 'draft') {
-      throw new SalesConflictError('notConfirmable');
+      if (state === 'rejected' || state === 'cancelled' || state === 'expired') {
+        await this.reservations
+          .updateOne(
+            { reservationId: current.reservationId, 'pendingExtension.requestId': requestId },
+            {
+              $unset: { pendingExtension: '' },
+              $set: { updatedAt: new Date() },
+              $inc: { version: 1 },
+            },
+          )
+          .exec();
+        return 'refused';
+      }
+      return 'unchanged';
     }
 
-    return this.moveReservation(actor, current, 'confirmed', context, {
-      unitFrom: 'held',
-      unitTo: 'reserved',
-      reason: `reservation ${current.reservationNumber} confirmed`,
-      auditAction: SALES_AUDIT_ACTIONS.reservationConfirmed,
-    });
+    if (current.pendingCancellation?.requestId === requestId) {
+      const state = await approvals.state(requestId);
+      if (state === 'approved' && LIVE_RESERVATION_STATES.includes(current.state)) {
+        await this.endReservation(
+          actor,
+          current,
+          'cancelled',
+          current.pendingCancellation.reason,
+          SALES_AUDIT_ACTIONS.reservationCancelled,
+          context,
+        );
+        return 'cancelled';
+      }
+      if (state === 'rejected' || state === 'cancelled' || state === 'expired') {
+        await this.reservations
+          .updateOne(
+            { reservationId: current.reservationId, 'pendingCancellation.requestId': requestId },
+            {
+              $unset: { pendingCancellation: '' },
+              $set: { updatedAt: new Date() },
+              $inc: { version: 1 },
+            },
+          )
+          .exec();
+        return 'refused';
+      }
+      return 'unchanged';
+    }
+
+    if (current.state !== 'pendingApproval') return 'unchanged';
+    const states = await Promise.all(
+      current.approvals.map((entry) => approvals.state(entry.requestId)),
+    );
+    const outcome = combinedOutcome(states);
+    if (outcome === 'approved') {
+      await this.transition(
+        actor,
+        current,
+        'approved',
+        SALES_AUDIT_ACTIONS.reservationApproved,
+        'all approvals granted',
+        context,
+      );
+      return 'approved';
+    }
+    if (outcome === 'rejected') {
+      await this.endReservation(
+        actor,
+        current,
+        'rejected',
+        'an approval was refused',
+        SALES_AUDIT_ACTIONS.reservationRejected,
+        context,
+      );
+      return 'rejected';
+    }
+    return 'unchanged';
   }
 
-  async cancelReservation(
-    actor: ActorContext,
-    reservationId: string,
-    reason: string,
-    context: RequestContext,
-  ): Promise<Reservation> {
-    const current = await this.getReservation(actor, reservationId);
-    return this.moveReservation(actor, current, 'cancelled', context, {
-      unitFrom: current.state === 'confirmed' ? 'reserved' : 'held',
-      unitTo: 'available',
-      reason,
-      auditAction: SALES_AUDIT_ACTIONS.reservationCancelled,
-      cancellationReason: reason,
-    });
-  }
-
-  private async moveReservation(
+  /** A state change that leaves the unit where it is. Conditional on the state and version read. */
+  private async transition(
     actor: ActorContext,
     current: Reservation,
     to: ReservationState,
+    auditAction: string,
+    reason: string,
     context: RequestContext,
-    options: {
-      unitFrom: string;
-      unitTo: string;
-      reason: string;
-      auditAction: string;
-      cancellationReason?: string;
-    },
+  ): Promise<Reservation> {
+    if (!canTransitionReservation(current.state, to)) throw conflict('INVALID_TRANSITION');
+    return withTransaction(this.connection, async (session) => {
+      const updated = await this.reservations
+        .findOneAndUpdate(
+          { reservationId: current.reservationId, state: current.state, version: current.version },
+          { $set: { state: to, updatedAt: new Date() }, $inc: { version: 1 } },
+          { returnDocument: 'after', session },
+        )
+        .lean<ReservationDocument>()
+        .exec();
+      if (!updated) throw conflict('STALE_VERSION');
+      await this.audit(
+        actor,
+        {
+          action: auditAction,
+          reservationId: current.reservationId,
+          reason,
+          changes: buildChangeSummary({ state: current.state }, { state: to }),
+        },
+        context,
+        session,
+      );
+      return toReservation(updated);
+    });
+  }
+
+  /**
+   * End a live reservation — cancelled, expired or rejected — and return everything it held: the unit
+   * to sale (only if this reservation still holds it), the opportunity to negotiation. Money agreed on
+   * the reservation becomes a refund hand-off for BMP-2; whether any was collected is not this
+   * module's to say.
+   */
+  private async endReservation(
+    actor: ActorContext,
+    current: Reservation,
+    to: 'cancelled' | 'expired' | 'rejected',
+    reason: string,
+    auditAction: string,
+    context: RequestContext,
   ): Promise<Reservation> {
     if (!canTransitionReservation(current.state, to)) {
-      await this.options.audit.record({
-        action: SALES_AUDIT_ACTIONS.reservationRefused,
-        outcome: 'denied',
-        actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
-        target: { type: 'reservation', id: current.reservationId },
-        reason: `refused transition ${current.state} -> ${to}`,
+      await this.audit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.reservationRefused,
+          outcome: 'denied',
+          reservationId: current.reservationId,
+          reason: `refused transition ${current.state} -> ${to}`,
+        },
         context,
-      });
+      );
       throw new SalesConflictError('invalidTransition');
     }
-
+    const refund =
+      compareMoney(current.reservationAmount, money('0', current.reservationAmount.currency)) > 0
+        ? 'pending'
+        : 'notApplicable';
     return withTransaction(this.connection, async (session) => {
       const updated = await this.reservations
         .findOneAndUpdate(
@@ -750,14 +1208,14 @@ export class SalesService {
           {
             $set: {
               state: to,
+              cancellationReason: reason,
+              refundHandoff: refund,
               updatedAt: new Date(),
-              ...(options.cancellationReason
-                ? { cancellationReason: options.cancellationReason }
-                : {}),
             },
+            $unset: { pendingExtension: '', pendingCancellation: '' },
             $inc: { version: 1 },
           },
-          { new: true, session },
+          { returnDocument: 'after', session },
         )
         .lean<ReservationDocument>()
         .exec();
@@ -768,37 +1226,307 @@ export class SalesService {
         actor,
         {
           unitId: current.unitId,
-          from: options.unitFrom,
-          to: options.unitTo,
-          reason: options.reason,
+          from: current.state === 'confirmed' ? 'reserved' : 'held',
+          to: 'available',
+          reason,
           sourceType: 'reservation',
           sourceId: current.reservationId,
-          ...(options.unitTo === 'available' ? { reservationId: null } : {}),
-          ...(options.unitTo === 'reserved' ? { reservationId: current.reservationId } : {}),
+          reservationId: null,
+          expectReservationId: current.reservationId,
         },
         context,
         session,
       );
-
-      await this.options.audit.record(
-        {
-          action: options.auditAction,
-          outcome: 'succeeded',
-          actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
-          target: { type: 'reservation', id: current.reservationId },
-          changes: buildChangeSummary({ state: current.state }, { state: to }),
-          reason: options.reason,
+      if (current.opportunityId) {
+        await this.options.opportunities?.advance(
+          actor,
+          current.opportunityId,
+          'negotiation',
+          {},
+          `reservation ${current.reservationNumber} ${to}`,
           context,
+          session,
+        );
+      }
+      await this.audit(
+        actor,
+        {
+          action: auditAction,
+          reservationId: current.reservationId,
+          reason,
+          changes: buildChangeSummary(
+            { state: current.state },
+            { state: to, refundHandoff: refund },
+          ),
         },
-        { session },
+        context,
+        session,
       );
       return toReservation(updated);
     });
   }
 
   /**
-   * Release holds whose deadline has passed. Idempotent: a second run finds nothing to do, because
-   * the state is part of every update filter.
+   * Confirm a reservation: the unit moves from `held` to `reserved`. A reservation waiting for an
+   * approval cannot be confirmed by anyone, including the person who raised it; one that needed no
+   * approval is confirmed from `draft`, and one whose approvals were all granted from `approved`.
+   */
+  async confirmReservation(
+    actor: ActorContext,
+    reservationId: string,
+    context: RequestContext,
+  ): Promise<Reservation> {
+    let current = await this.getReservation(actor, reservationId);
+    if (current.state === 'pendingApproval') {
+      // Settle first: an approval decided while nobody was listening is honoured here.
+      await this.syncApproval(actor, current.approvals[0]?.requestId ?? '', context);
+      current = await this.getReservation(actor, reservationId);
+    }
+    if (current.state === 'pendingApproval') {
+      await this.audit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.reservationRefused,
+          outcome: 'denied',
+          reservationId,
+          reason: 'confirmation refused: approval not granted',
+        },
+        context,
+      );
+      throw new SalesConflictError('approvalNotGranted');
+    }
+    if (current.state !== 'draft' && current.state !== 'approved') {
+      throw new SalesConflictError('notConfirmable');
+    }
+    if (current.state === 'draft' && current.approvals.length > 0) {
+      throw new SalesConflictError('approvalNotGranted');
+    }
+
+    return withTransaction(this.connection, async (session) => {
+      const updated = await this.reservations
+        .findOneAndUpdate(
+          { reservationId, state: current.state },
+          { $set: { state: 'confirmed', updatedAt: new Date() }, $inc: { version: 1 } },
+          { returnDocument: 'after', session },
+        )
+        .lean<ReservationDocument>()
+        .exec();
+      if (!updated) throw new SalesConflictError('invalidTransition');
+      await this.options.units.changeStatus(
+        actor,
+        {
+          unitId: current.unitId,
+          from: 'held',
+          to: 'reserved',
+          reason: `reservation ${current.reservationNumber} confirmed`,
+          sourceType: 'reservation',
+          sourceId: reservationId,
+          reservationId,
+          expectReservationId: reservationId,
+        },
+        context,
+        session,
+      );
+      await this.audit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.reservationConfirmed,
+          reservationId,
+          changes: buildChangeSummary({ state: current.state }, { state: 'confirmed' }),
+        },
+        context,
+        session,
+      );
+      return toReservation(updated);
+    });
+  }
+
+  /**
+   * SALE-RESERVE-005: cancel a live reservation. Through the approval engine when a policy governs
+   * cancellation (`BD-05`) — the reservation then waits with its request — and at once otherwise.
+   */
+  async cancelReservation(
+    actor: ActorContext,
+    reservationId: string,
+    reason: string,
+    context: RequestContext,
+  ): Promise<Reservation> {
+    const current = await this.getReservation(actor, reservationId);
+    if (!LIVE_RESERVATION_STATES.includes(current.state)) {
+      return this.endReservation(
+        actor,
+        current,
+        'cancelled',
+        reason,
+        SALES_AUDIT_ACTIONS.reservationCancelled,
+        context,
+      );
+    }
+    if (current.pendingCancellation) throw conflict('CANCELLATION_PENDING');
+    const submitted = await this.options.approvals?.submit(
+      actor,
+      {
+        operationType: SALES_APPROVAL_OPERATIONS.reservationCancellation,
+        source: { type: 'reservation', id: reservationId },
+        scope: this.approvalScope(current),
+        context: { amount: current.agreedPrice },
+        summary: [
+          {
+            label: { ar: 'رقم الحجز', en: 'Reservation number' },
+            value: current.reservationNumber,
+          },
+          { label: { ar: 'سبب الإلغاء', en: 'Reason' }, value: reason.slice(0, 200) },
+        ],
+        idempotencyKey: `reservation-cancel-${reservationId}-${String(current.version)}`,
+      },
+      context,
+    );
+    if (!submitted) {
+      return this.endReservation(
+        actor,
+        current,
+        'cancelled',
+        reason,
+        SALES_AUDIT_ACTIONS.reservationCancelled,
+        context,
+      );
+    }
+    await withTransaction(this.connection, async (session) => {
+      const result = await this.reservations
+        .updateOne(
+          { reservationId, version: current.version, pendingCancellation: { $exists: false } },
+          {
+            $set: {
+              pendingCancellation: { requestId: submitted.requestId, reason },
+              updatedAt: new Date(),
+            },
+            $inc: { version: 1 },
+          },
+          { session },
+        )
+        .exec();
+      if (result.modifiedCount === 0) throw conflict('STALE_VERSION');
+      await this.audit(
+        actor,
+        { action: SALES_AUDIT_ACTIONS.reservationCancellationRequested, reservationId, reason },
+        context,
+        session,
+      );
+    });
+    await this.syncApproval(actor, submitted.requestId, context);
+    return this.findReservationOrThrow(reservationId);
+  }
+
+  /**
+   * SALE-RESERVE-003: extend a live reservation. Through `sales.reservation.extension` approval when a
+   * policy applies; at once otherwise, for a holder of `sales.reservation.extend`.
+   */
+  async extendReservation(
+    actor: ActorContext,
+    reservationId: string,
+    input: ExtendReservation,
+    context: RequestContext,
+  ): Promise<Reservation> {
+    const current = await this.getReservation(actor, reservationId);
+    if (!LIVE_RESERVATION_STATES.includes(current.state)) throw conflict('RESERVATION_NOT_LIVE');
+    if (current.version !== input.expectedVersion) throw conflict('STALE_VERSION');
+    if (current.pendingExtension) throw conflict('EXTENSION_PENDING');
+    const submitted = await this.options.approvals?.submit(
+      actor,
+      {
+        operationType: SALES_APPROVAL_OPERATIONS.reservationExtension,
+        source: { type: 'reservation', id: reservationId },
+        scope: this.approvalScope(current),
+        context: { isException: true },
+        summary: [
+          {
+            label: { ar: 'رقم الحجز', en: 'Reservation number' },
+            value: current.reservationNumber,
+          },
+          { label: { ar: 'أيام التمديد', en: 'Days' }, value: String(input.days) },
+        ],
+        idempotencyKey: `reservation-extend-${reservationId}-${String(current.extensions + 1)}`,
+      },
+      context,
+    );
+    if (!submitted) return this.applyExtension(actor, current, input.days, input.reason, context);
+    await withTransaction(this.connection, async (session) => {
+      const result = await this.reservations
+        .updateOne(
+          { reservationId, version: current.version, pendingExtension: { $exists: false } },
+          {
+            $set: {
+              pendingExtension: {
+                days: input.days,
+                requestId: submitted.requestId,
+                reason: input.reason,
+              },
+              updatedAt: new Date(),
+            },
+            $inc: { version: 1 },
+          },
+          { session },
+        )
+        .exec();
+      if (result.modifiedCount === 0) throw conflict('STALE_VERSION');
+      await this.audit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.reservationExtensionRequested,
+          reservationId,
+          reason: `${String(input.days)} days: ${input.reason}`,
+        },
+        context,
+        session,
+      );
+    });
+    await this.syncApproval(actor, submitted.requestId, context);
+    return this.findReservationOrThrow(reservationId);
+  }
+
+  private async applyExtension(
+    actor: ActorContext,
+    current: Reservation,
+    days: number,
+    reason: string,
+    context: RequestContext,
+  ): Promise<Reservation> {
+    const today = this.options.today();
+    // From whichever is later, so an extension never shortens a reservation.
+    const from = current.expiresOn > today ? current.expiresOn : today;
+    const expiresOn = addDays(from, days);
+    return withTransaction(this.connection, async (session) => {
+      const updated = await this.reservations
+        .findOneAndUpdate(
+          { reservationId: current.reservationId, state: { $in: [...LIVE_RESERVATION_STATES] } },
+          {
+            $set: { expiresOn, updatedAt: new Date() },
+            $unset: { pendingExtension: '' },
+            $inc: { version: 1, extensions: 1 },
+          },
+          { returnDocument: 'after', session },
+        )
+        .lean<ReservationDocument>()
+        .exec();
+      if (!updated) throw conflict('RESERVATION_NOT_LIVE');
+      await this.audit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.reservationExtended,
+          reservationId: current.reservationId,
+          reason,
+          changes: buildChangeSummary({ expiresOn: current.expiresOn }, { expiresOn }),
+        },
+        context,
+        session,
+      );
+      return toReservation(updated);
+    });
+  }
+
+  /**
+   * Release reservations whose deadline has passed. Idempotent: the state is part of every update
+   * filter. A reservation with an extension awaiting a decision keeps its unit until it is decided.
    */
   async expireReservations(
     actor: ActorContext,
@@ -807,8 +1535,9 @@ export class SalesService {
     const today = this.options.today();
     const candidates = await this.reservations
       .find({
-        state: { $in: ['draft', 'pendingApproval', 'confirmed'] },
+        state: { $in: [...LIVE_RESERVATION_STATES] },
         expiresOn: { $lt: today },
+        pendingExtension: { $exists: false },
       })
       .limit(200)
       .lean<ReservationDocument[]>()
@@ -817,13 +1546,14 @@ export class SalesService {
     let expired = 0;
     for (const document of candidates) {
       try {
-        await this.moveReservation(actor, toReservation(document), 'expired', context, {
-          unitFrom: document.state === 'confirmed' ? 'reserved' : 'held',
-          unitTo: 'available',
-          reason: `hold expired on ${document.expiresOn}`,
-          auditAction: SALES_AUDIT_ACTIONS.reservationExpired,
-          cancellationReason: `hold expired on ${document.expiresOn}`,
-        });
+        await this.endReservation(
+          actor,
+          toReservation(document),
+          'expired',
+          `hold expired on ${document.expiresOn}`,
+          SALES_AUDIT_ACTIONS.reservationExpired,
+          context,
+        );
         expired += 1;
       } catch (error) {
         // One reservation that will not release must not stop the rest of the sweep.
@@ -836,6 +1566,50 @@ export class SalesService {
     return { expired };
   }
 
+  /** The maintenance sweep: expire overdue reservations and settle decided approvals. */
+  async sweep(
+    actor: ActorContext,
+    context: RequestContext,
+  ): Promise<{ expired: number; settled: number }> {
+    let settled = 0;
+    const waiting = await this.reservations
+      .find({
+        $or: [
+          { state: 'pendingApproval' },
+          { pendingExtension: { $exists: true } },
+          { pendingCancellation: { $exists: true } },
+        ],
+      })
+      .limit(200)
+      .lean<ReservationDocument[]>()
+      .exec();
+    for (const document of waiting) {
+      const requestIds = [
+        ...approvalsOf(document)
+          .map((entry) => entry.requestId)
+          .slice(0, 1),
+        ...(document.pendingExtension ? [document.pendingExtension.requestId] : []),
+        ...(document.pendingCancellation ? [document.pendingCancellation.requestId] : []),
+      ];
+      for (const requestId of requestIds) {
+        try {
+          if ((await this.syncApproval(actor, requestId, context)) !== 'unchanged') settled += 1;
+        } catch (error) {
+          this.options.logger.warn(
+            {
+              err: error,
+              code: 'RESERVATION_APPROVAL_SYNC_SKIPPED',
+              reservationId: document.reservationId,
+            },
+            'A reservation approval could not be settled; the sweep continued.',
+          );
+        }
+      }
+    }
+    const { expired } = await this.expireReservations(actor, context);
+    return { expired, settled };
+  }
+
   async listReservations(actor: ActorContext, query: ReservationQuery): Promise<ReservationPage> {
     const requested: Record<string, unknown> = {};
     for (const key of [
@@ -843,6 +1617,7 @@ export class SalesService {
       'projectId',
       'customerId',
       'unitId',
+      'opportunityId',
       'salesOwnerAccountId',
     ] as const) {
       const value = query[key];
@@ -994,7 +1769,11 @@ export class SalesService {
     const contractId = newId('ctr');
     try {
       return await withTransaction(this.connection, async (session) => {
-        const contractNumber = await this.nextNumber('CTR', session);
+        const contractNumber = await this.documentNumber(
+          'contract',
+          { id: contractId, projectId: reservation.projectId },
+          session,
+        );
         const now = new Date();
 
         const stored = this.applyReservationCredit(rows, reservation.reservationAmount);
@@ -1089,6 +1868,17 @@ export class SalesService {
             actor,
             reservation.leadId,
             'won',
+            `contract ${contractNumber}`,
+            context,
+            session,
+          );
+        }
+        if (reservation.opportunityId) {
+          await this.options.opportunities?.advance(
+            actor,
+            reservation.opportunityId,
+            'won',
+            { contractId },
             `contract ${contractNumber}`,
             context,
             session,

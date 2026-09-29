@@ -85,11 +85,43 @@ export const SETTING_DEFINITIONS = {
     defaultValue: null,
     decision: 'BD-29',
   },
+  /** Days a reservation holds its unit (`BD-01`). Not configured, no reservation can be made. */
   'sales.reservationValidityDays': {
     category: 'sales',
     schema: z.number().int().min(1).max(365),
     defaultValue: null,
-    decision: 'SD-03',
+    decision: 'BD-01',
+  },
+  /**
+   * The least deposit a reservation takes (`BD-02`): a fixed amount in a currency, or a percentage of
+   * the agreed price. Not configured, no minimum is enforced. Below it needs an exception approval.
+   */
+  'sales.reservationMinimumDeposit': {
+    category: 'sales',
+    schema: z.discriminatedUnion('kind', [
+      z.strictObject({
+        kind: z.literal('amount'),
+        amount: DecimalStringSchema,
+        currency: z.string().regex(/^[A-Z]{3}$/),
+      }),
+      z.strictObject({
+        kind: z.literal('percentage'),
+        percent: DecimalStringSchema.refine(isPercentage, { message: 'RATE_OUT_OF_RANGE' }),
+      }),
+    ]),
+    defaultValue: null,
+    decision: 'BD-02',
+  },
+  /**
+   * The largest discount a reservation may carry without a price-override approval, as a percentage
+   * of the list price (`BD-03`). Not configured, no maximum applies; any discount still asks for the
+   * discount approval when a policy governs it.
+   */
+  'sales.maximumDiscountPercent': {
+    category: 'sales',
+    schema: DecimalStringSchema.refine(isPercentage, { message: 'RATE_OUT_OF_RANGE' }),
+    defaultValue: null,
+    decision: 'BD-03',
   },
   /**
    * Days before a due date on which an instalment reminder is prepared. The 15-day reminder is

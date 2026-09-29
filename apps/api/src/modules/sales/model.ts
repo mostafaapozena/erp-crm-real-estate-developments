@@ -41,6 +41,12 @@ export interface StoredPaymentPlan {
   installmentCount: number;
   frequency: (typeof INSTALLMENT_FREQUENCIES)[number];
   firstDueOn: string;
+  /**
+   * Stored since BMP-1. Before, the plan dropped it, so a contract built from a reservation dated the
+   * deposit on the first instalment date — a discovery defect. A plan without it still means "the
+   * same day the instalments start", exactly as the contract documents.
+   */
+  downPaymentDueOn?: string;
   finalPayment?: StoredMoney;
 }
 
@@ -49,13 +55,21 @@ export interface ReservationDocument {
   reservationNumber: string;
   customerId: string;
   leadId?: string;
+  opportunityId?: string;
+  holdId?: string;
   unitId: string;
   projectId: string;
   reservedOn: string;
   expiresOn: string;
   reservationAmount: StoredMoney;
   agreedPrice: StoredMoney;
+  listPrice?: StoredMoney;
   discountPercentage: string;
+  minimumDeposit?: StoredMoney;
+  /** Absent on a record from before BMP-1: none. */
+  exceptions?: string[];
+  /** Absent on a record from before BMP-1: its `approvalRequestId`, if any, was the discount. */
+  approvals?: { operationType: string; requestId: string }[];
   paymentPlan: StoredPaymentPlan;
   salesOwnerAccountId: string;
   legalEntityId: string;
@@ -66,6 +80,10 @@ export interface ReservationDocument {
   approvalRequestId?: string;
   contractId?: string;
   cancellationReason?: string;
+  refundHandoff?: 'notApplicable' | 'pending';
+  pendingExtension?: { days: number; requestId: string; reason: string };
+  pendingCancellation?: { requestId: string; reason: string };
+  extensions?: number;
   notes?: string;
   idempotencyKey: string;
   /** Digest of the submission input, so a replay with different input is a conflict, not a no-op. */
@@ -146,6 +164,7 @@ const paymentPlan = new Schema(
     installmentCount: { type: Number, required: true },
     frequency: { type: String, required: true, enum: [...INSTALLMENT_FREQUENCIES] },
     firstDueOn: { type: String, required: true },
+    downPaymentDueOn: { type: String },
     finalPayment: { type: money },
   },
   { _id: false },
@@ -167,6 +186,8 @@ function reservationSchema(): Schema<ReservationDocument> {
       reservationNumber: { type: String, required: true, immutable: true },
       customerId: { type: String, required: true, immutable: true },
       leadId: { type: String, immutable: true },
+      opportunityId: { type: String, immutable: true },
+      holdId: { type: String, immutable: true },
       unitId: { type: String, required: true, immutable: true },
       projectId: { type: String, required: true, immutable: true },
       reservedOn: { type: String, required: true, immutable: true },
@@ -174,6 +195,20 @@ function reservationSchema(): Schema<ReservationDocument> {
       reservationAmount: { type: money, required: true, immutable: true },
       agreedPrice: { type: money, required: true, immutable: true },
       discountPercentage: { type: String, required: true, immutable: true },
+      listPrice: { type: money, immutable: true },
+      minimumDeposit: { type: money, immutable: true },
+      exceptions: { type: [String], immutable: true },
+      approvals: {
+        type: [
+          new Schema(
+            {
+              operationType: { type: String, required: true },
+              requestId: { type: String, required: true },
+            },
+            { _id: false },
+          ),
+        ],
+      },
       paymentPlan: { type: paymentPlan, required: true },
       salesOwnerAccountId: { type: String, required: true },
       legalEntityId: { type: String, required: true, immutable: true },
@@ -184,6 +219,27 @@ function reservationSchema(): Schema<ReservationDocument> {
       approvalRequestId: { type: String },
       contractId: { type: String },
       cancellationReason: { type: String },
+      refundHandoff: { type: String, enum: ['notApplicable', 'pending'] },
+      pendingExtension: {
+        type: new Schema(
+          {
+            days: { type: Number, required: true },
+            requestId: { type: String, required: true },
+            reason: { type: String, required: true },
+          },
+          { _id: false },
+        ),
+      },
+      pendingCancellation: {
+        type: new Schema(
+          {
+            requestId: { type: String, required: true },
+            reason: { type: String, required: true },
+          },
+          { _id: false },
+        ),
+      },
+      extensions: { type: Number },
       notes: { type: String },
       idempotencyKey: { type: String, required: true, immutable: true },
       idempotencyFingerprint: { type: String, required: true, immutable: true },
@@ -225,6 +281,24 @@ function reservationSchema(): Schema<ReservationDocument> {
   // The expiry sweep.
   schema.index({ state: 1, expiresOn: 1 }, { name: 'salesReservations_expiry' });
   schema.index({ approvalRequestId: 1 }, { name: 'salesReservations_approval' });
+  /**
+   * One live reservation per unit, covering the `approved` state added in BMP-1. A new name, because
+   * MongoDB refuses to change an existing index's filter in place; the older, narrower index
+   * (`salesReservations_liveUnit_unique`) is left in databases that have it, where it is harmless — every
+   * reservation it constrains, this one constrains too.
+   */
+  schema.index(
+    { unitId: 1 },
+    {
+      unique: true,
+      name: 'salesReservations_liveUnit_v2_unique',
+      partialFilterExpression: {
+        state: { $in: ['draft', 'pendingApproval', 'approved', 'confirmed'] },
+      },
+    },
+  );
+  schema.index({ 'approvals.requestId': 1 }, { name: 'salesReservations_approvals' });
+  schema.index({ opportunityId: 1 }, { name: 'salesReservations_opportunity' });
   return schema;
 }
 

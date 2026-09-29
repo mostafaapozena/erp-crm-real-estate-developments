@@ -21,13 +21,19 @@ export interface InventoryApprovalPort {
     context: RequestContext,
   ): Promise<{ requestId: string; state: string } | undefined>;
   state(requestId: string): Promise<string | undefined>;
+  /** Whether a published policy would govern the operation — asked before anything is written. */
+  applies(
+    actor: ActorContext,
+    input: {
+      operationType: string;
+      scope: Record<string, string | undefined>;
+      context: { amount?: Money; percentage?: string; isException?: boolean };
+    },
+  ): Promise<boolean>;
 }
 
-/** Operation types inventory submits. Owned here; a policy names them to apply (`BD-31`, `BD-29`). */
-export const INVENTORY_APPROVAL_OPERATIONS = {
-  priceChange: 'inventory.unit.priceChange',
-  holdExtension: 'inventory.hold.extension',
-} as const;
+/** Operation types inventory submits; declared in the contracts so labels and policies can name them. */
+export { INVENTORY_APPROVAL_OPERATIONS } from '@alola/contracts';
 
 /**
  * A percentage for an approval condition: the absolute value, at most `999.9999`, because the engine's

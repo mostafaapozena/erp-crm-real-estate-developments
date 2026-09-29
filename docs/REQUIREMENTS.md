@@ -698,7 +698,7 @@ one: it builds the configurable policy, stores *not configured* by default, and 
 | INV-PRICE-002 | Price visibility is a field restriction on every read, list, comparison, matrix and export | BMP-1 | — | implemented |
 | INV-PRICE-003 | A price change submits to the approval engine when a policy applies, and takes effect only when approved | BMP-1 | `BD-31` | implemented |
 | INV-PLAN-001 | Payment-plan templates with project eligibility and decimal-safe preview; a template is versioned by retirement, never edited in use | BMP-1 | `SD-05`, `BD-32` | implemented |
-| INV-HOLD-001 | Timed customer holds with atomic conflict prevention, expiry sweep, and conversion into a reservation | BMP-1 | `BD-29` | in-progress |
+| INV-HOLD-001 | Timed customer holds with atomic conflict prevention, expiry sweep, and conversion into a reservation | BMP-1 | `BD-29` | implemented |
 | INV-HOLD-002 | Hold release with reason, and extension (through approval where a policy applies), with history | BMP-1 | `BD-29` | implemented |
 | INV-SEARCH-001 | Scoped unit search and filtering by project, building, type, usage, status, floor, area and price (price filters only with price visibility) | BMP-1 | — | implemented |
 | INV-SEARCH-002 | Availability matrix: building × floor grid of unit statuses, scoped | BMP-1 | — | in-progress |
@@ -727,14 +727,14 @@ one: it builds the configurable policy, stores *not configured* by default, and 
 | CRM-OPP-001 | Opportunity as its own aggregate — several per customer — with target project, unit type, budget, expected value, expected close date and owner; probability only when configured per stage | BMP-1 | `BD-27` | implemented |
 | CRM-OPP-002 | Opportunity won/lost outcome with reason, stage history, and conversion into a reservation | BMP-1 | — | in-progress |
 | SALE-QUOTE-001 | Quotation versions from the unit's effective price and a plan, with validity; a quotation never reserves inventory | BMP-1 | `BD-36` | approved |
-| SALE-DISCOUNT-001 | Discount by amount or percentage with exact arithmetic; a configured maximum; no discount takes effect before its required approval | BMP-1 | `BD-03`, `BD-04` | approved |
-| SALE-DISCOUNT-002 | Price override below the effective price as an approval-controlled exception | BMP-1 | `BD-31` | approved |
-| SALE-RESERVE-001 | Reservation lifecycle: draft, pending approval, approved, rejected, confirmed, cancelled, expired, converted | BMP-1 | — | approved |
-| SALE-RESERVE-002 | Atomic unit protection, idempotent submission, and a proven single winner under concurrent requests | BMP-1 | `BD-30` | approved |
-| SALE-RESERVE-003 | Validity and expiry from configuration; extension through approval where a policy applies | BMP-1 | `BD-01` | approved |
-| SALE-RESERVE-004 | Deposit rule from configuration; booking evidence as documents; evidence never confirms a collection | BMP-1 | `BD-02` | approved |
-| SALE-RESERVE-005 | Cancellation with reason, optional approval, unit release, and a refund hand-off state for BMP-2 | BMP-1 | `BD-05`, `BD-06` | approved |
-| SALE-RESERVE-006 | Reservation and contract numbers issued through `CORE-DOC-001` when a format is active, continuing the existing series | BMP-1 | `BD-19` | approved |
+| SALE-DISCOUNT-001 | Discount by amount or percentage with exact arithmetic; a configured maximum; no discount takes effect before its required approval | BMP-1 | `BD-03`, `BD-04` | implemented |
+| SALE-DISCOUNT-002 | Price override below the effective price as an approval-controlled exception | BMP-1 | `BD-31` | implemented |
+| SALE-RESERVE-001 | Reservation lifecycle: draft, pending approval, approved, rejected, confirmed, cancelled, expired, converted | BMP-1 | — | implemented |
+| SALE-RESERVE-002 | Atomic unit protection, idempotent submission, and a proven single winner under concurrent requests | BMP-1 | `BD-30` | implemented |
+| SALE-RESERVE-003 | Validity and expiry from configuration; extension through approval where a policy applies | BMP-1 | `BD-01` | implemented |
+| SALE-RESERVE-004 | Deposit rule from configuration; booking evidence as documents; evidence never confirms a collection | BMP-1 | `BD-02` | implemented |
+| SALE-RESERVE-005 | Cancellation with reason, optional approval, unit release, and a refund hand-off state for BMP-2 | BMP-1 | `BD-05`, `BD-06` | implemented |
+| SALE-RESERVE-006 | Reservation and contract numbers issued through `CORE-DOC-001` when a format is active, continuing the existing series | BMP-1 | `BD-19` | in-progress |
 | SALE-CONTRACT-001 | Contract draft from a confirmed reservation carrying immutable customer, unit and pricing snapshots | BMP-1 | — | approved |
 | SALE-CONTRACT-002 | Contract parties (buyer, co-buyer, guarantor, representative) with shares that total exactly | BMP-1 | — | approved |
 | SALE-CONTRACT-003 | Activation — through approval when an exception applies — freezing the schedule and committing the unit; signing state recorded | BMP-1 | `BD-35` | approved |
@@ -807,12 +807,31 @@ Tests: `inventory.int-test.ts` (real MongoDB), `security/authorization.test.ts` 
 | INV-PRICE-002 | Price history, proposal and the price filter need `inventory.unit.viewPricing` (403 without); matrix and comparison omit prices without it |
 | INV-PRICE-003 | `inventory.unit.priceChange` submitted to the approval engine; the unit keeps its price until approval; approval applies, rejection ends the version |
 | INV-PLAN-001 | `inventoryPlanTemplates`, retired never edited; preview uses `planFromTemplate` + `buildInstallmentSchedule`; ineligible project and retired template refused; percentages over 100 % refused |
-| INV-HOLD-001 | in progress — `inventoryHolds`: refused while `sales.unitHoldHours` (`BD-29`) is not configured; one of two simultaneous holds wins; expiry sweep returns the unit once; `convert` hands the unit to a reservation inside its transaction. The reservation side is package 5 |
+| INV-HOLD-001 | `inventoryHolds`: refused while `sales.unitHoldHours` (`BD-29`) is not configured; one of two simultaneous holds wins; expiry sweep returns the unit once; a reservation made with `holdId` converts the hold inside its own transaction (only the holder's, only a live hold on the same unit), proven in `sales.int-test.ts` |
 | INV-HOLD-002 | Release by the holder or `inventory.hold.manage` only (`NOT_HOLDER`); extension at once or through `inventory.hold.extension` approval; never shortens a hold |
 | INV-SEARCH-001 | Area, bedroom and price filters; price filters refused without price visibility (`PRICE_FILTER_NOT_PERMITTED`) |
 | INV-SEARCH-002 | in progress — `GET /inventory/projects/{id}/matrix`: highest floor first, status counts from the same scoped rows; screen in package 8 |
 | INV-SEARCH-003 | in progress — `GET /inventory/units/compare`: 2–4 units in the order asked; one out of scope makes it 404; screen in package 8 |
 | CRM-MATCH-001 | in progress — matching is the unit search with the lead's project, type, rooms and (with price visibility) budget; the lead's "matching units" panel is package 8 |
+
+### Implementation evidence — BMP-1 package 5, reservations and approvals (2026-09-29)
+
+Tests: `sales.int-test.ts` (real MongoDB) §"validity from configuration", §"competing requests",
+§"discounts and exceptions", §"extension and cancellation", §"holds, opportunities and numbering",
+§"the down payment date survives"; `sales/reservation-rules.test.ts`; `approval.int-test.ts`
+§"hasApplicablePolicy". Screens are package 8.
+
+| ID | Evidence |
+|---|---|
+| SALE-RESERVE-001 | States `draft`, `pendingApproval`, `approved`, `rejected`, `confirmed`, `cancelled`, `expired`, `converted`; every move a conditional update naming the state it read; a rejected approval ends the reservation and frees the unit; outcomes applied by `syncApproval` on the engine's event and by the `sales.sweep` maintenance job |
+| SALE-RESERVE-002 | Five simultaneous requests for one unit: exactly one reservation, four `UNIT_NOT_AVAILABLE` conflicts, one stored reservation, the unit held by the winner; a replayed key returns the original; a new partial unique index on live states (`salesReservations_liveUnit_v2_unique`) backs the unit's conditional update |
+| SALE-RESERVE-003 | Validity only from `sales.reservationValidityDays` (`BD-01`): refused while not configured (`RESERVATION_VALIDITY_NOT_CONFIGURED`), a hand-entered `holdDays` that differs is refused (`VALIDITY_SET_BY_POLICY`) — **the invented 14-day default is gone**; `POST /sales/reservations/{id}/extend` (`sales.reservation.extend`) extends at once or through `sales.reservation.extension` approval, never shortens |
+| SALE-RESERVE-004 | Minimum deposit from `sales.reservationMinimumDeposit` (`BD-02`, amount or percentage rounded up to the piastre); below it the reservation needs a `reservationException` approval or is refused before anything is written; reservation documents through `CORE-DOC-002`, which records evidence and never a collection |
+| SALE-RESERVE-005 | Cancellation with a reason, through `sales.reservation.cancellation` approval where a policy applies (`CANCELLATION_PENDING` for a second), releases the unit once, and records `refundHandoff: pending` when money was taken — the hand-off state BMP-2 finance consumes |
+| SALE-RESERVE-006 | in progress — reservation and contract numbers come from `CORE-DOC-001` when a format is active (`NO_ACTIVE_SEQUENCE` falls back to the legacy series, whose year is now the organization's calendar year); configuring the format to continue the existing series is package 8 |
+| SALE-DISCOUNT-001 | Discount derived exactly from list and agreed price (`comparePercent`, decimal); the `sales.reservation.discount` policy governs it; no confirmation while an approval is pending; `sales.maximumDiscountPercent` (`BD-03`) caps it |
+| SALE-DISCOUNT-002 | Above the maximum a `sales.reservation.priceOverride` approval is required; without a policy the request is refused before writing (`DISCOUNT_ABOVE_MAXIMUM`), asked through `ApprovalService.hasApplicablePolicy` |
+| CRM-OPP-002 | in progress — a reservation with `opportunityId` (same customer, else `OPPORTUNITY_CUSTOMER_MISMATCH`) advances it to `reservation`, and the contract to `won`; package 6 moves `won` to contract activation |
 
 ---
 

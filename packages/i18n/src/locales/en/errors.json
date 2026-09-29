@@ -59,6 +59,14 @@
     "CODE_TAKEN": "This code is already in use.",
     "PROJECT_OUTSIDE_LEGAL_ENTITY": "The project does not belong to the chosen legal entity.",
     "LEGAL_ENTITY_NOT_VISIBLE": "The legal entity is outside your scope.",
-    "PERCENTAGES_EXCEED_WHOLE": "The percentages add up to more than 100%."
+    "PERCENTAGES_EXCEED_WHOLE": "The percentages add up to more than 100%.",
+    "RESERVATION_VALIDITY_NOT_CONFIGURED": "The reservation validity has not been set in the settings yet.",
+    "VALIDITY_SET_BY_POLICY": "The validity is set by the settings, not entered by hand.",
+    "OPPORTUNITY_CUSTOMER_MISMATCH": "The opportunity belongs to another customer.",
+    "DISCOUNT_ABOVE_MAXIMUM": "The discount is above the allowed maximum, and no approval policy covers it.",
+    "DEPOSIT_BELOW_MINIMUM": "The deposit is below the minimum, and no approval policy covers it.",
+    "INVALID_TRANSITION": "This cannot be done in the current state.",
+    "CANCELLATION_PENDING": "A cancellation is already waiting for approval.",
+    "RESERVATION_NOT_LIVE": "This reservation is no longer live."
   }
 }

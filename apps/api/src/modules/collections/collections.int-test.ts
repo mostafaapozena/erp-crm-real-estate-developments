@@ -177,7 +177,6 @@ describe.skipIf(!gate.available)(`collections module — ${gate.reason}`, () => 
         reservationAmount: egp('0'),
         agreedPrice: egp(total),
         paymentPlan: plan,
-        holdDays: 14,
         idempotencyKey: nextKey('idem-rsv-'),
       },
       context,
@@ -245,6 +244,12 @@ describe.skipIf(!gate.available)(`collections module — ${gate.reason}`, () => 
             ? { customerId: customer.customerId, legalEntityId: customer.legalEntityId }
             : undefined;
         },
+      },
+      // Reservation validity is a configured rule (BD-01); this suite needs one, not a particular one.
+      policies: {
+        validityDays: () => Promise.resolve(14),
+        minimumDeposit: () => Promise.resolve(null),
+        maximumDiscountPercent: () => Promise.resolve(null),
       },
       today: () => TODAY,
     });

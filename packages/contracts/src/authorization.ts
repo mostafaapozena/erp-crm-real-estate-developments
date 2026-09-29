@@ -192,6 +192,8 @@ export const PERMISSIONS = [
   'sales.reservation.create',
   'sales.reservation.confirm',
   'sales.reservation.cancel',
+  /** Extend a live reservation's validity; through approval where a policy applies (SALE-RESERVE-003). */
+  'sales.reservation.extend',
   'sales.contract.view',
   'sales.contract.create',
   'sales.contract.activate',

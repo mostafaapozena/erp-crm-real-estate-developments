@@ -190,6 +190,11 @@ export function buildInstallmentSchedule(total: Money, plan: PaymentPlan): Sched
 
 /* ----------------------------------------------------------------- reservation */
 
+/**
+ * SALE-RESERVE-001. `approved` means every approval the reservation needed was granted and it waits
+ * for a person to confirm it; `rejected` means one was refused, and the unit is back on sale. Both
+ * were added in BMP-1 after the demonstration's states, so stored records keep their meaning.
+ */
 export const RESERVATION_STATES = [
   'draft',
   'pendingApproval',
@@ -197,6 +202,8 @@ export const RESERVATION_STATES = [
   'cancelled',
   'expired',
   'converted',
+  'approved',
+  'rejected',
 ] as const;
 export const ReservationStateSchema = z.enum(RESERVATION_STATES);
 export type ReservationState = z.infer<typeof ReservationStateSchema>;
@@ -205,12 +212,52 @@ export const RESERVATION_TRANSITIONS: Readonly<
   Record<ReservationState, readonly ReservationState[]>
 > = {
   draft: ['pendingApproval', 'confirmed', 'cancelled', 'expired'],
-  pendingApproval: ['confirmed', 'cancelled', 'expired'],
+  // `confirmed` directly from `pendingApproval` remains for a record whose approval was granted
+  // before the `approved` state existed; the service still requires the approval to be granted.
+  pendingApproval: ['approved', 'rejected', 'confirmed', 'cancelled', 'expired'],
+  approved: ['confirmed', 'cancelled', 'expired'],
   confirmed: ['converted', 'cancelled', 'expired'],
   cancelled: [],
   expired: [],
   converted: [],
+  rejected: [],
 };
+
+/** A reservation that still holds its unit. */
+export const LIVE_RESERVATION_STATES: readonly ReservationState[] = [
+  'draft',
+  'pendingApproval',
+  'approved',
+  'confirmed',
+];
+
+/**
+ * The commercial operations sales submits to the approval engine (SALE-DISCOUNT, SALE-RESERVE,
+ * SALE-CONTRACT, SALE-CHANGE). Each is governed only when a published policy names it (`BD-04`);
+ * the demonstration seed publishes illustrative ones, and a client deployment publishes its own.
+ */
+export const SALES_APPROVAL_OPERATIONS = {
+  discount: 'sales.reservation.discount',
+  priceOverride: 'sales.reservation.priceOverride',
+  reservationException: 'sales.reservation.exception',
+  reservationExtension: 'sales.reservation.extension',
+  reservationCancellation: 'sales.reservation.cancellation',
+  contractException: 'sales.contract.exception',
+  contractAmendment: 'sales.contract.amendment',
+  contractCancellation: 'sales.contract.cancellation',
+} as const;
+export type SalesApprovalOperation =
+  (typeof SALES_APPROVAL_OPERATIONS)[keyof typeof SALES_APPROVAL_OPERATIONS];
+
+/**
+ * Why a reservation needs an exception approval. Each is refused outright when no policy can approve
+ * it — an exception is never granted by the absence of a control.
+ */
+export const RESERVATION_EXCEPTIONS = ['discountAboveMaximum', 'depositBelowMinimum'] as const;
+export type ReservationException = (typeof RESERVATION_EXCEPTIONS)[number];
+
+/** What the finance side (BMP-2) must do about money taken on a reservation that ended. */
+export const REFUND_HANDOFF_STATES = ['notApplicable', 'pending'] as const;
 
 export function canTransitionReservation(from: ReservationState, to: ReservationState): boolean {
   return RESERVATION_TRANSITIONS[from].includes(to);
@@ -222,6 +269,10 @@ export const ReservationSchema = z.strictObject({
   reservationNumber: BusinessCodeSchema,
   customerId: RecordIdSchema,
   leadId: RecordIdSchema.optional(),
+  /** The opportunity this reservation advanced (CRM-OPP-002). */
+  opportunityId: RecordIdSchema.optional(),
+  /** The timed hold it was converted from (INV-HOLD-001). */
+  holdId: RecordIdSchema.optional(),
   unitId: RecordIdSchema,
   projectId: RecordIdSchema,
   reservedOn: BusinessDateSchema,
@@ -229,8 +280,17 @@ export const ReservationSchema = z.strictObject({
   reservationAmount: MoneySchema,
   /** The price agreed with the customer; may be below the unit's current price. */
   agreedPrice: MoneySchema,
+  /** The unit's price when the reservation was made — what the discount is measured against. */
+  listPrice: MoneySchema.optional(),
   /** Derived from the unit's current price and the agreed price, as a decimal string fraction. */
   discountPercentage: z.string(),
+  /** The deposit the configured rule asked for when the reservation was made (`BD-02`). */
+  minimumDeposit: MoneySchema.optional(),
+  exceptions: z.array(z.enum(RESERVATION_EXCEPTIONS)),
+  /** Every approval request the reservation waits on, by operation. */
+  approvals: z.array(
+    z.strictObject({ operationType: z.string(), requestId: z.string().min(1).max(200) }),
+  ),
   paymentPlan: PaymentPlanSchema,
   salesOwnerAccountId: z.string().min(1).max(200),
   legalEntityId: RecordIdSchema,
@@ -242,6 +302,14 @@ export const ReservationSchema = z.strictObject({
   approvalRequestId: z.string().min(1).max(200).optional(),
   contractId: RecordIdSchema.optional(),
   cancellationReason: z.string().max(500).optional(),
+  /** Set when the reservation ends with money taken on it; BMP-2 settles it. */
+  refundHandoff: z.enum(REFUND_HANDOFF_STATES),
+  /** An extension or a cancellation waiting for approval (SALE-RESERVE-003, 005). */
+  pendingExtension: z
+    .strictObject({ days: z.number().int().positive(), requestId: z.string(), reason: z.string() })
+    .optional(),
+  pendingCancellation: z.strictObject({ requestId: z.string(), reason: z.string() }).optional(),
+  extensions: z.number().int().nonnegative(),
   notes: NoteSchema.optional(),
   version: z.number().int().positive(),
   createdAt: InstantSchema,
@@ -252,12 +320,18 @@ export type Reservation = z.infer<typeof ReservationSchema>;
 export const CreateReservationSchema = z.strictObject({
   customerId: RecordIdSchema,
   leadId: RecordIdSchema.optional(),
+  opportunityId: RecordIdSchema.optional(),
+  /** Reserve the unit the actor's timed hold already holds, instead of an available one. */
+  holdId: RecordIdSchema.optional(),
   unitId: RecordIdSchema,
   reservationAmount: MoneySchema,
   agreedPrice: MoneySchema,
   paymentPlan: PaymentPlanSchema,
-  /** Days the hold lasts. Bounded here; the business value is `SD-05`. */
-  holdDays: z.number().int().min(1).max(180).default(14),
+  /**
+   * The validity is `sales.reservationValidityDays` (`BD-01`); when given, this must equal it. There
+   * is no default: an unconfigured validity refuses the reservation rather than inventing one.
+   */
+  holdDays: z.number().int().min(1).max(365).optional(),
   notes: NoteSchema.optional(),
   /**
    * Idempotency key. A retried submission returns the original reservation instead of taking a second
@@ -272,6 +346,13 @@ export const CancelReservationSchema = z.strictObject({
 });
 export type CancelReservation = z.infer<typeof CancelReservationSchema>;
 
+export const ExtendReservationSchema = z.strictObject({
+  days: z.number().int().min(1).max(180),
+  reason: z.string().trim().min(3).max(500),
+  expectedVersion: z.number().int().positive(),
+});
+export type ExtendReservation = z.infer<typeof ExtendReservationSchema>;
+
 export const ReservationQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(25),
   cursor: z.string().min(1).max(200).optional(),
@@ -279,6 +360,7 @@ export const ReservationQuerySchema = z.strictObject({
   projectId: RecordIdSchema.optional(),
   customerId: RecordIdSchema.optional(),
   unitId: RecordIdSchema.optional(),
+  opportunityId: RecordIdSchema.optional(),
   salesOwnerAccountId: z.string().min(1).max(200).optional(),
 });
 export type ReservationQuery = z.infer<typeof ReservationQuerySchema>;
@@ -494,6 +576,11 @@ export const SALES_AUDIT_ACTIONS = {
   reservationExpired: 'sales.reservation.expired',
   reservationRefused: 'sales.reservation.refused',
   reservationApprovalRequested: 'sales.reservation.approvalRequested',
+  reservationApproved: 'sales.reservation.approved',
+  reservationRejected: 'sales.reservation.rejected',
+  reservationExtended: 'sales.reservation.extended',
+  reservationExtensionRequested: 'sales.reservation.extensionRequested',
+  reservationCancellationRequested: 'sales.reservation.cancellationRequested',
   contractCreated: 'sales.contract.created',
   contractActivated: 'sales.contract.activated',
   contractCancelled: 'sales.contract.cancelled',

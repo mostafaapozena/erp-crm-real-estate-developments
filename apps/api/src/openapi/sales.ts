@@ -2,6 +2,7 @@ import {
   CONTRACT_STATES,
   CancelContractSchema,
   CancelReservationSchema,
+  ExtendReservationSchema,
   ContractPageSchema,
   ContractSchema,
   ContractSummarySchema,
@@ -44,6 +45,7 @@ export const salesComponents = {
   ReservationPage: ReservationPageSchema,
   CreateReservationRequest: CreateReservationSchema,
   CancelReservationRequest: CancelReservationSchema,
+  ExtendReservationRequest: ExtendReservationSchema,
   Contract: ContractSchema,
   ContractPage: ContractPageSchema,
   CreateContractRequest: CreateContractSchema,
@@ -106,7 +108,14 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
           'hold, and replaying it with different input is a 409. When the agreed price is below the ' +
           'unit price and an approval policy applies, the reservation moves to pendingApproval and ' +
           'cannot be confirmed until the engine records an approval — including by the person who ' +
-          'raised it.',
+          'raised it. Since BMP-1: validity is sales.reservationValidityDays (BD-01), refused with ' +
+          'RESERVATION_VALIDITY_NOT_CONFIGURED while unset; a discount above ' +
+          'sales.maximumDiscountPercent (BD-03) needs a sales.reservation.priceOverride policy and a ' +
+          'deposit below sales.reservationMinimumDeposit (BD-02) a sales.reservation.exception policy, ' +
+          'or the request is refused (DISCOUNT_ABOVE_MAXIMUM, DEPOSIT_BELOW_MINIMUM) before anything is ' +
+          'written; holdId converts a timed hold the actor holds; opportunityId moves the opportunity to ' +
+          'reservation; concurrent requests for one unit: exactly one wins, the rest are ' +
+          'UNIT_NOT_AVAILABLE; the number comes from CORE-DOC-001 when a format is active.',
         requestBody: requestBody(h.ref('CreateReservationRequest')),
         responses: {
           '201': h.json('Reservation', 'The reservation'),
@@ -160,13 +169,30 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
         },
       },
     },
+    '/api/v1/sales/reservations/{reservationId}/extend': {
+      post: {
+        operationId: 'extendReservation',
+        summary: 'Extend a live reservation',
+        description:
+          'Requires sales.reservation.extend (SALE-RESERVE-003). Through the approval engine as ' +
+          'sales.reservation.extension when a policy applies (pendingExtension until decided); at ' +
+          'once otherwise. Extended from the later of today and the current expiry.',
+        parameters: [pathParameter('reservationId', 'Opaque reservation identifier')],
+        requestBody: requestBody(h.ref('ExtendReservationRequest')),
+        responses: { '200': h.json('Reservation', 'The reservation'), ...h.conflictErrors },
+      },
+    },
     '/api/v1/sales/reservations/{reservationId}/cancel': {
       post: {
         operationId: 'cancelReservation',
         summary: 'Cancel a reservation and return the unit to the market',
         description:
-          'Requires sales.reservation.cancel. The reservation is cancelled with its reason and kept ' +
-          '— never deleted (ADR-0009). The unit returns to available in the same transaction.',
+          'Requires sales.reservation.cancel (SALE-RESERVE-005). With a policy governing ' +
+          'sales.reservation.cancellation the reservation keeps its unit and carries ' +
+          'pendingCancellation until the decision; otherwise it is cancelled at once, kept with its ' +
+          'reason — never deleted (ADR-0009) — the unit returns to available, the opportunity to ' +
+          'negotiation, and an agreed deposit becomes refundHandoff=pending for BMP-2, all in one ' +
+          'transaction.',
         parameters: [pathParameter('reservationId', 'Opaque reservation identifier')],
         requestBody: requestBody(h.ref('CancelReservationRequest')),
         responses: {

@@ -420,7 +420,9 @@
     "confirmed": "Confirmed",
     "cancelled": "Cancelled",
     "expired": "Expired",
-    "converted": "Converted to contract"
+    "converted": "Converted to contract",
+    "approved": "Approved, awaiting confirmation",
+    "rejected": "Rejected"
   },
   "contractState": {
     "draft": "Draft",
@@ -1042,5 +1044,37 @@
   "planTemplateState": {
     "active": "Active",
     "retired": "Retired"
+  },
+  "reservationException": {
+    "discountAboveMaximum": "Discount above the allowed maximum",
+    "depositBelowMinimum": "Deposit below the minimum"
+  },
+  "refundHandoff": {
+    "notApplicable": "None",
+    "pending": "Awaiting finance"
+  },
+  "approvalOperation": {
+    "sales": {
+      "reservation": {
+        "discount": "Reservation discount",
+        "priceOverride": "Discount above the maximum",
+        "exception": "Reservation exception",
+        "extension": "Reservation extension",
+        "cancellation": "Reservation cancellation"
+      },
+      "contract": {
+        "exception": "Contract exception",
+        "amendment": "Contract amendment",
+        "cancellation": "Contract cancellation"
+      }
+    },
+    "inventory": {
+      "unit": {
+        "priceChange": "Unit price change"
+      },
+      "hold": {
+        "extension": "Hold extension"
+      }
+    }
   }
 }

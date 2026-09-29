@@ -495,6 +495,34 @@ describe.skipIf(!gate.available)(`approval engine — ${gate.reason}`, () => {
       expect(JSON.stringify(res.body)).not.toContain('idempotencyFingerprint');
     });
 
+    it('answers whether a policy would govern an operation, without submitting anything', async () => {
+      const { operationType } = await publishedPolicy({
+        stages: singleStage(),
+        conditions: [{ field: 'isException', operator: 'isTrue' }],
+      });
+      const requester = (await security.resolveActor(REQUESTER))!;
+      const before = await connection.collection('approvalRequests').countDocuments({});
+      expect(
+        await approvals.hasApplicablePolicy(requester, {
+          operationType,
+          scope: {},
+          context: { isException: true },
+        }),
+      ).toBe(true);
+      // The condition does not hold: no policy governs this one.
+      expect(
+        await approvals.hasApplicablePolicy(requester, { operationType, scope: {}, context: {} }),
+      ).toBe(false);
+      expect(
+        await approvals.hasApplicablePolicy(requester, {
+          operationType: 'test.nothing.governs',
+          scope: {},
+          context: {},
+        }),
+      ).toBe(false);
+      expect(await connection.collection('approvalRequests').countDocuments({})).toBe(before);
+    });
+
     it('refuses a submission with no published policy for the operation', async () => {
       const res = await submit(REQUESTER, 'test.nothing.governs');
       expect(res.status).toBe(400);

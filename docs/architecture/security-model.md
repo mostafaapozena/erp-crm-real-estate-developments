@@ -432,6 +432,14 @@ entities — through `buildCatalogueScopeFilter`. An assignment naming no place 
 Owned records (leads, customers, opportunities, reservations) keep the ordinary filter, so a
 representative sees their own leads and their branch's units at the same time.
 
+`salesReservations` (package 5) gained `salesReservations_liveUnit_v2_unique` (partial over
+`draft`, `pendingApproval`, `approved`, `confirmed` — the `approved` state is new), because MongoDB
+cannot widen an existing index's filter in place; the older `_liveUnit_unique` stays declared and is
+strictly narrower, so it never refuses what the new one allows. Also `_approvals` (each approval
+request the reservation raised) and `_opportunity`. New permission `sales.reservation.extend`
+(not administrative). Reservations are cancelled, expired or rejected — never deleted — and a
+cancellation that took money records a `refundHandoff` for finance rather than moving money.
+
 `crmCustomers` gained duplicate-candidate indexes (`_entity_email`, `_entity_identity`, both
 non-unique) and team/department scope indexes; `crmActivities` gained customer and opportunity
 timeline indexes and refuses an activity with no subject.

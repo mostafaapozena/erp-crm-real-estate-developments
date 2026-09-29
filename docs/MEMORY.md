@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-29 (Business Master Prompt 1 — Commercial Operations — in progress)
+Last updated: 2026-09-29 (Business Master Prompt 1 — Commercial Operations — package 5 complete)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -87,8 +87,8 @@ idempotent seed extensions.
 | 1 Scope consolidation, ADR-0032, discovery IDs, decisions, Arabic questionnaire | **complete** | `6faac98` |
 | 2 CRM and customer completion | **complete** | `9a8eb7b` |
 | 3 Opportunities and ownership | **complete** | `d79330c` |
-| 4 Inventory and pricing | **complete** | the commit containing this row |
-| 5 Reservations and approvals | not started | — |
+| 4 Inventory and pricing | **complete** | `f6dcdc4` |
+| 5 Reservations and approvals | **complete** | the commit containing this row |
 | 6 Contracts and schedules | not started | — |
 | 7 Arabic/English PDF documents and QR verification | not started | — |
 | 8 UI journey, dashboards and reports | not started | — |
@@ -186,6 +186,37 @@ idempotent seed extensions.
 - Measured: unit **628 passed** (the two web timeouts seen once under load pass standalone), inventory
   integration **45 passed**, OpenAPI **209 paths / 0 broken references**; full integration gate
   **567 passed / 0 failed / 0 skipped**, 27 files.
+
+### Package 5 — reservations and approvals
+
+- Reservation states gain `approved` and `rejected`; `LIVE_RESERVATION_STATES`; a new partial unique
+  index `salesReservations_liveUnit_v2_unique` (the old one stays declared, strictly narrower).
+- Rules in `apps/api/src/modules/sales/reservation-rules.ts` (pure, unit-tested): minimum deposit
+  (percentage rounded **up**), exact percentage comparison, exceptions, required approvals, combined
+  outcome. `SALES_APPROVAL_OPERATIONS` in contracts names all eight sales operations (package 6
+  uses the contract ones).
+- `SalesService` ports: `HoldPort` (convert a hold inside the reservation transaction),
+  `OpportunityPort` (advance to `reservation`; the contract still advances to `won` until package
+  6), `ReservationPolicies` (settings), `NumberPort` (CORE-DOC-001, `undefined` = no active
+  format → legacy series), `ApprovalPort.applies` (new `ApprovalService.hasApplicablePolicy`).
+- Settings `sales.reservationValidityDays` (decision relabelled **BD-01**, was SD-03 — BD-01 cites
+  SD-03), `sales.reservationMinimumDeposit` (BD-02), `sales.maximumDiscountPercent` (BD-03), all
+  default `null`. **Discovery defects fixed:** no invented 14-day validity (refused while not
+  configured); `downPaymentDueOn` stored and carried into the contract.
+- `POST /sales/reservations/{id}/extend` (`sales.reservation.extend`); cancellation and extension
+  go through approval where a policy applies; a cancellation that took money records
+  `refundHandoff: pending` for BMP-2. Maintenance sweep `sales.sweep` (300 s: expiry and
+  decided approvals); `settleApprovalOutcome` includes sales.
+- **Seed:** a fresh `seed:demo` now sets `sales.reservationValidityDays = 14` as the system actor,
+  reason "demonstration value — BD-01 open", only when not configured, and no longer passes
+  `holdDays`. **The existing development database was not reseeded and has no validity
+  configured**, so creating a reservation there answers `RESERVATION_VALIDITY_NOT_CONFIGURED`
+  until the package 8 seed extension (or an administrator) sets it. Demo roles still lack the new
+  permissions.
+- Measured: typecheck, full lint, format, i18n, secrets (499 files), ignored-source, **unit 636
+  passed / 49 files**, OpenAPI **210 paths / 0 broken references**, full integration gate **582
+  passed / 0 failed / 0 skipped**, 27 files. Lint needs `NODE_OPTIONS=--max-old-space-size=8192`
+  now — the default heap ran out once.
 
 ## Foundation completion (post-demo master prompt) — COMPLETE, stopped at the foundation gate
 

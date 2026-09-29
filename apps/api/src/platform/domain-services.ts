@@ -42,7 +42,7 @@ import {
 import { NotificationReminderDelivery } from './reminder-delivery';
 import { APPROVAL_AUDIT_ACTIONS } from '@alola/contracts';
 import { OrganizationService } from '../modules/organization';
-import { SalesService } from '../modules/sales';
+import { SalesService, type DepositRule } from '../modules/sales';
 import { SecurityService } from '../modules/security';
 import { SettingsService, referenceItemImporter } from '../modules/settings';
 import { ImportService, readFirstSheet } from '../modules/imports';
@@ -576,6 +576,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
         return undefined;
       }
     },
+    applies: (actor, input) => getApprovalService().hasApplicablePolicy(actor, input),
   };
 
   /** Unit price versions (INV-PRICE-001, 003): changes wait for approval where a policy applies. */
@@ -627,6 +628,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     for (const settle of [
       () => getPriceService().syncApproval(MAINTENANCE_ACTOR, requestId, context),
       () => getHoldService().syncApproval(MAINTENANCE_ACTOR, requestId, context),
+      () => getSalesService().syncApproval(MAINTENANCE_ACTOR, requestId, context),
     ]) {
       try {
         await settle();
@@ -796,6 +798,10 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
                 code: unit.code,
                 status: unit.status,
                 ...(unit.currentPrice ? { currentPrice: unit.currentPrice } : {}),
+                ...(unit.heldByHoldId ? { heldByHoldId: unit.heldByHoldId } : {}),
+                ...(unit.heldByReservationId
+                  ? { heldByReservationId: unit.heldByReservationId }
+                  : {}),
               }
             : undefined;
         },
@@ -818,6 +824,74 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
           getCrmService().advanceStageInternal(actor, leadId, to, reason, context, session),
       },
       approvals: approvalPort,
+      holds: {
+        find: async (holdId, session) => {
+          const hold = await getHoldService().findUnscoped(holdId, session);
+          return hold
+            ? {
+                holdId: hold.holdId,
+                unitId: hold.unitId,
+                state: hold.state,
+                holderAccountId: hold.holderAccountId,
+              }
+            : undefined;
+        },
+        convert: (actor, holdId, reservationId, expected, context, session) =>
+          getHoldService().convert(actor, holdId, reservationId, expected, context, session),
+      },
+      opportunities: {
+        find: async (actor, opportunityId) => {
+          const opportunity = await getOpportunityService().get(actor, opportunityId);
+          return {
+            opportunityId: opportunity.opportunityId,
+            customerId: opportunity.customerId,
+            stage: opportunity.stage,
+          };
+        },
+        advance: async (actor, opportunityId, to, links, reason, context, session) => {
+          await getOpportunityService().advanceInternal(
+            actor,
+            opportunityId,
+            to,
+            links,
+            reason,
+            context,
+            session,
+          );
+        },
+      },
+      // The commercial rules are the deployment's configuration; none is assumed (BD-01 … BD-03).
+      policies: {
+        validityDays: () => getSettingsService().valueOf<number>('sales.reservationValidityDays'),
+        minimumDeposit: () =>
+          getSettingsService().valueOf<DepositRule>('sales.reservationMinimumDeposit'),
+        maximumDiscountPercent: () =>
+          getSettingsService().valueOf<string>('sales.maximumDiscountPercent'),
+      },
+      // Official numbers through CORE-DOC-001 once a format is active (BD-19); until then, none.
+      numbers: {
+        issue: async (input, session) => {
+          const project = await getInventoryService().findProjectUnscoped(input.projectId);
+          try {
+            const issued = await getNumberingService().issue(
+              { accountId: 'system:sales' },
+              {
+                type: input.type,
+                issueDate: input.issueDate,
+                ...(project ? { projectCode: project.code } : {}),
+                source: input.source,
+                idempotencyKey: `${input.type}-${input.source.id}`,
+              },
+              session,
+            );
+            return issued.number;
+          } catch (error) {
+            const issue = (error as { issues?: { code: string }[] }).issues?.[0]?.code;
+            if (issue === 'NO_ACTIVE_SEQUENCE') return undefined;
+            throw error;
+          }
+        },
+      },
       today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
     });
     return salesService;

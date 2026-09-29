@@ -420,7 +420,9 @@
     "confirmed": "مؤكد",
     "cancelled": "ملغي",
     "expired": "منتهي",
-    "converted": "محوّل إلى عقد"
+    "converted": "محوّل إلى عقد",
+    "approved": "موافق عليه، بانتظار التأكيد",
+    "rejected": "مرفوض"
   },
   "contractState": {
     "draft": "مسودة",
@@ -1050,5 +1052,37 @@
   "planTemplateState": {
     "active": "مفعّل",
     "retired": "موقوف"
+  },
+  "reservationException": {
+    "discountAboveMaximum": "خصم يتجاوز الحد المسموح",
+    "depositBelowMinimum": "مبلغ حجز أقل من الحد الأدنى"
+  },
+  "refundHandoff": {
+    "notApplicable": "لا يوجد",
+    "pending": "بانتظار المعالجة المالية"
+  },
+  "approvalOperation": {
+    "sales": {
+      "reservation": {
+        "discount": "خصم على حجز",
+        "priceOverride": "تجاوز حد الخصم",
+        "exception": "استثناء في الحجز",
+        "extension": "تمديد حجز",
+        "cancellation": "إلغاء حجز"
+      },
+      "contract": {
+        "exception": "استثناء في العقد",
+        "amendment": "تعديل عقد",
+        "cancellation": "إلغاء عقد"
+      }
+    },
+    "inventory": {
+      "unit": {
+        "priceChange": "تغيير سعر وحدة"
+      },
+      "hold": {
+        "extension": "تمديد حجز مؤقت"
+      }
+    }
   }
 }

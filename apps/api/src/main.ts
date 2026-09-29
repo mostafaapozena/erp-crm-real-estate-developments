@@ -172,6 +172,12 @@ const sweeps: SweepDefinition[] = [
     }),
   },
   {
+    // Expired reservations, and decided reservation, extension and cancellation approvals.
+    name: 'sales.sweep',
+    intervalSeconds: 300,
+    run: async (actor, context) => counts(await services.sales().sweep(actor, context)),
+  },
+  {
     name: 'installments.refresh',
     intervalSeconds: 3600,
     run: async (actor, context) =>

@@ -629,6 +629,29 @@ export class ApprovalService {
   /* -------------------------------------------------------------- requests */
 
   /**
+   * Whether a published policy would govern this operation — the question `submit` answers first,
+   * asked without submitting. A module uses it to refuse an exception **before** it writes anything:
+   * an exception no policy can approve must not become a record waiting for an approval that can never
+   * come (ADR-0024). Reads only; records nothing.
+   */
+  async hasApplicablePolicy(
+    actor: ActorContext,
+    input: { operationType: string; scope: RequestScope; context: ApprovalRequest['context'] },
+  ): Promise<boolean> {
+    const candidates = await this.policies
+      .find({ operationType: input.operationType, state: 'published' })
+      .lean<ApprovalPolicyDocument[]>()
+      .exec();
+    const policy = selectPolicy(
+      candidates.map((document) => this.toPolicy(document)),
+      input.operationType,
+      { context: input.context, scope: input.scope, requesterRoleKeys: actor.roleKeys },
+      this.now(),
+    );
+    return policy !== undefined && policy.stages.length > 0;
+  }
+
+  /**
    * Submit a request (`APPROVAL-001`).
    *
    * The applied policy **version** is stored, so a later edit or a newer version never changes what an

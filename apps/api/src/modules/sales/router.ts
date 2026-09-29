@@ -1,6 +1,7 @@
 import {
   CancelContractSchema,
   CancelReservationSchema,
+  ExtendReservationSchema,
   ContractQuerySchema,
   ContractSummaryQuerySchema,
   CreateContractSchema,
@@ -103,8 +104,8 @@ export function salesRouter(options: SalesRouterOptions): Router {
     async (req, res) => {
       const result = await options
         .getService()
-        .expireReservations(actorOf(res), requestContext(req, res, `${base}/reservations/expire`));
-      if (result.expired === 0) markAuditExempt(res);
+        .sweep(actorOf(res), requestContext(req, res, `${base}/reservations/expire`));
+      if (result.expired === 0 && result.settled === 0) markAuditExempt(res);
       res.json(result);
     },
   );
@@ -152,6 +153,26 @@ export function salesRouter(options: SalesRouterOptions): Router {
             reservationId,
             body.reason,
             requestContext(req, res, `${base}/reservations/:reservationId/cancel`),
+          ),
+      );
+    },
+  );
+
+  router.post(
+    '/reservations/:reservationId/extend',
+    requirePermission('sales.reservation.extend', options.guard),
+    validate({ params: ReservationParamsSchema, body: ExtendReservationSchema }),
+    async (req, res) => {
+      const { reservationId } = validated<typeof ReservationParamsSchema._output>(res, 'params');
+      const body = validated<typeof ExtendReservationSchema._output>(res, 'body');
+      res.json(
+        await options
+          .getService()
+          .extendReservation(
+            actorOf(res),
+            reservationId,
+            body,
+            requestContext(req, res, `${base}/reservations/:reservationId/extend`),
           ),
       );
     },

@@ -93,6 +93,7 @@ describe.skipIf(!gate.available)(`inventory module — ${gate.reason}`, () => {
       return Promise.resolve({ requestId, state: 'pending' });
     },
     state: (requestId) => Promise.resolve(approvalStates.get(requestId)),
+    applies: () => Promise.resolve(approvalPolicy),
   };
 
   const R_MANAGER = `${RUN}-r-manager`;

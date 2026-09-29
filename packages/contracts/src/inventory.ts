@@ -642,6 +642,12 @@ export const UnitComparisonQuerySchema = z.strictObject({
 
 export const UnitComparisonSchema = z.strictObject({ items: z.array(UnitSchema) });
 
+/** Operation types inventory submits to the approval engine; a policy names them to apply (BD-31, BD-29). */
+export const INVENTORY_APPROVAL_OPERATIONS = {
+  priceChange: 'inventory.unit.priceChange',
+  holdExtension: 'inventory.hold.extension',
+} as const;
+
 export const INVENTORY_AUDIT_ACTIONS = {
   projectCreated: 'inventory.project.created',
   projectUpdated: 'inventory.project.updated',

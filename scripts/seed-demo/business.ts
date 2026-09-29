@@ -79,6 +79,7 @@ export async function seedBusiness(options: BusinessSeedOptions): Promise<Counte
     context,
   });
   tally(counts, 'companyProfile', identity.companyProfile === 'created');
+  await seedDemoSettings(services, foundation.systemActor, context, counts);
   await seedJourneys(services, actors, context, foundation, unitIds, leadIds);
 
   // The sweep the scheduled job would run. Without it every instalment stays `upcoming` however long
@@ -209,6 +210,44 @@ async function seedApprovalPolicy(
     },
   );
   tally(counts, 'approvalPolicy', result.created);
+}
+
+/* --------------------------------------------------------- demo settings */
+
+/**
+ * Commercial rules a reservation needs before one can exist. **These are demonstration values, not
+ * decisions**: BD-01 (reservation validity) stays open in the business decision register, and the
+ * reason recorded on the setting says so. A value already configured — by the client, or by an
+ * earlier run — is never overwritten.
+ */
+const DEMO_SETTINGS = [
+  { key: 'sales.reservationValidityDays', value: 14, decision: 'BD-01' },
+] as const;
+
+async function seedDemoSettings(
+  services: DomainServices,
+  systemActor: ActorContext,
+  context: { correlationId: string; method: string; route: string },
+  counts: Counter,
+): Promise<void> {
+  const settings = services.settings();
+  for (const entry of DEMO_SETTINGS) {
+    const current = await settings.getSetting(entry.key);
+    const create = !current.configured;
+    if (create) {
+      await settings.updateSetting(
+        systemActor,
+        entry.key,
+        {
+          value: entry.value,
+          expectedVersion: current.version,
+          reason: `demonstration value — ${entry.decision} open, not a business decision`,
+        },
+        context,
+      );
+    }
+    tally(counts, 'demoSetting', create);
+  }
 }
 
 /* ---------------------------------------------------------------- inventory */
@@ -622,7 +661,6 @@ async function seedJourneys(
             reservationAmount: egp(journey.reservationAmount),
             agreedPrice,
             paymentPlan,
-            holdDays: 14,
             notes: 'حجز تجريبي ضمن بيانات العرض.',
             idempotencyKey: `demo-reservation-${journey.key}`,
           },

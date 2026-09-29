@@ -163,7 +163,7 @@ describe.skipIf(!gate.available)(`settings and reference data — ${gate.reason}
       });
       expect(byKey.get('sales.reservationValidityDays')).toMatchObject({
         value: null,
-        decision: 'SD-03',
+        decision: 'BD-01',
       });
       expect(byKey.get('collections.reminderWindowsDays')).toMatchObject({ value: [15] });
       expect(byKey.get('display.dateFormat')).toMatchObject({ value: 'dd/MM/yyyy' });

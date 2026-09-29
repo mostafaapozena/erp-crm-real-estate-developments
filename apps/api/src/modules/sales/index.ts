@@ -30,9 +30,20 @@ export type {
   ApprovalPort,
   AuditRecorder,
   CrmPort,
+  HoldPort,
+  NumberPort,
+  OpportunityPort,
   RequestContext,
+  ReservationPolicies,
   SalesServiceOptions,
   UnitPort,
 } from './service';
+export {
+  combinedOutcome,
+  minimumDepositFor,
+  requiredApprovals,
+  reservationExceptions,
+} from './reservation-rules';
+export type { DepositRule } from './reservation-rules';
 export { salesRouter } from './router';
 export type { SalesRouterOptions } from './router';
