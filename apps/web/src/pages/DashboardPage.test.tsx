@@ -7,9 +7,10 @@ import type {
 } from '@alola/contracts';
 import { cleanup, render, screen } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { createI18n } from '../i18n';
+import { FIRST_RENDER, WARM_UP_BUDGET_MS, warmLazyModules } from '../testing/warm-up';
 
 /**
  * The signed-in dashboard, rendered exactly as `main.tsx` renders it — inside `StrictMode`.
@@ -22,9 +23,6 @@ import { createI18n } from '../i18n';
  * 2. **Valid DOM nesting.** React reports block content inside a paragraph as a console error; the
  *    dashboard once rendered one, which a screen reader then announced as a broken paragraph.
  */
-
-/** The first render transforms and lazy-loads the whole shell, which can exceed the 1 s default under a busy suite. */
-const FIRST_RENDER = { timeout: 10_000 };
 
 const session = {
   account: {
@@ -144,6 +142,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+
+// Compile and import the lazily loaded chunks once, before any test is timed.
+beforeAll(warmLazyModules, WARM_UP_BUDGET_MS);
 
 describe('signed-in dashboard under StrictMode', () => {
   it('restores the session with exactly one refresh request', async () => {

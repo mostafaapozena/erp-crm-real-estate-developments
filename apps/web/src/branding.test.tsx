@@ -1,9 +1,10 @@
 import type { PublicBranding } from '@alola/contracts';
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { NEUTRAL_BRANDING, loadBranding } from './branding';
 import { createI18n } from './i18n';
+import { FIRST_RENDER, WARM_UP_BUDGET_MS, warmLazyModules } from './testing/warm-up';
 
 /**
  * Runtime branding (PLAT-023, ADR-0027): one build, many deployments, each with its own identity read
@@ -51,11 +52,14 @@ afterEach(() => {
   document.querySelectorAll('link[rel="icon"]').forEach((link) => link.remove());
 });
 
+// Compile and import the lazily loaded chunks once, before any test is timed.
+beforeAll(warmLazyModules, WARM_UP_BUDGET_MS);
+
 describe('runtime branding', () => {
   it('names the tab after the company and shows its logo with the name as its text alternative', async () => {
     serve(configured);
     render(<App i18n={createI18n(() => undefined)} />);
-    await screen.findByRole('heading', { level: 1, name: 'تسجيل الدخول' });
+    await screen.findByRole('heading', { level: 1, name: 'تسجيل الدخول' }, FIRST_RENDER);
     expect(document.title).toBe('شركة المثال');
     // The logo's text alternative is the display name shown with it on the sign-in screen.
     expect(screen.getByRole('img', { name: 'شركة المثال للتطوير' }).getAttribute('src')).toBe(
@@ -70,14 +74,14 @@ describe('runtime branding', () => {
   it('never claims a live deployment is a demonstration', async () => {
     serve(configured);
     render(<App i18n={createI18n(() => undefined)} />);
-    await screen.findByRole('heading', { level: 1 });
+    await screen.findByRole('heading', { level: 1 }, FIRST_RENDER);
     expect(screen.queryByText(/تجريبي|تجريبية/)).toBeNull();
   });
 
   it('starts in the deployment language and offers no switch when it offers one language', async () => {
     serve({ ...configured, defaultLocale: 'en', supportedLocales: ['en'] });
     render(<App i18n={createI18n(() => undefined)} />);
-    await screen.findByRole('heading', { level: 1, name: 'Sign in' });
+    await screen.findByRole('heading', { level: 1, name: 'Sign in' }, FIRST_RENDER);
     expect(document.documentElement.lang).toBe('en');
     expect(document.documentElement.dir).toBe('ltr');
     expect(screen.queryByRole('button', { name: 'العربية' })).toBeNull();
@@ -86,14 +90,14 @@ describe('runtime branding', () => {
   it('falls back to the neutral identity on a malformed answer', async () => {
     serve({ configured: true, defaultLocale: 'fr' });
     render(<App i18n={createI18n(() => undefined)} />);
-    await screen.findByRole('heading', { level: 1, name: 'تسجيل الدخول' });
+    await screen.findByRole('heading', { level: 1, name: 'تسجيل الدخول' }, FIRST_RENDER);
     expect(document.title).toBe('نظام إدارة التطوير العقاري');
   });
 
   it('draws a monogram from the brand colour when no logo is configured', async () => {
     serve({ ...configured, assets: {} });
     render(<App i18n={createI18n(() => undefined)} />);
-    await screen.findByRole('heading', { level: 1 });
+    await screen.findByRole('heading', { level: 1 }, FIRST_RENDER);
     expect(screen.queryByTestId('brand-logo')).toBeNull();
     expect(screen.getByTestId('brand-monogram').textContent).toBe('م');
     expect(screen.getByText('شركة المثال للتطوير')).toBeDefined();

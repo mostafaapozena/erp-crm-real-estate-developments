@@ -16,30 +16,65 @@ import { useLocale } from './locale';
  * Each lazy page gets a **stable fallback** of the height the content will occupy, so the layout does
  * not jump, and a chunk that fails to arrive gets a retry rather than a blank page.
  */
-const Dashboard = lazy(() => import('./pages/DashboardPage'));
-const Leads = lazy(() => import('./pages/LeadsPage'));
-const LeadDetail = lazy(() => import('./pages/LeadDetailPage'));
-const Customers = lazy(() => import('./pages/CustomersPage'));
-const Projects = lazy(() => import('./pages/ProjectsPage'));
-const Units = lazy(() => import('./pages/UnitsPage'));
-const UnitDetail = lazy(() => import('./pages/UnitDetailPage'));
-const Reservations = lazy(() => import('./pages/ReservationsPage'));
-const ReservationNew = lazy(() => import('./pages/ReservationNewPage'));
-const ReservationDetail = lazy(() => import('./pages/ReservationDetailPage'));
-const Contracts = lazy(() => import('./pages/ContractsPage'));
-const ContractDetail = lazy(() => import('./pages/ContractDetailPage'));
-const Installments = lazy(() => import('./pages/InstallmentsPage'));
-const Receipts = lazy(() => import('./pages/ReceiptsPage'));
-const ReceiptDetail = lazy(() => import('./pages/ReceiptDetailPage'));
-const Instruments = lazy(() => import('./pages/InstrumentsPage'));
-const Reminders = lazy(() => import('./pages/RemindersPage'));
-const Campaigns = lazy(() => import('./pages/CampaignsPage'));
-const Organization = lazy(() => import('./pages/OrganizationPage'));
-const Notifications = lazy(() => import('./pages/NotificationsPage'));
-const Tasks = lazy(() => import('./pages/TasksPage'));
-const Imports = lazy(() => import('./pages/ImportsPage'));
-const CompanyIdentity = lazy(() => import('./pages/CompanyIdentityPage'));
-const NotFound = lazy(() => import('./pages/NotFoundPage'));
+/**
+ * The page chunks, one loader each. `lazy` renders from them, and `preloadPages` fetches them ahead of
+ * need — once before a test file, so a cold compile is not timed as if it were a render.
+ */
+export const PAGE_MODULES = {
+  Dashboard: () => import('./pages/DashboardPage'),
+  Leads: () => import('./pages/LeadsPage'),
+  LeadDetail: () => import('./pages/LeadDetailPage'),
+  Customers: () => import('./pages/CustomersPage'),
+  Projects: () => import('./pages/ProjectsPage'),
+  Units: () => import('./pages/UnitsPage'),
+  UnitDetail: () => import('./pages/UnitDetailPage'),
+  Reservations: () => import('./pages/ReservationsPage'),
+  ReservationNew: () => import('./pages/ReservationNewPage'),
+  ReservationDetail: () => import('./pages/ReservationDetailPage'),
+  Contracts: () => import('./pages/ContractsPage'),
+  ContractDetail: () => import('./pages/ContractDetailPage'),
+  Installments: () => import('./pages/InstallmentsPage'),
+  Receipts: () => import('./pages/ReceiptsPage'),
+  ReceiptDetail: () => import('./pages/ReceiptDetailPage'),
+  Instruments: () => import('./pages/InstrumentsPage'),
+  Reminders: () => import('./pages/RemindersPage'),
+  Campaigns: () => import('./pages/CampaignsPage'),
+  Organization: () => import('./pages/OrganizationPage'),
+  Notifications: () => import('./pages/NotificationsPage'),
+  Tasks: () => import('./pages/TasksPage'),
+  Imports: () => import('./pages/ImportsPage'),
+  CompanyIdentity: () => import('./pages/CompanyIdentityPage'),
+  NotFound: () => import('./pages/NotFoundPage'),
+} as const;
+
+export function preloadPages(): Promise<unknown[]> {
+  return Promise.all(Object.values(PAGE_MODULES).map((load) => load()));
+}
+
+const Dashboard = lazy(PAGE_MODULES.Dashboard);
+const Leads = lazy(PAGE_MODULES.Leads);
+const LeadDetail = lazy(PAGE_MODULES.LeadDetail);
+const Customers = lazy(PAGE_MODULES.Customers);
+const Projects = lazy(PAGE_MODULES.Projects);
+const Units = lazy(PAGE_MODULES.Units);
+const UnitDetail = lazy(PAGE_MODULES.UnitDetail);
+const Reservations = lazy(PAGE_MODULES.Reservations);
+const ReservationNew = lazy(PAGE_MODULES.ReservationNew);
+const ReservationDetail = lazy(PAGE_MODULES.ReservationDetail);
+const Contracts = lazy(PAGE_MODULES.Contracts);
+const ContractDetail = lazy(PAGE_MODULES.ContractDetail);
+const Installments = lazy(PAGE_MODULES.Installments);
+const Receipts = lazy(PAGE_MODULES.Receipts);
+const ReceiptDetail = lazy(PAGE_MODULES.ReceiptDetail);
+const Instruments = lazy(PAGE_MODULES.Instruments);
+const Reminders = lazy(PAGE_MODULES.Reminders);
+const Campaigns = lazy(PAGE_MODULES.Campaigns);
+const Organization = lazy(PAGE_MODULES.Organization);
+const Notifications = lazy(PAGE_MODULES.Notifications);
+const Tasks = lazy(PAGE_MODULES.Tasks);
+const Imports = lazy(PAGE_MODULES.Imports);
+const CompanyIdentity = lazy(PAGE_MODULES.CompanyIdentity);
+const NotFound = lazy(PAGE_MODULES.NotFound);
 
 /** Tall enough that the page does not reflow when the chunk arrives. */
 export function RouteFallback() {

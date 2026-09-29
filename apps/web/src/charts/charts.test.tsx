@@ -1,8 +1,9 @@
 import { ThemeRoot } from '@alola/ui';
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { CategoryBarChart, DonutChart } from './index';
 import { RatioMeter } from './RatioMeter';
+import { FIRST_RENDER, WARM_UP_BUDGET_MS, warmLazyModules } from '../testing/warm-up';
 
 /**
  * THEME-009: a series is never told apart by colour alone. Every bar carries its label and its
@@ -15,6 +16,9 @@ const data = [
   { key: 'new', label: 'جديد', value: 3, display: '3' },
   { key: 'won', label: 'تم البيع', value: 1, display: '1' },
 ];
+
+// Compile and import the lazily loaded chunks once, before any test is timed.
+beforeAll(warmLazyModules, WARM_UP_BUDGET_MS);
 
 describe('charts (THEME-009)', () => {
   it('labels every horizontal bar with its category and value', () => {
@@ -66,11 +70,7 @@ describe('charts (THEME-009)', () => {
         />
       </ThemeRoot>,
     );
-    const table = await screen.findByRole(
-      'table',
-      { name: 'Units by status' },
-      { timeout: 10_000 },
-    );
+    const table = await screen.findByRole('table', { name: 'Units by status' }, FIRST_RENDER);
     expect(within(table).getAllByRole('row')).toHaveLength(3);
   });
 

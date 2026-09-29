@@ -13,12 +13,16 @@ import { HorizontalBars } from './HorizontalBars';
 export type { ChartDatum } from './Charts';
 export { RatioMeter } from './RatioMeter';
 
+/** The chart chunk's loader; `preloadCharts` fetches it ahead of the first chart. */
+const loadCharts = () => import('./Charts');
+export function preloadCharts(): Promise<unknown> {
+  return loadCharts();
+}
+
 const LazyCategoryBarChart = lazy(() =>
-  import('./Charts').then((module) => ({ default: module.CategoryBarChart })),
+  loadCharts().then((module) => ({ default: module.CategoryBarChart })),
 );
-const LazyDonutChart = lazy(() =>
-  import('./Charts').then((module) => ({ default: module.DonutChart })),
-);
+const LazyDonutChart = lazy(() => loadCharts().then((module) => ({ default: module.DonutChart })));
 
 export function ChartSkeleton({ height = 160 }: { height?: number }) {
   return (

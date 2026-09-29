@@ -1,9 +1,10 @@
 import type { Task } from '@alola/contracts';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { createI18n } from '../i18n';
+import { FIRST_RENDER, WARM_UP_BUDGET_MS, warmLazyModules } from '../testing/warm-up';
 
 /**
  * The tasks screen (CORE-TASK-001, CORE-TASK-004).
@@ -11,9 +12,6 @@ import { createI18n } from '../i18n';
  * Pinned here: an overdue task says so in words, not by colour alone; and the calendar files a task on
  * the organization-calendar day the server reports (`dueOn`), with the week starting on Saturday.
  */
-
-/** The first render transforms and lazy-loads the whole shell, which can exceed the 1 s default under a busy suite. */
-const FIRST_RENDER = { timeout: 10_000 };
 
 const session = {
   account: {
@@ -108,6 +106,9 @@ const renderApp = () =>
       <App i18n={createI18n(() => undefined)} />
     </StrictMode>,
   );
+
+// Compile and import the lazily loaded chunks once, before any test is timed.
+beforeAll(warmLazyModules, WARM_UP_BUDGET_MS);
 
 describe('tasks screen', () => {
   it('lists my tasks and names an overdue one in words', async () => {

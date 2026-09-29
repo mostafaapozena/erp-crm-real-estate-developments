@@ -1,9 +1,10 @@
 import { StateView } from '@alola/ui';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { RouteErrorBoundary } from './RouteErrorBoundary';
 import { createI18n } from './i18n';
+import { FIRST_RENDER, WARM_UP_BUDGET_MS, warmLazyModules } from './testing/warm-up';
 
 const ARABIC = /[؀-ۿ]/;
 const LATIN_WORD = /[A-Za-z]{3,}/;
@@ -50,11 +51,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Compile and import the lazily loaded chunks once, before any test is timed.
+beforeAll(warmLazyModules, WARM_UP_BUDGET_MS);
+
 describe('web shell (I18N-003, TEST-003 unit tier)', () => {
   it('starts in Arabic, right-to-left, with no missing keys', async () => {
     const { missing } = renderApp();
     // Branding is read at runtime first (PLAT-023); with no server it falls back to the neutral identity.
-    await screen.findByRole('heading', { level: 1, name: 'تسجيل الدخول' });
+    await screen.findByRole('heading', { level: 1, name: 'تسجيل الدخول' }, FIRST_RENDER);
     expect(document.documentElement.lang).toBe('ar');
     expect(document.documentElement.dir).toBe('rtl');
     expect(document.title).toBe('نظام إدارة التطوير العقاري');
@@ -63,14 +67,14 @@ describe('web shell (I18N-003, TEST-003 unit tier)', () => {
 
   it('shows no English words while in Arabic', async () => {
     renderApp();
-    await screen.findByRole('heading', { level: 1 });
+    await screen.findByRole('heading', { level: 1 }, FIRST_RENDER);
     // The language switch is marked `lang="en"` and is excluded, as are direction-isolated values.
     expect(textInCurrentLanguage()).not.toMatch(LATIN_WORD);
   });
 
   it('switches language and direction together, with no Arabic left on screen', async () => {
     const { missing } = renderApp();
-    await screen.findByRole('heading', { level: 1 });
+    await screen.findByRole('heading', { level: 1 }, FIRST_RENDER);
 
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'English' }));
@@ -91,21 +95,21 @@ describe('web shell (I18N-003, TEST-003 unit tier)', () => {
 
   it('states on the sign-in screen that this is a demonstration environment', async () => {
     renderApp();
-    await screen.findByRole('heading', { level: 1 });
+    await screen.findByRole('heading', { level: 1 }, FIRST_RENDER);
     // The boundary has to be visible before anyone signs in, not only inside the product (ADR-0026).
     expect(document.body.textContent).toContain('بيئة عرض تجريبي');
   });
 
   it('keeps credential fields left-to-right whatever the interface language is', async () => {
     renderApp();
-    await screen.findByRole('heading', { level: 1 });
+    await screen.findByRole('heading', { level: 1 }, FIRST_RENDER);
     const identifier = screen.getByLabelText(/البريد الإلكتروني/);
     expect(identifier.getAttribute('dir')).toBe('ltr');
   });
 
   it('renders no session-only navigation while signed out', async () => {
     renderApp();
-    await screen.findByRole('heading', { level: 1 });
+    await screen.findByRole('heading', { level: 1 }, FIRST_RENDER);
     expect(screen.queryByRole('navigation', { name: 'التنقل الرئيسي' })).toBeNull();
   });
 });
@@ -113,7 +117,7 @@ describe('web shell (I18N-003, TEST-003 unit tier)', () => {
 describe('language switch on the sign-in screen', () => {
   it('labels the switch with the target language in that language', async () => {
     renderApp();
-    await screen.findByRole('heading', { level: 1 });
+    await screen.findByRole('heading', { level: 1 }, FIRST_RENDER);
     const button = screen.getByRole('button', { name: 'English' });
     expect(button.getAttribute('lang')).toBe('en');
   });

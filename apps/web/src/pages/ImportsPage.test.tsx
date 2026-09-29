@@ -1,9 +1,10 @@
 import type { ImportBatch } from '@alola/contracts';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import { createI18n } from '../i18n';
+import { FIRST_RENDER, WARM_UP_BUDGET_MS, warmLazyModules } from '../testing/warm-up';
 
 /**
  * The reference-data import screen (CORE-IMPORT-001, CORE-IMPORT-002).
@@ -11,9 +12,6 @@ import { createI18n } from '../i18n';
  * Pinned here: every issue is listed by row and column in the reader's language, and the commit
  * button stays disabled while any issue remains — the screen never offers a partial import.
  */
-
-/** The first render transforms and lazy-loads the whole shell. */
-const FIRST_RENDER = { timeout: 10_000 };
 
 const session = {
   account: {
@@ -105,6 +103,9 @@ async function uploadFile() {
     target: { files: [new File(['list,code'], 'items.csv', { type: 'text/csv' })] },
   });
 }
+
+// Compile and import the lazily loaded chunks once, before any test is timed.
+beforeAll(warmLazyModules, WARM_UP_BUDGET_MS);
 
 describe('import screen', () => {
   it('lists every issue in Arabic and will not offer a partial import', async () => {
