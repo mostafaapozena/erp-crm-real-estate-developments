@@ -196,8 +196,16 @@ export const PERMISSIONS = [
   'sales.reservation.extend',
   'sales.contract.view',
   'sales.contract.create',
+  /** Activate a draft contract, freezing its schedule (SALE-CONTRACT-003, BD-35). */
   'sales.contract.activate',
   'sales.contract.cancel',
+  /** Record the signing date and signed copy (SALE-CONTRACT-003). */
+  'sales.contract.sign',
+  /** Request a plan-change amendment; applied only through approval (SALE-CHANGE-001). */
+  'sales.contract.amend',
+  /** Priced offers that never reserve a unit (SALE-QUOTE-001). */
+  'sales.quotation.view',
+  'sales.quotation.manage',
 
   // Collections (`COL-*`)
   'collection.installment.view',
@@ -407,6 +415,7 @@ export const RESTRICTED_RESOURCES = [
   'approvalRequest',
   'unit',
   'customer',
+  'contract',
 ] as const;
 export type RestrictedResource = (typeof RESTRICTED_RESOURCES)[number];
 
@@ -454,5 +463,9 @@ export const FIELD_RESTRICTIONS: Readonly<
      * appointment needs the phone number, not the national ID (CRM-PERSON-002).
      */
     identity: 'crm.customer.viewIdentity',
+  },
+  contract: {
+    /** The buyer's identity snapshot is restricted exactly as the customer's identity is. */
+    'customerSnapshot.identity': 'crm.customer.viewIdentity',
   },
 };

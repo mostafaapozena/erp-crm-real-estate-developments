@@ -10,13 +10,22 @@ export {
   CONTRACTS_COLLECTION,
   COUNTERS_COLLECTION,
   INSTALLMENTS_COLLECTION,
+  QUOTATIONS_COLLECTION,
   RESERVATIONS_COLLECTION,
   SalesRecordUndeletableError,
   contractModel,
   counterModel,
   installmentModel,
+  quotationModel,
   reservationModel,
 } from './model';
+export { QUOTATION_SCOPE_FIELDS, QuotationService } from './quotations';
+export type {
+  QuotationRecipientPort,
+  QuotationServiceOptions,
+  QuotationUnitPort,
+} from './quotations';
+export { amendmentRows, partyIssues, samePlan } from './contract-rules';
 export {
   INSTALLMENT_SCOPE_FIELDS,
   IdempotencyConflictError,
@@ -29,8 +38,12 @@ export {
 export type {
   ApprovalPort,
   AuditRecorder,
+  ContractCustomerPort,
   CrmPort,
+  HistoryPort,
   HoldPort,
+  SignedCopyPort,
+  UnitSnapshotPort,
   NumberPort,
   OpportunityPort,
   RequestContext,

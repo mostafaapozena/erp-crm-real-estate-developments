@@ -428,7 +428,8 @@
     "draft": "Draft",
     "active": "Active",
     "cancelled": "Cancelled",
-    "completed": "Fully paid"
+    "completed": "Fully paid",
+    "pendingApproval": "Awaiting activation approval"
   },
   "frequency": {
     "monthly": "Monthly",
@@ -439,7 +440,9 @@
   "installmentKind": {
     "downPayment": "Down payment",
     "installment": "Installment",
-    "finalPayment": "Final payment"
+    "finalPayment": "Final payment",
+    "milestone": "Milestone payment",
+    "maintenanceDeposit": "Maintenance deposit"
   },
   "installmentState": {
     "upcoming": "Upcoming",
@@ -1076,5 +1079,34 @@
         "extension": "Hold extension"
       }
     }
+  },
+  "contractPartyRole": {
+    "buyer": "Buyer",
+    "coBuyer": "Co-buyer",
+    "guarantor": "Guarantor",
+    "representative": "Representative"
+  },
+  "contractException": {
+    "planChanged": "Payment plan differs from the reservation's"
+  },
+  "contractWarning": {
+    "identityMissing": "No identity document is recorded for the buyer",
+    "notSigned": "The contract's signing has not been recorded yet"
+  },
+  "signingState": {
+    "unsigned": "Not signed",
+    "signed": "Signed"
+  },
+  "amendmentState": {
+    "pending": "Awaiting approval",
+    "applied": "Applied",
+    "rejected": "Rejected",
+    "stale": "No longer applicable"
+  },
+  "quotationState": {
+    "active": "Active",
+    "superseded": "Replaced by a newer revision",
+    "withdrawn": "Withdrawn",
+    "expired": "Expired"
   }
 }

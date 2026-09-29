@@ -18,8 +18,20 @@ import {
   subtractMoney,
   type ActorContext,
   type BusinessDate,
+  SCHEDULE_ROUNDING_RULE,
+  scheduleTotal,
+  type ActivateContract,
+  type AmendContract,
   type CancelContract,
   type Contract,
+  type ContractAmendment,
+  type ContractCustomerSnapshot,
+  type ContractHistoryEntry,
+  type ContractPartyInput,
+  type ContractUnitSnapshot,
+  type ContractWarning,
+  type RecordSigning,
+  type SetContractParties,
   type ContractSummary,
   type ContractSummaryQuery,
   type ContractPage,
@@ -45,6 +57,7 @@ import {
   buildChangeSummary,
   buildScopeFilter,
   can,
+  restrictDocument,
   withScope,
   type Logger,
   type ScopeFieldMap,
@@ -63,9 +76,12 @@ import {
   type ContractDocument,
   type InstallmentDocument,
   type ReservationDocument,
+  type StoredAmendment,
   type StoredMoney,
   type StoredPaymentPlan,
+  type StoredScheduleRow,
 } from './model';
+import { amendmentRows, partyIssues, samePlan } from './contract-rules';
 import {
   combinedOutcome,
   minimumDepositFor,
@@ -157,6 +173,42 @@ export interface UnitPort {
   ): Promise<unknown>;
 }
 
+/**
+ * The unit as a contract records it (SALE-CONTRACT-001): read once, when the draft is made, and never
+ * again — a later change to the unit does not rewrite the contract.
+ */
+export interface UnitSnapshotPort {
+  snapshot(unitId: string, session?: ClientSession): Promise<ContractUnitSnapshot | undefined>;
+}
+
+/**
+ * The customers a contract names. `snapshot` reads the buyer through CRM's own scoped, field-restricted
+ * read, so the identity is recorded only when the person drafting may see it (CRM never hands identity
+ * to another module otherwise); without it the contract carries the `identityMissing` warning. The
+ * identity is then restricted on the contract exactly as on the customer. `inScope` is how a party is
+ * checked: a person the actor cannot see cannot be added to a contract.
+ */
+export interface ContractCustomerPort {
+  snapshot(
+    actor: ActorContext,
+    customerId: string,
+  ): Promise<ContractCustomerSnapshot | undefined>;
+  inScope(actor: ActorContext, customerId: string): Promise<{ name: string } | undefined>;
+}
+
+/** A signed copy must be a document the contract owns (CORE-DOC-002). */
+export interface SignedCopyPort {
+  ownerOf(
+    actor: ActorContext,
+    documentId: string,
+  ): Promise<{ type: string; id: string } | undefined>;
+}
+
+/** The contract's own trail, read from the audit record (SALE-CONTRACT-004). */
+export interface HistoryPort {
+  targetHistory(target: { type: string; id: string }, limit?: number): Promise<ContractHistoryEntry[]>;
+}
+
 /** Timed holds, as a reservation converts one (INV-HOLD-001). */
 export interface HoldPort {
   find(
@@ -210,7 +262,7 @@ export interface ReservationPolicies {
 export interface NumberPort {
   issue(
     input: {
-      type: 'reservation' | 'contract';
+      type: 'reservation' | 'contract' | 'quotation';
       issueDate: BusinessDate;
       projectId: string;
       source: { type: string; id: string };
@@ -322,6 +374,14 @@ export const INSTALLMENT_SCOPE_FIELDS: ScopeFieldMap = {
 
 const iso = (date: Date) => date.toISOString();
 
+/** The buyer's identity snapshot is absent for an actor who may not see identities (SEC-029). */
+function restrictContract(actor: ActorContext, contract: Contract): Contract {
+  return restrictDocument('contract', actor, contract) as Contract;
+}
+
+/** Rows that owe their whole amount — what an amendment may replace (SALE-CHANGE-001). */
+const UNPAID_STATES: InstallmentDocument['state'][] = ['upcoming', 'due', 'overdue'];
+
 function toMoney(stored: StoredMoney): Money {
   return { amount: fromDecimal128(stored.amount), currency: stored.currency };
 }
@@ -340,6 +400,23 @@ function toPlan(stored: StoredPaymentPlan): PaymentPlan {
       ? { downPaymentDueOn: stored.downPaymentDueOn as BusinessDate }
       : {}),
     ...(stored.finalPayment ? { finalPayment: toMoney(stored.finalPayment) } : {}),
+    ...(stored.milestones && stored.milestones.length > 0
+      ? {
+          milestones: stored.milestones.map((milestone) => ({
+            dueOn: milestone.dueOn as BusinessDate,
+            amount: toMoney(milestone.amount),
+            ...(milestone.label ? { label: { ar: milestone.label.ar, en: milestone.label.en } } : {}),
+          })),
+        }
+      : {}),
+    ...(stored.maintenanceDeposit
+      ? {
+          maintenanceDeposit: {
+            amount: toMoney(stored.maintenanceDeposit.amount),
+            dueOn: stored.maintenanceDeposit.dueOn as BusinessDate,
+          },
+        }
+      : {}),
   };
 }
 
@@ -351,6 +428,43 @@ function fromPlan(plan: PaymentPlan): StoredPaymentPlan {
     firstDueOn: plan.firstDueOn,
     ...(plan.downPaymentDueOn ? { downPaymentDueOn: plan.downPaymentDueOn } : {}),
     ...(plan.finalPayment ? { finalPayment: fromMoney(plan.finalPayment) } : {}),
+    ...(plan.milestones && plan.milestones.length > 0
+      ? {
+          milestones: plan.milestones.map((milestone) => ({
+            dueOn: milestone.dueOn,
+            amount: fromMoney(milestone.amount),
+            ...(milestone.label ? { label: milestone.label } : {}),
+          })),
+        }
+      : {}),
+    ...(plan.maintenanceDeposit
+      ? {
+          maintenanceDeposit: {
+            amount: fromMoney(plan.maintenanceDeposit.amount),
+            dueOn: plan.maintenanceDeposit.dueOn,
+          },
+        }
+      : {}),
+  };
+}
+
+function toRow(stored: StoredScheduleRow): ScheduleRow {
+  return {
+    sequence: stored.sequence,
+    kind: stored.kind,
+    dueOn: stored.dueOn as BusinessDate,
+    amount: toMoney(stored.amount),
+    ...(stored.label ? { label: { ar: stored.label.ar, en: stored.label.en } } : {}),
+  };
+}
+
+function fromRow(row: ScheduleRow): StoredScheduleRow {
+  return {
+    sequence: row.sequence,
+    kind: row.kind,
+    dueOn: row.dueOn,
+    amount: fromMoney(row.amount),
+    ...(row.label ? { label: row.label } : {}),
   };
 }
 
@@ -405,7 +519,53 @@ function approvalsOf(d: ReservationDocument): { operationType: string; requestId
     : [];
 }
 
+/** The price the schedule is built on: the snapshot's agreed price, or — before BMP-1 — the total. */
+function contractPrice(d: ContractDocument): Money {
+  return d.pricing ? toMoney(d.pricing.agreedPrice) : toMoney(d.totalPrice);
+}
+
+function contractWarnings(d: ContractDocument): ContractWarning[] {
+  const warnings: ContractWarning[] = [];
+  // Only a contract drafted with a snapshot can say its buyer had no identity (BD-34).
+  if (d.customerSnapshot && !d.customerSnapshot['identity']) warnings.push('identityMissing');
+  const live = d.state === 'draft' || d.state === 'pendingApproval' || d.state === 'active';
+  if (live && (d.signing?.state ?? 'unsigned') === 'unsigned') warnings.push('notSigned');
+  return warnings;
+}
+
+function draftScheduleOf(d: ContractDocument): ScheduleRow[] | undefined {
+  if (d.state !== 'draft' && d.state !== 'pendingApproval') return undefined;
+  try {
+    return buildInstallmentSchedule(contractPrice(d), toPlan(d.paymentPlan));
+  } catch {
+    // A stored plan was valid when it was stored; a preview is never worth failing a read over.
+    return undefined;
+  }
+}
+
+function toAmendment(a: StoredAmendment): ContractAmendment {
+  return {
+    amendmentId: a.amendmentId,
+    state: a.state,
+    reason: a.reason,
+    ...(a.requestId ? { requestId: a.requestId } : {}),
+    plan: {
+      installmentCount: a.plan.installmentCount,
+      frequency: a.plan.frequency,
+      firstDueOn: a.plan.firstDueOn as BusinessDate,
+      ...(a.plan.finalPayment ? { finalPayment: toMoney(a.plan.finalPayment) } : {}),
+    },
+    replacedInstallmentIds: a.replacedInstallmentIds,
+    amount: toMoney(a.amount),
+    rows: a.rows.map(toRow),
+    requestedBy: a.requestedBy,
+    requestedAt: iso(a.requestedAt),
+    ...(a.decidedAt ? { decidedAt: iso(a.decidedAt) } : {}),
+  } as ContractAmendment;
+}
+
 function toContract(d: ContractDocument): Contract {
+  const draftSchedule = draftScheduleOf(d);
   return ContractSchema.parse({
     contractId: d.contractId,
     contractNumber: d.contractNumber,
@@ -413,18 +573,54 @@ function toContract(d: ContractDocument): Contract {
     unitId: d.unitId,
     projectId: d.projectId,
     reservationId: d.reservationId,
+    ...(d.leadId ? { leadId: d.leadId } : {}),
+    ...(d.opportunityId ? { opportunityId: d.opportunityId } : {}),
     contractedOn: d.contractedOn,
     totalPrice: toMoney(d.totalPrice),
     reservationAmount: toMoney(d.reservationAmount),
     paymentPlan: toPlan(d.paymentPlan),
     outstandingAmount: toMoney(d.outstandingAmount),
     paidAmount: toMoney(d.paidAmount),
+    ...(d.customerSnapshot ? { customerSnapshot: d.customerSnapshot } : {}),
+    ...(d.unitSnapshot ? { unitSnapshot: d.unitSnapshot } : {}),
+    ...(d.pricing
+      ? {
+          pricing: {
+            ...(d.pricing.listPrice ? { listPrice: toMoney(d.pricing.listPrice) } : {}),
+            agreedPrice: toMoney(d.pricing.agreedPrice),
+            discountPercentage: d.pricing.discountPercentage,
+            reservationAmount: toMoney(d.pricing.reservationAmount),
+            ...(d.pricing.maintenanceDeposit
+              ? { maintenanceDeposit: toMoney(d.pricing.maintenanceDeposit) }
+              : {}),
+          },
+        }
+      : {}),
+    // A contract from before BMP-1 had one party: its customer, owning the whole unit.
+    parties: d.parties ?? [{ role: 'buyer', customerId: d.customerId, sharePercent: '100' }],
+    signing: d.signing
+      ? {
+          state: d.signing.state,
+          ...(d.signing.signedOn ? { signedOn: d.signing.signedOn } : {}),
+          ...(d.signing.documentId ? { documentId: d.signing.documentId } : {}),
+          ...(d.signing.recordedBy ? { recordedBy: d.signing.recordedBy } : {}),
+          ...(d.signing.recordedAt ? { recordedAt: iso(d.signing.recordedAt) } : {}),
+        }
+      : { state: 'unsigned' },
+    exceptions: d.exceptions ?? [],
+    warnings: contractWarnings(d),
+    approvals: d.approvals ?? [],
+    amendments: (d.amendments ?? []).map(toAmendment),
+    ...(d.pendingCancellation ? { pendingCancellation: d.pendingCancellation } : {}),
+    refundHandoff: d.refundHandoff ?? 'notApplicable',
+    ...(draftSchedule ? { draftSchedule } : {}),
     salesOwnerAccountId: d.salesOwnerAccountId,
     legalEntityId: d.legalEntityId,
     branchId: d.branchId,
     ...(d.departmentId ? { departmentId: d.departmentId } : {}),
     ...(d.teamId ? { teamId: d.teamId } : {}),
     state: d.state,
+    ...(d.activatedAt ? { activatedAt: iso(d.activatedAt) } : {}),
     ...(d.cancellationReason ? { cancellationReason: d.cancellationReason } : {}),
     ...(d.documentRef ? { documentRef: d.documentRef } : {}),
     version: d.version,
@@ -447,6 +643,8 @@ function toInstallment(d: InstallmentDocument): Installment {
     paidAmount: toMoney(d.paidAmount),
     remainingAmount: toMoney(d.remainingAmount),
     state: d.state,
+    ...(d.label ? { label: { ar: d.label.ar, en: d.label.en } } : {}),
+    ...(d.amendmentId ? { amendmentId: d.amendmentId } : {}),
     legalEntityId: d.legalEntityId,
     branchId: d.branchId,
     ...(d.teamId ? { teamId: d.teamId } : {}),
@@ -494,6 +692,11 @@ export interface SalesServiceOptions {
   policies?: ReservationPolicies;
   /** Absent means the legacy series numbers every document. */
   numbers?: NumberPort;
+  /** Contract drafting (SALE-CONTRACT-001 … 004). Absent: drafts carry no snapshots. */
+  unitSnapshots?: UnitSnapshotPort;
+  customers?: ContractCustomerPort;
+  signedCopies?: SignedCopyPort;
+  history?: HistoryPort;
   today: () => BusinessDate;
 }
 
@@ -568,7 +771,14 @@ export class SalesService {
       (running, row) => addMoney(running, row.amount),
       money('0', total.currency),
     );
-    return { rows, total, rowsTotal };
+    return {
+      rows,
+      total: scheduleTotal(total, plan),
+      price: total,
+      ...(plan.maintenanceDeposit ? { maintenanceDeposit: plan.maintenanceDeposit.amount } : {}),
+      roundingRule: SCHEDULE_ROUNDING_RULE,
+      rowsTotal,
+    };
   }
 
   /* --------------------------------------------------------- reservations */
@@ -1044,7 +1254,12 @@ export class SalesService {
       })
       .lean<ReservationDocument>()
       .exec();
-    if (!document) return 'unchanged';
+    if (!document) {
+      const outcome = await this.syncContractApproval(actor, requestId, context);
+      if (outcome === 'activated' || outcome === 'amended') return 'approved';
+      if (outcome === 'stale') return 'refused';
+      return outcome;
+    }
     const current = toReservation(document);
     const approvals = this.options.approvals;
 
@@ -1352,6 +1567,10 @@ export class SalesService {
     context: RequestContext,
   ): Promise<Reservation> {
     const current = await this.getReservation(actor, reservationId);
+    // The draft is withdrawn first, through the contract; the reservation cannot vanish under it.
+    if (current.contractId && current.state === 'confirmed') {
+      throw conflict('CONTRACT_IN_PROGRESS', ['reservationId']);
+    }
     if (!LIVE_RESERVATION_STATES.includes(current.state)) {
       return this.endReservation(
         actor,
@@ -1538,6 +1757,8 @@ export class SalesService {
         state: { $in: [...LIVE_RESERVATION_STATES] },
         expiresOn: { $lt: today },
         pendingExtension: { $exists: false },
+        // A confirmed reservation with a contract draft is the contract's now; it does not expire.
+        contractId: { $exists: false },
       })
       .limit(200)
       .lean<ReservationDocument[]>()
@@ -1606,6 +1827,7 @@ export class SalesService {
         }
       }
     }
+    settled += await this.sweepContracts(actor, context);
     const { expired } = await this.expireReservations(actor, context);
     return { expired, settled };
   }
@@ -1731,13 +1953,13 @@ export class SalesService {
   }
 
   /**
-   * Turn a confirmed reservation into a contract, its schedule, and a contracted unit — in one
-   * transaction.
+   * SALE-CONTRACT-001. Draft a contract from a confirmed reservation.
    *
-   * The reservation amount is **credited**: it is money already received, so the schedule is built
-   * over the agreed price and the reservation amount is recorded as paid against the earliest rows.
-   * Building the schedule over "price minus reservation" instead would make the contract total
-   * disagree with the unit price on every printed document.
+   * The draft carries **snapshots** — the buyer, the unit and the agreed price as they stand today —
+   * its parties, its number and a proposed schedule, and nothing else moves: the unit stays the
+   * reservation's, no instalment exists and nothing is collectible. Activation (below) is what commits
+   * the unit and freezes the schedule. The reservation records the draft, so it can neither expire nor
+   * be cancelled underneath it.
    */
   async createContract(
     actor: ActorContext,
@@ -1748,11 +1970,12 @@ export class SalesService {
       reservationId: input.reservationId,
       contractedOn: input.contractedOn,
       paymentPlan: input.paymentPlan ?? null,
+      parties: input.parties ?? null,
     });
     const replay = await this.replayContract(input.idempotencyKey, print);
     if (replay) {
       return {
-        contract: replay,
+        contract: restrictContract(actor, replay),
         installments: await this.listContractInstallments(actor, replay.contractId),
         replayed: true,
       };
@@ -1760,11 +1983,31 @@ export class SalesService {
 
     const reservation = await this.getReservation(actor, input.reservationId);
     if (reservation.state !== 'confirmed') throw new SalesConflictError('reservationNotConfirmed');
+    if (reservation.contractId) throw conflict('CONTRACT_IN_PROGRESS', ['reservationId']);
 
     const plan = input.paymentPlan ?? reservation.paymentPlan;
-    const total = reservation.agreedPrice;
-    const rows = buildInstallmentSchedule(total, plan);
+    const price = reservation.agreedPrice;
+    const rows = buildInstallmentSchedule(price, plan);
+    const total = scheduleTotal(price, plan);
     this.assertReconciles(rows, total);
+    // Money already taken can never exceed what the contract is worth: it would have nowhere to go.
+    if (compareMoney(reservation.reservationAmount, total) > 0) {
+      throw invalid('RESERVATION_EXCEEDS_TOTAL', ['paymentPlan']);
+    }
+
+    const parties = await this.resolveParties(
+      actor,
+      input.parties ?? [
+        { role: 'buyer', customerId: reservation.customerId, sharePercent: '100' },
+      ],
+      reservation.customerId,
+    );
+    const customerSnapshot = await this.options.customers?.snapshot(actor, reservation.customerId);
+    const unitSnapshot = await this.options.unitSnapshots?.snapshot(reservation.unitId);
+    const exceptions: Contract['exceptions'] =
+      input.paymentPlan && !samePlan(input.paymentPlan, reservation.paymentPlan)
+        ? ['planChanged']
+        : [];
 
     const contractId = newId('ctr');
     try {
@@ -1775,13 +2018,7 @@ export class SalesService {
           session,
         );
         const now = new Date();
-
-        const stored = this.applyReservationCredit(rows, reservation.reservationAmount);
-        const paidAmount = stored.reduce<Money>(
-          (running, row) => addMoney(running, row.paidAmount),
-          money('0', total.currency),
-        );
-        const outstanding = subtractMoney(total, paidAmount);
+        const zero = money('0', total.currency);
 
         const contractDocument: ContractDocument = {
           contractId,
@@ -1790,18 +2027,38 @@ export class SalesService {
           unitId: reservation.unitId,
           projectId: reservation.projectId,
           reservationId: reservation.reservationId,
+          ...(reservation.leadId ? { leadId: reservation.leadId } : {}),
+          ...(reservation.opportunityId ? { opportunityId: reservation.opportunityId } : {}),
           contractedOn: input.contractedOn,
           totalPrice: fromMoney(total),
           reservationAmount: fromMoney(reservation.reservationAmount),
           paymentPlan: fromPlan(plan),
-          outstandingAmount: fromMoney(outstanding),
-          paidAmount: fromMoney(paidAmount),
+          // Nothing is owed on a draft; activation writes the real figures with the schedule.
+          outstandingAmount: fromMoney(total),
+          paidAmount: fromMoney(zero),
+          ...(customerSnapshot ? { customerSnapshot: { ...customerSnapshot } } : {}),
+          ...(unitSnapshot ? { unitSnapshot: { ...unitSnapshot } } : {}),
+          pricing: {
+            ...(reservation.listPrice ? { listPrice: fromMoney(reservation.listPrice) } : {}),
+            agreedPrice: fromMoney(price),
+            discountPercentage: reservation.discountPercentage,
+            reservationAmount: fromMoney(reservation.reservationAmount),
+            ...(plan.maintenanceDeposit
+              ? { maintenanceDeposit: fromMoney(plan.maintenanceDeposit.amount) }
+              : {}),
+          },
+          parties,
+          signing: { state: 'unsigned' },
+          exceptions,
+          approvals: [],
+          amendments: [],
+          refundHandoff: 'notApplicable',
           salesOwnerAccountId: reservation.salesOwnerAccountId,
           legalEntityId: reservation.legalEntityId,
           branchId: reservation.branchId,
           ...(reservation.departmentId ? { departmentId: reservation.departmentId } : {}),
           ...(reservation.teamId ? { teamId: reservation.teamId } : {}),
-          state: 'active',
+          state: 'draft',
           idempotencyKey: input.idempotencyKey,
           idempotencyFingerprint: print,
           version: 1,
@@ -1811,111 +2068,40 @@ export class SalesService {
         const [createdContract] = await this.contracts.create([contractDocument], { session });
         if (!createdContract) throw new SalesConflictError('contractNotCreated');
 
-        const installmentDocuments: InstallmentDocument[] = stored.map((row) => ({
-          installmentId: newId('inst'),
-          contractId,
-          customerId: reservation.customerId,
-          unitId: reservation.unitId,
-          projectId: reservation.projectId,
-          sequence: row.sequence,
-          kind: row.kind,
-          dueOn: row.dueOn,
-          amount: fromMoney(row.amount),
-          paidAmount: fromMoney(row.paidAmount),
-          remainingAmount: fromMoney(row.remainingAmount),
-          state: row.state,
-          legalEntityId: reservation.legalEntityId,
-          branchId: reservation.branchId,
-          ...(reservation.teamId ? { teamId: reservation.teamId } : {}),
-          salesOwnerAccountId: reservation.salesOwnerAccountId,
-          version: 1,
-          createdAt: now,
-          updatedAt: now,
-        }));
-        // `ordered: true` is required by mongoose when creating several documents in a session, and
-        // it is what we want anyway: the rows are inserted in sequence order.
-        const createdInstallments = await this.installments.create(installmentDocuments, {
-          session,
-          ordered: true,
-        });
-
-        await this.reservations
+        // The reservation now points at its draft; the condition makes two drafts for one sale lose.
+        const claimed = await this.reservations
           .updateOne(
-            { reservationId: reservation.reservationId, state: 'confirmed' },
-            { $set: { state: 'converted', contractId, updatedAt: now }, $inc: { version: 1 } },
+            {
+              reservationId: reservation.reservationId,
+              state: 'confirmed',
+              contractId: { $exists: false },
+            },
+            { $set: { contractId, updatedAt: now }, $inc: { version: 1 } },
             { session },
           )
           .exec();
+        if (claimed.modifiedCount !== 1) throw conflict('CONTRACT_IN_PROGRESS', ['reservationId']);
 
-        await this.options.units.changeStatus(
+        await this.contractAudit(
           actor,
           {
-            unitId: reservation.unitId,
-            from: 'reserved',
-            to: 'contracted',
-            reason: `contract ${contractNumber}`,
-            sourceType: 'contract',
-            sourceId: contractId,
-            contractId,
-            reservationId: null,
-          },
-          context,
-          session,
-        );
-
-        if (reservation.leadId && this.options.crm.advanceLead) {
-          await this.options.crm.advanceLead(
-            actor,
-            reservation.leadId,
-            'won',
-            `contract ${contractNumber}`,
-            context,
-            session,
-          );
-        }
-        if (reservation.opportunityId) {
-          await this.options.opportunities?.advance(
-            actor,
-            reservation.opportunityId,
-            'won',
-            { contractId },
-            `contract ${contractNumber}`,
-            context,
-            session,
-          );
-        }
-
-        await this.options.audit.record(
-          {
             action: SALES_AUDIT_ACTIONS.contractCreated,
-            outcome: 'succeeded',
-            actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
-            target: { type: 'contract', id: contractId },
+            contractId,
             changes: buildChangeSummary(undefined, {
               contractNumber,
               reservationId: reservation.reservationId,
               unitId: reservation.unitId,
-              installments: String(stored.length),
+              state: 'draft',
+              parties: String(parties.length),
+              ...(exceptions.length > 0 ? { exceptions: exceptions.join(',') } : {}),
             }),
-            context,
           },
-          { session },
+          context,
+          session,
         );
-        await this.options.audit.record(
-          {
-            action: SALES_AUDIT_ACTIONS.scheduleGenerated,
-            outcome: 'succeeded',
-            actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
-            target: { type: 'contract', id: contractId },
-            reason: `${stored.length} rows reconciling to the contract total`,
-            context,
-          },
-          { session },
-        );
-
         return {
-          contract: toContract(createdContract.toObject()),
-          installments: createdInstallments.map((document) => toInstallment(document.toObject())),
+          contract: restrictContract(actor, toContract(createdContract.toObject())),
+          installments: [],
           replayed: false,
         };
       });
@@ -1924,7 +2110,7 @@ export class SalesService {
         const stored = await this.replayContract(input.idempotencyKey, print);
         if (stored) {
           return {
-            contract: stored,
+            contract: restrictContract(actor, stored),
             installments: await this.listContractInstallments(actor, stored.contractId),
             replayed: true,
           };
@@ -1934,6 +2120,422 @@ export class SalesService {
       throw error;
     }
   }
+
+  /**
+   * Validate parties (SALE-CONTRACT-002) and snapshot each name. Every person must be a customer the
+   * actor can see; the buyer is the reservation's customer.
+   */
+  private async resolveParties(
+    actor: ActorContext,
+    parties: readonly ContractPartyInput[],
+    reservationCustomerId: string,
+  ): Promise<NonNullable<ContractDocument['parties']>> {
+    const problem = partyIssues(parties, reservationCustomerId);
+    if (problem) throw invalid(problem.issue, ['parties', problem.index]);
+    const resolved: NonNullable<ContractDocument['parties']> = [];
+    for (const [index, party] of parties.entries()) {
+      let name: string | undefined;
+      if (this.options.customers) {
+        const found = await this.options.customers.inScope(actor, party.customerId);
+        if (!found) throw invalid('PARTY_NOT_FOUND', ['parties', index, 'customerId']);
+        name = found.name;
+      }
+      resolved.push({
+        role: party.role,
+        customerId: party.customerId,
+        ...(party.sharePercent !== undefined ? { sharePercent: party.sharePercent } : {}),
+        ...(name ? { name } : {}),
+      });
+    }
+    return resolved;
+  }
+
+  private contractAudit(
+    actor: ActorContext,
+    entry: {
+      action: string;
+      outcome?: 'succeeded' | 'denied';
+      contractId: string;
+      reason?: string;
+      changes?: { path: string; from?: string; to?: string }[];
+    },
+    context: RequestContext,
+    session?: ClientSession,
+  ): Promise<unknown> {
+    return this.options.audit.record(
+      {
+        action: entry.action,
+        outcome: entry.outcome ?? 'succeeded',
+        actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
+        target: { type: 'contract', id: entry.contractId },
+        ...(entry.changes ? { changes: entry.changes } : {}),
+        ...(entry.reason ? { reason: entry.reason } : {}),
+        context,
+      },
+      session ? { session } : {},
+    );
+  }
+
+  private async findContractOrThrow(contractId: string): Promise<ContractDocument> {
+    assertSafeFilter({ contractId });
+    const document = await this.contracts.findOne({ contractId }).lean<ContractDocument>().exec();
+    if (!document) throw new SalesNotFoundError('contract');
+    return document;
+  }
+
+  /** Read a contract in scope and check the version the caller edited. */
+  private async editableContract(
+    actor: ActorContext,
+    contractId: string,
+    expectedVersion: number,
+  ): Promise<ContractDocument> {
+    await this.getContract(actor, contractId);
+    const document = await this.findContractOrThrow(contractId);
+    if (document.version !== expectedVersion) throw conflict('STALE_VERSION', ['expectedVersion']);
+    return document;
+  }
+
+  /** SALE-CONTRACT-002. Parties change only while the contract is a draft. */
+  async setParties(
+    actor: ActorContext,
+    contractId: string,
+    input: SetContractParties,
+    context: RequestContext,
+  ): Promise<Contract> {
+    const current = await this.editableContract(actor, contractId, input.expectedVersion);
+    if (current.state !== 'draft') throw conflict('CONTRACT_NOT_DRAFT', ['parties']);
+    const parties = await this.resolveParties(actor, input.parties, current.customerId);
+    return withTransaction(this.connection, async (session) => {
+      const updated = await this.contracts
+        .findOneAndUpdate(
+          { contractId, state: 'draft', version: current.version },
+          { $set: { parties, updatedAt: new Date() }, $inc: { version: 1 } },
+          { returnDocument: 'after', session },
+        )
+        .lean<ContractDocument>()
+        .exec();
+      if (!updated) throw conflict('STALE_VERSION', ['expectedVersion']);
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.contractPartiesChanged,
+          contractId,
+          changes: buildChangeSummary(
+            { parties: (current.parties ?? []).map((p) => `${p.role}:${p.customerId}`).join(',') },
+            { parties: parties.map((p) => `${p.role}:${p.customerId}`).join(',') },
+          ),
+        },
+        context,
+        session,
+      );
+      return restrictContract(actor, toContract(updated));
+    });
+  }
+
+  /**
+   * SALE-CONTRACT-003. Record the signing date and, optionally, the signed copy — a document this
+   * contract owns. Signing is a fact, recorded once. It is **not** required for activation until
+   * `BD-35` decides it; a contract without it carries the `notSigned` warning.
+   */
+  async recordSigning(
+    actor: ActorContext,
+    contractId: string,
+    input: RecordSigning,
+    context: RequestContext,
+  ): Promise<Contract> {
+    const current = await this.editableContract(actor, contractId, input.expectedVersion);
+    if (!['draft', 'pendingApproval', 'active'].includes(current.state)) {
+      throw conflict('INVALID_TRANSITION', ['state']);
+    }
+    if (current.signing?.state === 'signed') throw conflict('ALREADY_SIGNED', ['signedOn']);
+    if (input.signedOn > this.options.today()) throw invalid('SIGNED_IN_FUTURE', ['signedOn']);
+    if (input.documentId) {
+      const owner = await this.options.signedCopies?.ownerOf(actor, input.documentId);
+      if (!owner || owner.type !== 'contract' || owner.id !== contractId) {
+        throw invalid('DOCUMENT_NOT_OWNED_BY_CONTRACT', ['documentId']);
+      }
+    }
+    return withTransaction(this.connection, async (session) => {
+      const now = new Date();
+      const updated = await this.contracts
+        .findOneAndUpdate(
+          { contractId, version: current.version },
+          {
+            $set: {
+              signing: {
+                state: 'signed',
+                signedOn: input.signedOn,
+                ...(input.documentId ? { documentId: input.documentId } : {}),
+                recordedBy: actor.accountId,
+                recordedAt: now,
+              },
+              updatedAt: now,
+            },
+            $inc: { version: 1 },
+          },
+          { returnDocument: 'after', session },
+        )
+        .lean<ContractDocument>()
+        .exec();
+      if (!updated) throw conflict('STALE_VERSION', ['expectedVersion']);
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.contractSigned,
+          contractId,
+          changes: buildChangeSummary(
+            { signing: 'unsigned' },
+            { signing: 'signed', signedOn: input.signedOn },
+          ),
+        },
+        context,
+        session,
+      );
+      return restrictContract(actor, toContract(updated));
+    });
+  }
+
+  /**
+   * SALE-CONTRACT-003. Activate a draft. Where the draft carries an exception (a plan changed from the
+   * one the reservation was approved with) and a published policy governs `sales.contract.exception`,
+   * the contract waits in `pendingApproval` and is activated when the approval is granted. Otherwise the
+   * permission alone activates it: the absence of a configured control is not an error (ADR-0024).
+   */
+  async activateContract(
+    actor: ActorContext,
+    contractId: string,
+    input: ActivateContract,
+    context: RequestContext,
+  ): Promise<Contract> {
+    let current = await this.editableContract(actor, contractId, input.expectedVersion);
+    if (current.state === 'pendingApproval') {
+      await this.syncContractApproval(actor, current.approvals?.at(-1)?.requestId ?? '', context);
+      current = await this.findContractOrThrow(contractId);
+    }
+    if (current.state === 'pendingApproval') throw conflict('APPROVAL_PENDING', ['state']);
+    if (current.state !== 'draft') throw conflict('INVALID_TRANSITION', ['state']);
+
+    const exceptions = current.exceptions ?? [];
+    if (exceptions.length > 0 && this.options.approvals) {
+      const scope = this.approvalScope(current);
+      const price = contractPrice(current);
+      const governed =
+        (await this.options.approvals.applies?.(actor, {
+          operationType: SALES_APPROVAL_OPERATIONS.contractException,
+          scope,
+          context: { amount: price, isException: true },
+        })) ?? true;
+      if (governed) {
+        const submitted = await this.options.approvals.submit(
+          actor,
+          {
+            operationType: SALES_APPROVAL_OPERATIONS.contractException,
+            source: { type: 'contract', id: contractId },
+            scope,
+            context: { amount: price, isException: true },
+            summary: [
+              { label: { ar: 'رقم العقد', en: 'Contract number' }, value: current.contractNumber },
+              { label: { ar: 'الاستثناء', en: 'Exception' }, value: exceptions.join(', ') },
+            ],
+            idempotencyKey: `contract-exception-${contractId}-v${current.version}`,
+          },
+          context,
+        );
+        if (submitted) {
+          await withTransaction(this.connection, async (session) => {
+            const updated = await this.contracts
+              .findOneAndUpdate(
+                { contractId, state: 'draft', version: current.version },
+                {
+                  $set: { state: 'pendingApproval', updatedAt: new Date() },
+                  $push: {
+                    approvals: {
+                      operationType: SALES_APPROVAL_OPERATIONS.contractException,
+                      requestId: submitted.requestId,
+                    },
+                  },
+                  $inc: { version: 1 },
+                },
+                { returnDocument: 'after', session },
+              )
+              .lean<ContractDocument>()
+              .exec();
+            if (!updated) throw conflict('STALE_VERSION', ['expectedVersion']);
+            await this.contractAudit(
+              actor,
+              {
+                action: SALES_AUDIT_ACTIONS.contractActivationRequested,
+                contractId,
+                reason: exceptions.join(', '),
+              },
+              context,
+              session,
+            );
+          });
+          // A policy that settles at once (an automatic approval) is honoured straight away.
+          await this.syncContractApproval(actor, submitted.requestId, context);
+          return restrictContract(actor, toContract(await this.findContractOrThrow(contractId)));
+        }
+      }
+    }
+    const activated = await this.applyActivation(actor, current, context);
+    return restrictContract(actor, activated);
+  }
+
+  /**
+   * Freeze the schedule and commit the unit, in one transaction: the contract becomes `active`, its
+   * rows become instalments (the reservation's money credited earliest-first), the reservation becomes
+   * `converted`, the unit `contracted`, and the lead and the opportunity `won`.
+   */
+  private async applyActivation(
+    actor: ActorContext,
+    current: ContractDocument,
+    context: RequestContext,
+  ): Promise<Contract> {
+    const plan = toPlan(current.paymentPlan);
+    const price = contractPrice(current);
+    const total = toMoney(current.totalPrice);
+    const rows = buildInstallmentSchedule(price, plan);
+    this.assertReconciles(rows, total);
+    const reservationAmount = toMoney(current.reservationAmount);
+    const stored = this.applyReservationCredit(rows, reservationAmount);
+    const paidAmount = stored.reduce<Money>(
+      (running, row) => addMoney(running, row.paidAmount),
+      money('0', total.currency),
+    );
+    const outstanding = subtractMoney(total, paidAmount);
+    const reservation = await this.reservations
+      .findOne({ reservationId: current.reservationId })
+      .lean<ReservationDocument>()
+      .exec();
+    if (!reservation) throw new SalesNotFoundError('reservation');
+
+    return withTransaction(this.connection, async (session) => {
+      const now = new Date();
+      const updated = await this.contracts
+        .findOneAndUpdate(
+          { contractId: current.contractId, state: current.state, version: current.version },
+          {
+            $set: {
+              state: 'active',
+              activatedAt: now,
+              paidAmount: fromMoney(paidAmount),
+              outstandingAmount: fromMoney(outstanding),
+              updatedAt: now,
+            },
+            $inc: { version: 1 },
+          },
+          { returnDocument: 'after', session },
+        )
+        .lean<ContractDocument>()
+        .exec();
+      if (!updated) throw conflict('STALE_VERSION', ['expectedVersion']);
+
+      const installmentDocuments: InstallmentDocument[] = stored.map((row) => ({
+        installmentId: newId('inst'),
+        contractId: current.contractId,
+        customerId: current.customerId,
+        unitId: current.unitId,
+        projectId: current.projectId,
+        sequence: row.sequence,
+        kind: row.kind,
+        dueOn: row.dueOn,
+        amount: fromMoney(row.amount),
+        paidAmount: fromMoney(row.paidAmount),
+        remainingAmount: fromMoney(row.remainingAmount),
+        state: row.state,
+        ...(row.label ? { label: row.label } : {}),
+        legalEntityId: current.legalEntityId,
+        branchId: current.branchId,
+        ...(current.teamId ? { teamId: current.teamId } : {}),
+        salesOwnerAccountId: current.salesOwnerAccountId,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      }));
+      // `ordered: true` is required by mongoose when creating several documents in a session, and
+      // it is what we want anyway: the rows are inserted in sequence order.
+      await this.installments.create(installmentDocuments, { session, ordered: true });
+
+      const converted = await this.reservations
+        .updateOne(
+          {
+            reservationId: current.reservationId,
+            state: 'confirmed',
+            contractId: current.contractId,
+          },
+          { $set: { state: 'converted', updatedAt: now }, $inc: { version: 1 } },
+          { session },
+        )
+        .exec();
+      if (converted.modifiedCount !== 1) throw new SalesConflictError('reservationNotConfirmed');
+
+      await this.options.units.changeStatus(
+        actor,
+        {
+          unitId: current.unitId,
+          from: 'reserved',
+          to: 'contracted',
+          reason: `contract ${current.contractNumber}`,
+          sourceType: 'contract',
+          sourceId: current.contractId,
+          contractId: current.contractId,
+          reservationId: null,
+          expectReservationId: current.reservationId,
+        },
+        context,
+        session,
+      );
+
+      if (reservation.leadId && this.options.crm.advanceLead) {
+        await this.options.crm.advanceLead(
+          actor,
+          reservation.leadId,
+          'won',
+          `contract ${current.contractNumber}`,
+          context,
+          session,
+        );
+      }
+      if (reservation.opportunityId) {
+        await this.options.opportunities?.advance(
+          actor,
+          reservation.opportunityId,
+          'won',
+          { contractId: current.contractId },
+          `contract ${current.contractNumber}`,
+          context,
+          session,
+        );
+      }
+
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.contractActivated,
+          contractId: current.contractId,
+          changes: buildChangeSummary(
+            { state: current.state },
+            { state: 'active', installments: String(stored.length) },
+          ),
+        },
+        context,
+        session,
+      );
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.scheduleGenerated,
+          contractId: current.contractId,
+          reason: `${stored.length} rows reconciling to the contract total`,
+        },
+        context,
+        session,
+      );
+      return toContract(updated);
+    });
+  }
+
 
   /** The rows a schedule produces must sum to the total. Asserted again before anything is stored. */
   private assertReconciles(rows: ScheduleRow[], total: Money): void {
@@ -2007,7 +2609,7 @@ export class SalesService {
     const page = documents.slice(0, query.limit);
     const last = page[page.length - 1];
     return {
-      items: page.map(toContract),
+      items: page.map((document) => restrictContract(actor, toContract(document))),
       total,
       limit: query.limit,
       ...(documents.length > query.limit && last
@@ -2030,6 +2632,8 @@ export class SalesService {
     const requested: Record<string, unknown> = {};
     if (query.state !== undefined) requested['state'] = query.state;
     assertSafeFilter(requested);
+    // A draft commits nothing, so the portfolio leaves drafts out unless they are asked for.
+    if (query.state === undefined) requested['state'] = { $nin: ['draft', 'pendingApproval'] };
     const filter = withScope(buildScopeFilter(actor, SALES_SCOPE_FIELDS), requested);
     const rows = await this.contracts
       .aggregate<{
@@ -2070,63 +2674,207 @@ export class SalesService {
     const filter = withScope(buildScopeFilter(actor, SALES_SCOPE_FIELDS), { contractId });
     const document = await this.contracts.findOne(filter).lean<ContractDocument>().exec();
     if (!document) throw new SalesNotFoundError('contract');
-    return toContract(document);
+    return restrictContract(actor, toContract(document));
   }
 
+  /**
+   * SALE-CANCEL-001. Cancel a contract **before any collection**.
+   *
+   * A draft (or one waiting on its activation approval) is simply withdrawn: nothing was committed,
+   * the reservation stays confirmed and can be drafted again. An active contract is cancelled only
+   * while the money on it is no more than the reservation's own — any receipt beyond that is a refund
+   * with penalties and accounting (SALE-CANCEL-002, BMP-2) and is refused here. Where a published
+   * policy governs `sales.contract.cancellation`, the cancellation waits for its approval.
+   */
   async cancelContract(
     actor: ActorContext,
     contractId: string,
     input: CancelContract,
     context: RequestContext,
   ): Promise<Contract> {
-    const current = await this.getContract(actor, contractId);
+    await this.getContract(actor, contractId);
+    const current = await this.findContractOrThrow(contractId);
     if (!canTransitionContract(current.state, 'cancelled')) {
-      await this.options.audit.record({
+      await this.contractAudit(actor, {
         action: SALES_AUDIT_ACTIONS.contractRefused,
         outcome: 'denied',
-        actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
-        target: { type: 'contract', id: contractId },
+        contractId,
         reason: `refused transition ${current.state} -> cancelled`,
-        context,
-      });
+      }, context);
       throw new SalesConflictError('invalidTransition');
     }
 
-    /**
-     * A contract with money against it is **not** cancelled here. Reversing collected money is a
-     * refund, which is an accounting operation with its own controls, and letting a cancellation
-     * silently strand receipts would put the books out by exactly that amount. Refunds arrive in
-     * Phase 6 with the ledger that can record them.
-     */
-    if (compareMoney(current.paidAmount, money('0', current.paidAmount.currency)) > 0) {
-      throw new SalesConflictError('contractHasCollections');
+    if (current.state === 'draft' || current.state === 'pendingApproval') {
+      return restrictContract(
+        actor,
+        await this.withdrawDraft(actor, current, input.reason, context),
+      );
     }
 
+    if (current.pendingCancellation) throw conflict('CANCELLATION_PENDING', ['reason']);
+    this.assertNoCollections(current);
+
+    if (this.options.approvals) {
+      const scope = this.approvalScope(current);
+      const submitted = await this.options.approvals.submit(
+        actor,
+        {
+          operationType: SALES_APPROVAL_OPERATIONS.contractCancellation,
+          source: { type: 'contract', id: contractId },
+          scope,
+          context: { amount: toMoney(current.totalPrice) },
+          summary: [
+            { label: { ar: 'رقم العقد', en: 'Contract number' }, value: current.contractNumber },
+            { label: { ar: 'سبب الإلغاء', en: 'Cancellation reason' }, value: input.reason },
+          ],
+          idempotencyKey: `contract-cancellation-${contractId}-v${current.version}`,
+        },
+        context,
+      );
+      if (submitted) {
+        await withTransaction(this.connection, async (session) => {
+          const updated = await this.contracts
+            .updateOne(
+              { contractId, state: 'active', pendingCancellation: { $exists: false } },
+              {
+                $set: {
+                  pendingCancellation: { requestId: submitted.requestId, reason: input.reason },
+                  updatedAt: new Date(),
+                },
+                $push: {
+                  approvals: {
+                    operationType: SALES_APPROVAL_OPERATIONS.contractCancellation,
+                    requestId: submitted.requestId,
+                  },
+                },
+                $inc: { version: 1 },
+              },
+              { session },
+            )
+            .exec();
+          if (updated.modifiedCount !== 1) throw conflict('CANCELLATION_PENDING', ['reason']);
+          await this.contractAudit(
+            actor,
+            {
+              action: SALES_AUDIT_ACTIONS.contractCancellationRequested,
+              contractId,
+              reason: input.reason,
+            },
+            context,
+            session,
+          );
+        });
+        await this.syncContractApproval(actor, submitted.requestId, context);
+        return restrictContract(actor, toContract(await this.findContractOrThrow(contractId)));
+      }
+    }
+    return restrictContract(
+      actor,
+      await this.applyCancellation(actor, current, input.reason, input.releaseUnit, context),
+    );
+  }
+
+  /**
+   * Money beyond the reservation's own means a receipt was taken on the contract; cancelling it is a
+   * refund, which BMP-2 owns (SALE-CANCEL-002). Stranding receipts here would put the books out by
+   * exactly that amount.
+   */
+  private assertNoCollections(current: ContractDocument): void {
+    if (compareMoney(toMoney(current.paidAmount), toMoney(current.reservationAmount)) > 0) {
+      throw new SalesConflictError('contractHasCollections');
+    }
+  }
+
+  private async withdrawDraft(
+    actor: ActorContext,
+    current: ContractDocument,
+    reason: string,
+    context: RequestContext,
+  ): Promise<Contract> {
     return withTransaction(this.connection, async (session) => {
       const now = new Date();
       const updated = await this.contracts
         .findOneAndUpdate(
-          { contractId, state: current.state },
+          { contractId: current.contractId, state: current.state },
           {
-            $set: { state: 'cancelled', cancellationReason: input.reason, updatedAt: now },
+            $set: { state: 'cancelled', cancellationReason: reason, updatedAt: now },
             $inc: { version: 1 },
           },
-          { new: true, session },
+          { returnDocument: 'after', session },
+        )
+        .lean<ContractDocument>()
+        .exec();
+      if (!updated) throw new SalesConflictError('invalidTransition');
+      // The reservation is confirmed and free to be drafted again.
+      await this.reservations
+        .updateOne(
+          { reservationId: current.reservationId, contractId: current.contractId },
+          { $unset: { contractId: '' }, $set: { updatedAt: now }, $inc: { version: 1 } },
+          { session },
+        )
+        .exec();
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.contractCancelled,
+          contractId: current.contractId,
+          reason,
+          changes: buildChangeSummary({ state: current.state }, { state: 'cancelled' }),
+        },
+        context,
+        session,
+      );
+      return toContract(updated);
+    });
+  }
+
+  private async applyCancellation(
+    actor: ActorContext,
+    current: ContractDocument,
+    reason: string,
+    releaseUnit: boolean,
+    context: RequestContext,
+  ): Promise<Contract> {
+    this.assertNoCollections(current);
+    const refund =
+      compareMoney(toMoney(current.paidAmount), money('0', current.paidAmount.currency)) > 0
+        ? 'pending'
+        : 'notApplicable';
+    return withTransaction(this.connection, async (session) => {
+      const now = new Date();
+      const updated = await this.contracts
+        .findOneAndUpdate(
+          { contractId: current.contractId, state: 'active' },
+          {
+            $set: {
+              state: 'cancelled',
+              cancellationReason: reason,
+              refundHandoff: refund,
+              updatedAt: now,
+            },
+            $unset: { pendingCancellation: '' },
+            $inc: { version: 1 },
+          },
+          { returnDocument: 'after', session },
         )
         .lean<ContractDocument>()
         .exec();
       if (!updated) throw new SalesConflictError('invalidTransition');
 
-      // Installments are cancelled, never deleted: the schedule that existed is part of the history.
+      // Instalments are cancelled, never deleted: the schedule that existed is part of the history.
+      // Paid and rescheduled rows keep their state — each is a fact about money or a past amendment.
       await this.installments
         .updateMany(
-          { contractId, state: { $nin: ['paid', 'cancelled'] } },
+          {
+            contractId: current.contractId,
+            state: { $nin: ['paid', 'cancelled', 'rescheduled'] },
+          },
           { $set: { state: 'cancelled', updatedAt: now }, $inc: { version: 1 } },
           { session },
         )
         .exec();
 
-      if (input.releaseUnit) {
+      if (releaseUnit) {
         await this.options.units.changeStatus(
           actor,
           {
@@ -2135,7 +2883,7 @@ export class SalesService {
             to: 'available',
             reason: `contract ${current.contractNumber} cancelled`,
             sourceType: 'contract',
-            sourceId: contractId,
+            sourceId: current.contractId,
             contractId: null,
           },
           context,
@@ -2143,21 +2891,472 @@ export class SalesService {
         );
       }
 
-      await this.options.audit.record(
+      await this.contractAudit(
+        actor,
         {
           action: SALES_AUDIT_ACTIONS.contractCancelled,
-          outcome: 'succeeded',
-          actor: { kind: actor.kind, accountId: actor.accountId, roleKeys: actor.roleKeys },
-          target: { type: 'contract', id: contractId },
-          changes: buildChangeSummary({ state: current.state }, { state: 'cancelled' }),
-          reason: input.reason,
-          context,
+          contractId: current.contractId,
+          reason,
+          changes: buildChangeSummary(
+            { state: current.state },
+            { state: 'cancelled', refundHandoff: refund },
+          ),
         },
-        { session },
+        context,
+        session,
       );
       return toContract(updated);
     });
   }
+
+  /**
+   * SALE-CHANGE-001, COL-SCHEDULE-002. Ask to replace every **unpaid** row of an active contract with
+   * a new plan for exactly what those rows still owe. A confirmed schedule changes only by an approved
+   * amendment, so this is refused outright where no published policy governs
+   * `sales.contract.amendment` (`BD-09`). Partly paid rows and the maintenance deposit are kept.
+   */
+  async requestAmendment(
+    actor: ActorContext,
+    contractId: string,
+    input: AmendContract,
+    context: RequestContext,
+  ): Promise<Contract> {
+    const current = await this.editableContract(actor, contractId, input.expectedVersion);
+    if (current.state !== 'active') throw conflict('CONTRACT_NOT_ACTIVE', ['state']);
+    if ((current.amendments ?? []).some((entry) => entry.state === 'pending')) {
+      throw conflict('AMENDMENT_PENDING', ['plan']);
+    }
+    if (current.pendingCancellation) throw conflict('CANCELLATION_PENDING', ['plan']);
+    if (input.plan.firstDueOn < this.options.today()) {
+      throw invalid('FIRST_DUE_IN_PAST', ['plan', 'firstDueOn']);
+    }
+
+    const scope = this.approvalScope(current);
+    const governed =
+      this.options.approvals !== undefined &&
+      ((await this.options.approvals.applies?.(actor, {
+        operationType: SALES_APPROVAL_OPERATIONS.contractAmendment,
+        scope,
+        context: { amount: toMoney(current.totalPrice) },
+      })) ??
+        true);
+    if (!governed) {
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.contractRefused,
+          outcome: 'denied',
+          contractId,
+          reason: 'amendment refused: no approval policy governs it',
+        },
+        context,
+      );
+      throw conflict('AMENDMENT_NEEDS_POLICY', ['plan']);
+    }
+
+    const rows = await this.installments
+      .find({ contractId })
+      .sort({ sequence: 1 })
+      .lean<InstallmentDocument[]>()
+      .exec();
+    const zero = money('0', current.totalPrice.currency);
+    const replaced = rows.filter(
+      (row) =>
+        UNPAID_STATES.includes(row.state) &&
+        row.kind !== 'maintenanceDeposit' &&
+        compareMoney(toMoney(row.paidAmount), zero) === 0,
+    );
+    if (replaced.length === 0) throw conflict('NOTHING_TO_AMEND', ['plan']);
+    const owed = replaced.reduce<Money>((sum, row) => addMoney(sum, toMoney(row.amount)), zero);
+    const lastSequence = rows.reduce((max, row) => Math.max(max, row.sequence), 0);
+    let newRows: ScheduleRow[];
+    try {
+      newRows = amendmentRows(owed, input.plan, lastSequence);
+    } catch (error) {
+      throw invalid((error as { issue?: string }).issue ?? 'SCHEDULE_INVALID', ['plan']);
+    }
+
+    const amendmentId = newId('amd');
+    const now = new Date();
+    const amendment: StoredAmendment = {
+      amendmentId,
+      state: 'pending',
+      reason: input.reason,
+      plan: {
+        installmentCount: input.plan.installmentCount,
+        frequency: input.plan.frequency,
+        firstDueOn: input.plan.firstDueOn,
+        ...(input.plan.finalPayment ? { finalPayment: fromMoney(input.plan.finalPayment) } : {}),
+      },
+      replacedInstallmentIds: replaced.map((row) => row.installmentId),
+      amount: fromMoney(owed),
+      rows: newRows.map(fromRow),
+      requestedBy: actor.accountId,
+      requestedAt: now,
+    };
+    await withTransaction(this.connection, async (session) => {
+      const updated = await this.contracts
+        .updateOne(
+          { contractId, state: 'active', version: current.version },
+          {
+            $push: { amendments: amendment },
+            $set: { updatedAt: now },
+            $inc: { version: 1 },
+          },
+          { session },
+        )
+        .exec();
+      if (updated.modifiedCount !== 1) throw conflict('STALE_VERSION', ['expectedVersion']);
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.contractAmendmentRequested,
+          contractId,
+          reason: input.reason,
+          changes: buildChangeSummary(undefined, {
+            amendmentId,
+            replacedRows: String(replaced.length),
+            newRows: String(newRows.length),
+            owed: `${owed.amount} ${owed.currency}`,
+          }),
+        },
+        context,
+        session,
+      );
+    });
+
+    // Submitted after the commit, so no approval ever points at an amendment that does not exist.
+    const submitted = await this.options.approvals?.submit(
+      actor,
+      {
+        operationType: SALES_APPROVAL_OPERATIONS.contractAmendment,
+        source: { type: 'contract', id: contractId },
+        scope,
+        context: { amount: owed },
+        summary: [
+          { label: { ar: 'رقم العقد', en: 'Contract number' }, value: current.contractNumber },
+          { label: { ar: 'المبلغ المعاد جدولته', en: 'Amount rescheduled' }, value: `${owed.amount} ${owed.currency}` },
+          { label: { ar: 'عدد الأقساط الجديدة', en: 'New instalments' }, value: String(newRows.length) },
+        ],
+        idempotencyKey: `contract-amendment-${amendmentId}`,
+      },
+      context,
+    );
+    if (!submitted) {
+      // The policy went away between the check and the submission: the amendment cannot be approved.
+      await this.settleAmendment(actor, contractId, amendmentId, 'rejected', context);
+    } else {
+      await this.contracts
+        .updateOne(
+          { contractId, 'amendments.amendmentId': amendmentId },
+          {
+            $set: { 'amendments.$.requestId': submitted.requestId },
+            $push: {
+              approvals: {
+                operationType: SALES_APPROVAL_OPERATIONS.contractAmendment,
+                requestId: submitted.requestId,
+              },
+            },
+          },
+        )
+        .exec();
+      await this.syncContractApproval(actor, submitted.requestId, context);
+    }
+    return restrictContract(actor, toContract(await this.findContractOrThrow(contractId)));
+  }
+
+  /** Mark a pending amendment rejected or stale; the schedule is untouched. */
+  private async settleAmendment(
+    actor: ActorContext,
+    contractId: string,
+    amendmentId: string,
+    to: 'rejected' | 'stale',
+    context: RequestContext,
+  ): Promise<void> {
+    await withTransaction(this.connection, async (session) => {
+      const now = new Date();
+      const updated = await this.contracts
+        .updateOne(
+          {
+            contractId,
+            amendments: { $elemMatch: { amendmentId, state: 'pending' } },
+          },
+          {
+            $set: {
+              'amendments.$.state': to,
+              'amendments.$.decidedAt': now,
+              updatedAt: now,
+            },
+            $inc: { version: 1 },
+          },
+          { session },
+        )
+        .exec();
+      if (updated.modifiedCount !== 1) return;
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.contractAmendmentRejected,
+          contractId,
+          reason: to === 'stale' ? 'the rows it replaced were paid meanwhile' : 'approval refused',
+          changes: buildChangeSummary({ amendment: 'pending' }, { amendment: to }),
+        },
+        context,
+        session,
+      );
+    });
+  }
+
+  /**
+   * Apply an approved amendment in one transaction: the replaced rows become `rescheduled` (never
+   * deleted), the new rows are inserted, and the totals are recomputed — they cannot change, because
+   * the new rows add up to exactly what the old ones owed. If any replaced row took money after the
+   * request, the amendment is **stale** and nothing changes.
+   */
+  private async applyAmendment(
+    actor: ActorContext,
+    contract: ContractDocument,
+    amendment: StoredAmendment,
+    context: RequestContext,
+  ): Promise<'amended' | 'stale'> {
+    const outcome = await withTransaction(this.connection, async (session) => {
+      const now = new Date();
+      const zero = money('0', contract.totalPrice.currency);
+      const current = await this.installments
+        .find({ installmentId: { $in: amendment.replacedInstallmentIds } })
+        .session(session)
+        .lean<InstallmentDocument[]>()
+        .exec();
+      const stillUnpaid =
+        current.length === amendment.replacedInstallmentIds.length &&
+        current.every(
+          (row) =>
+            UNPAID_STATES.includes(row.state) &&
+            compareMoney(toMoney(row.paidAmount), zero) === 0,
+        );
+      if (!stillUnpaid) return 'stale' as const;
+
+      const moved = await this.installments
+        .updateMany(
+          {
+            installmentId: { $in: amendment.replacedInstallmentIds },
+            state: { $in: [...UNPAID_STATES] },
+          },
+          { $set: { state: 'rescheduled', updatedAt: now }, $inc: { version: 1 } },
+          { session },
+        )
+        .exec();
+      if (moved.modifiedCount !== amendment.replacedInstallmentIds.length) {
+        throw conflict('STALE_VERSION', ['amendment']);
+      }
+      const today = this.options.today();
+      await this.installments.create(
+        amendment.rows.map((row) => ({
+          installmentId: newId('inst'),
+          contractId: contract.contractId,
+          customerId: contract.customerId,
+          unitId: contract.unitId,
+          projectId: contract.projectId,
+          sequence: row.sequence,
+          kind: row.kind,
+          dueOn: row.dueOn,
+          amount: row.amount,
+          paidAmount: fromMoney(zero),
+          remainingAmount: row.amount,
+          state: row.dueOn <= today ? 'due' : 'upcoming',
+          amendmentId: amendment.amendmentId,
+          legalEntityId: contract.legalEntityId,
+          branchId: contract.branchId,
+          ...(contract.teamId ? { teamId: contract.teamId } : {}),
+          salesOwnerAccountId: contract.salesOwnerAccountId,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        })),
+        { session, ordered: true },
+      );
+      const marked = await this.contracts
+        .updateOne(
+          {
+            contractId: contract.contractId,
+            amendments: { $elemMatch: { amendmentId: amendment.amendmentId, state: 'pending' } },
+          },
+          {
+            $set: {
+              'amendments.$.state': 'applied',
+              'amendments.$.decidedAt': now,
+              updatedAt: now,
+            },
+            $inc: { version: 1 },
+          },
+          { session },
+        )
+        .exec();
+      if (marked.modifiedCount !== 1) throw conflict('STALE_VERSION', ['amendment']);
+      await this.recomputeContractTotals(contract.contractId, session);
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.contractAmended,
+          contractId: contract.contractId,
+          reason: amendment.reason,
+          changes: buildChangeSummary(
+            { rows: String(amendment.replacedInstallmentIds.length) },
+            { rows: String(amendment.rows.length), amendmentId: amendment.amendmentId },
+          ),
+        },
+        context,
+        session,
+      );
+      return 'amended' as const;
+    });
+    if (outcome === 'stale') {
+      await this.settleAmendment(actor, contract.contractId, amendment.amendmentId, 'stale', context);
+    }
+    return outcome;
+  }
+
+  /**
+   * Act on a decided approval for a contract (ADR-0024 §2): its activation exception, an amendment, or
+   * a cancellation. Idempotent — every move is conditional on the state it read.
+   */
+  async syncContractApproval(
+    actor: ActorContext,
+    requestId: string,
+    context: RequestContext,
+  ): Promise<'activated' | 'amended' | 'stale' | 'cancelled' | 'rejected' | 'refused' | 'unchanged'> {
+    if (!requestId || !this.options.approvals) return 'unchanged';
+    assertSafeFilter({ requestId });
+    const document = await this.contracts
+      .findOne({
+        $or: [
+          { 'approvals.requestId': requestId },
+          { 'amendments.requestId': requestId },
+          { 'pendingCancellation.requestId': requestId },
+        ],
+      })
+      .lean<ContractDocument>()
+      .exec();
+    if (!document) return 'unchanged';
+    const state = await this.options.approvals.state(requestId);
+    const refused = state === 'rejected' || state === 'cancelled' || state === 'expired';
+
+    const amendment = (document.amendments ?? []).find(
+      (entry) => entry.requestId === requestId && entry.state === 'pending',
+    );
+    if (amendment) {
+      if (state === 'approved') return this.applyAmendment(actor, document, amendment, context);
+      if (refused) {
+        await this.settleAmendment(actor, document.contractId, amendment.amendmentId, 'rejected', context);
+        return 'rejected';
+      }
+      return 'unchanged';
+    }
+
+    if (document.pendingCancellation?.requestId === requestId) {
+      if (state === 'approved' && document.state === 'active') {
+        await this.applyCancellation(actor, document, document.pendingCancellation.reason, true, context);
+        return 'cancelled';
+      }
+      if (refused) {
+        await this.contracts
+          .updateOne(
+            { contractId: document.contractId, 'pendingCancellation.requestId': requestId },
+            { $unset: { pendingCancellation: '' }, $set: { updatedAt: new Date() }, $inc: { version: 1 } },
+          )
+          .exec();
+        return 'refused';
+      }
+      return 'unchanged';
+    }
+
+    const latest = document.approvals?.at(-1);
+    if (
+      document.state === 'pendingApproval' &&
+      latest?.requestId === requestId &&
+      latest.operationType === SALES_APPROVAL_OPERATIONS.contractException
+    ) {
+      if (state === 'approved') {
+        await this.applyActivation(actor, document, context);
+        return 'activated';
+      }
+      if (refused) {
+        await withTransaction(this.connection, async (session) => {
+          const updated = await this.contracts
+            .updateOne(
+              { contractId: document.contractId, state: 'pendingApproval', version: document.version },
+              { $set: { state: 'draft', updatedAt: new Date() }, $inc: { version: 1 } },
+              { session },
+            )
+            .exec();
+          if (updated.modifiedCount !== 1) return;
+          await this.contractAudit(
+            actor,
+            {
+              action: SALES_AUDIT_ACTIONS.contractActivationRejected,
+              contractId: document.contractId,
+              reason: 'the exception approval was refused; the contract is a draft again',
+              changes: buildChangeSummary({ state: 'pendingApproval' }, { state: 'draft' }),
+            },
+            context,
+            session,
+          );
+        });
+        return 'rejected';
+      }
+    }
+    return 'unchanged';
+  }
+
+  /** SALE-CONTRACT-004. The contract's trail — only for a contract the actor can read. */
+  async contractHistory(
+    actor: ActorContext,
+    contractId: string,
+  ): Promise<{ items: ContractHistoryEntry[] }> {
+    await this.getContract(actor, contractId);
+    return { items: (await this.options.history?.targetHistory({ type: 'contract', id: contractId })) ?? [] };
+  }
+
+  /** Settle every contract approval the engine decided while nobody was listening. */
+  private async sweepContracts(actor: ActorContext, context: RequestContext): Promise<number> {
+    let settled = 0;
+    const waiting = await this.contracts
+      .find({
+        $or: [
+          { state: 'pendingApproval' },
+          { pendingCancellation: { $exists: true } },
+          { amendments: { $elemMatch: { state: 'pending' } } },
+        ],
+      })
+      .limit(200)
+      .lean<ContractDocument[]>()
+      .exec();
+    for (const document of waiting) {
+      const requestIds = [
+        ...(document.state === 'pendingApproval' && document.approvals?.at(-1)
+          ? [document.approvals.at(-1)?.requestId ?? '']
+          : []),
+        ...(document.pendingCancellation ? [document.pendingCancellation.requestId] : []),
+        ...(document.amendments ?? [])
+          .filter((entry) => entry.state === 'pending' && entry.requestId)
+          .map((entry) => entry.requestId ?? ''),
+      ];
+      for (const requestId of requestIds) {
+        try {
+          if ((await this.syncContractApproval(actor, requestId, context)) !== 'unchanged') {
+            settled += 1;
+          }
+        } catch (error) {
+          this.options.logger.warn(
+            { err: error, code: 'CONTRACT_APPROVAL_SYNC_SKIPPED', contractId: document.contractId },
+            'A contract approval could not be settled; the sweep continued.',
+          );
+        }
+      }
+    }
+    return settled;
+  }
+
 
   /* --------------------------------------------------------- installments */
 

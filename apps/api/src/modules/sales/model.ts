@@ -1,9 +1,13 @@
 import {
+  AMENDMENT_STATES,
+  CONTRACT_EXCEPTIONS,
+  CONTRACT_PARTY_ROLES,
   CONTRACT_STATES,
   INSTALLMENT_FREQUENCIES,
   INSTALLMENT_KINDS,
   INSTALLMENT_STATES,
   RESERVATION_STATES,
+  SIGNING_STATES,
 } from '@alola/contracts';
 import { Schema, type Connection, type Model, type Types } from 'mongoose';
 
@@ -22,6 +26,7 @@ export const RESERVATIONS_COLLECTION = 'salesReservations';
 export const CONTRACTS_COLLECTION = 'salesContracts';
 export const INSTALLMENTS_COLLECTION = 'salesInstallments';
 export const COUNTERS_COLLECTION = 'salesCounters';
+export const QUOTATIONS_COLLECTION = 'salesQuotations';
 
 export class SalesRecordUndeletableError extends Error {
   readonly code = 'CONFLICT';
@@ -48,6 +53,36 @@ export interface StoredPaymentPlan {
    */
   downPaymentDueOn?: string;
   finalPayment?: StoredMoney;
+  /** Since BMP-1 package 6 (COL-SCHEDULE-001). */
+  milestones?: { dueOn: string; amount: StoredMoney; label?: { ar: string; en: string } }[];
+  maintenanceDeposit?: { amount: StoredMoney; dueOn: string };
+}
+
+export interface StoredScheduleRow {
+  sequence: number;
+  kind: (typeof INSTALLMENT_KINDS)[number];
+  dueOn: string;
+  amount: StoredMoney;
+  label?: { ar: string; en: string };
+}
+
+export interface StoredAmendment {
+  amendmentId: string;
+  state: (typeof AMENDMENT_STATES)[number];
+  reason: string;
+  requestId?: string;
+  plan: {
+    installmentCount: number;
+    frequency: (typeof INSTALLMENT_FREQUENCIES)[number];
+    firstDueOn: string;
+    finalPayment?: StoredMoney;
+  };
+  replacedInstallmentIds: string[];
+  amount: StoredMoney;
+  rows: StoredScheduleRow[];
+  requestedBy: string;
+  requestedAt: Date;
+  decidedAt?: Date;
 }
 
 export interface ReservationDocument {
@@ -100,6 +135,8 @@ export interface ContractDocument {
   unitId: string;
   projectId: string;
   reservationId: string;
+  leadId?: string;
+  opportunityId?: string;
   contractedOn: string;
   totalPrice: StoredMoney;
   reservationAmount: StoredMoney;
@@ -112,6 +149,35 @@ export interface ContractDocument {
   departmentId?: string;
   teamId?: string;
   state: (typeof CONTRACT_STATES)[number];
+  /** Snapshots and lifecycle fields since BMP-1 package 6; absent on earlier contracts. */
+  customerSnapshot?: Record<string, unknown>;
+  unitSnapshot?: Record<string, unknown>;
+  pricing?: {
+    listPrice?: StoredMoney;
+    agreedPrice: StoredMoney;
+    discountPercentage: string;
+    reservationAmount: StoredMoney;
+    maintenanceDeposit?: StoredMoney;
+  };
+  parties?: {
+    role: (typeof CONTRACT_PARTY_ROLES)[number];
+    customerId: string;
+    sharePercent?: string;
+    name?: string;
+  }[];
+  signing?: {
+    state: (typeof SIGNING_STATES)[number];
+    signedOn?: string;
+    documentId?: string;
+    recordedBy?: string;
+    recordedAt?: Date;
+  };
+  exceptions?: (typeof CONTRACT_EXCEPTIONS)[number][];
+  approvals?: { operationType: string; requestId: string }[];
+  amendments?: StoredAmendment[];
+  pendingCancellation?: { requestId: string; reason: string };
+  refundHandoff?: 'notApplicable' | 'pending';
+  activatedAt?: Date;
   cancellationReason?: string;
   documentRef?: string;
   idempotencyKey: string;
@@ -134,11 +200,47 @@ export interface InstallmentDocument {
   paidAmount: StoredMoney;
   remainingAmount: StoredMoney;
   state: (typeof INSTALLMENT_STATES)[number];
+  /** A milestone's wording. */
+  label?: { ar: string; en: string };
+  /** The amendment that created this row (SALE-CHANGE-001). */
+  amendmentId?: string;
   legalEntityId: string;
   branchId: string;
   teamId?: string;
   salesOwnerAccountId: string;
   version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface QuotationDocument {
+  quotationId: string;
+  quotationNumber: string;
+  revision: number;
+  customerId?: string;
+  leadId?: string;
+  opportunityId?: string;
+  unitId: string;
+  unitCode: string;
+  projectId: string;
+  listPrice: StoredMoney;
+  agreedPrice: StoredMoney;
+  discountPercentage: string;
+  paymentPlan: StoredPaymentPlan;
+  rows: StoredScheduleRow[];
+  total: StoredMoney;
+  validUntil: string;
+  state: 'active' | 'superseded' | 'withdrawn';
+  withdrawalReason?: string;
+  notes?: string;
+  salesOwnerAccountId: string;
+  legalEntityId: string;
+  branchId: string;
+  departmentId?: string;
+  teamId?: string;
+  /** Only the first revision carries the key; a revision is not a submission. */
+  idempotencyKey?: string;
+  idempotencyFingerprint?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -158,6 +260,11 @@ const money = new Schema(
   { _id: false },
 );
 
+const label = new Schema(
+  { ar: { type: String, required: true }, en: { type: String, required: true } },
+  { _id: false },
+);
+
 const paymentPlan = new Schema(
   {
     downPayment: { type: money, required: true },
@@ -166,6 +273,69 @@ const paymentPlan = new Schema(
     firstDueOn: { type: String, required: true },
     downPaymentDueOn: { type: String },
     finalPayment: { type: money },
+    milestones: {
+      type: [
+        new Schema(
+          {
+            dueOn: { type: String, required: true },
+            amount: { type: money, required: true },
+            label: { type: label },
+          },
+          { _id: false },
+        ),
+      ],
+      default: undefined,
+    },
+    maintenanceDeposit: {
+      type: new Schema(
+        { amount: { type: money, required: true }, dueOn: { type: String, required: true } },
+        { _id: false },
+      ),
+    },
+  },
+  { _id: false },
+);
+
+const scheduleRow = new Schema(
+  {
+    sequence: { type: Number, required: true },
+    kind: { type: String, required: true, enum: [...INSTALLMENT_KINDS] },
+    dueOn: { type: String, required: true },
+    amount: { type: money, required: true },
+    label: { type: label },
+  },
+  { _id: false },
+);
+
+const approvalRef = new Schema(
+  { operationType: { type: String, required: true }, requestId: { type: String, required: true } },
+  { _id: false },
+);
+
+const amendment = new Schema(
+  {
+    amendmentId: { type: String, required: true },
+    state: { type: String, required: true, enum: [...AMENDMENT_STATES] },
+    reason: { type: String, required: true },
+    requestId: { type: String },
+    plan: {
+      type: new Schema(
+        {
+          installmentCount: { type: Number, required: true },
+          frequency: { type: String, required: true, enum: [...INSTALLMENT_FREQUENCIES] },
+          firstDueOn: { type: String, required: true },
+          finalPayment: { type: money },
+        },
+        { _id: false },
+      ),
+      required: true,
+    },
+    replacedInstallmentIds: { type: [String], required: true },
+    amount: { type: money, required: true },
+    rows: { type: [scheduleRow], required: true },
+    requestedBy: { type: String, required: true },
+    requestedAt: { type: Date, required: true },
+    decidedAt: { type: Date },
   },
   { _id: false },
 );
@@ -312,6 +482,8 @@ function contractSchema(): Schema<ContractDocument> {
       unitId: { type: String, required: true, immutable: true },
       projectId: { type: String, required: true, immutable: true },
       reservationId: { type: String, required: true, immutable: true },
+      leadId: { type: String, immutable: true },
+      opportunityId: { type: String, immutable: true },
       contractedOn: { type: String, required: true, immutable: true },
       totalPrice: { type: money, required: true, immutable: true },
       reservationAmount: { type: money, required: true, immutable: true },
@@ -324,6 +496,59 @@ function contractSchema(): Schema<ContractDocument> {
       departmentId: { type: String },
       teamId: { type: String },
       state: { type: String, required: true, enum: [...CONTRACT_STATES] },
+      // Snapshots are written once, with the draft, and never again (SALE-CONTRACT-001).
+      customerSnapshot: { type: Schema.Types.Mixed, immutable: true },
+      unitSnapshot: { type: Schema.Types.Mixed, immutable: true },
+      pricing: {
+        type: new Schema(
+          {
+            listPrice: { type: money },
+            agreedPrice: { type: money, required: true },
+            discountPercentage: { type: String, required: true },
+            reservationAmount: { type: money, required: true },
+            maintenanceDeposit: { type: money },
+          },
+          { _id: false },
+        ),
+        immutable: true,
+      },
+      parties: {
+        type: [
+          new Schema(
+            {
+              role: { type: String, required: true, enum: [...CONTRACT_PARTY_ROLES] },
+              customerId: { type: String, required: true },
+              sharePercent: { type: String },
+              name: { type: String },
+            },
+            { _id: false },
+          ),
+        ],
+        default: undefined,
+      },
+      signing: {
+        type: new Schema(
+          {
+            state: { type: String, required: true, enum: [...SIGNING_STATES] },
+            signedOn: { type: String },
+            documentId: { type: String },
+            recordedBy: { type: String },
+            recordedAt: { type: Date },
+          },
+          { _id: false },
+        ),
+      },
+      exceptions: { type: [String], enum: [...CONTRACT_EXCEPTIONS], default: undefined },
+      approvals: { type: [approvalRef], default: undefined },
+      amendments: { type: [amendment], default: undefined },
+      pendingCancellation: {
+        type: new Schema(
+          { requestId: { type: String, required: true }, reason: { type: String, required: true } },
+          { _id: false },
+        ),
+      },
+      refundHandoff: { type: String, enum: ['notApplicable', 'pending'] },
+      activatedAt: { type: Date },
       cancellationReason: { type: String },
       documentRef: { type: String },
       idempotencyKey: { type: String, required: true, immutable: true },
@@ -354,6 +579,22 @@ function contractSchema(): Schema<ContractDocument> {
   schema.index({ legalEntityId: 1, branchId: 1, state: 1 }, { name: 'salesContracts_scope' });
   schema.index({ teamId: 1, state: 1 }, { name: 'salesContracts_scope_team' });
   schema.index({ salesOwnerAccountId: 1, state: 1 }, { name: 'salesContracts_owner_state' });
+  /**
+   * One live contract per reservation, covering `pendingApproval` (BMP-1). A new name, because MongoDB
+   * cannot widen an existing index's filter; the older index stays declared and is strictly narrower.
+   */
+  schema.index(
+    { reservationId: 1 },
+    {
+      unique: true,
+      name: 'salesContracts_reservation_v2_unique',
+      partialFilterExpression: {
+        state: { $in: ['draft', 'pendingApproval', 'active', 'completed'] },
+      },
+    },
+  );
+  schema.index({ 'approvals.requestId': 1 }, { name: 'salesContracts_approvals' });
+  schema.index({ 'amendments.requestId': 1 }, { name: 'salesContracts_amendments' });
   return schema;
 }
 
@@ -372,6 +613,8 @@ function installmentSchema(): Schema<InstallmentDocument> {
       paidAmount: { type: money, required: true },
       remainingAmount: { type: money, required: true },
       state: { type: String, required: true, enum: [...INSTALLMENT_STATES] },
+      label: { type: label, immutable: true },
+      amendmentId: { type: String, immutable: true },
       legalEntityId: { type: String, required: true, immutable: true },
       branchId: { type: String, required: true, immutable: true },
       teamId: { type: String },
@@ -401,6 +644,79 @@ function installmentSchema(): Schema<InstallmentDocument> {
   return schema;
 }
 
+/**
+ * SALE-QUOTE-001. One document per revision; `(quotationId, revision)` is unique, and only one
+ * revision of a quotation is `active` at a time. Nothing here touches inventory.
+ */
+function quotationSchema(): Schema<QuotationDocument> {
+  const schema = new Schema<QuotationDocument>(
+    {
+      quotationId: { type: String, required: true, immutable: true },
+      quotationNumber: { type: String, required: true, immutable: true },
+      revision: { type: Number, required: true, immutable: true },
+      customerId: { type: String, immutable: true },
+      leadId: { type: String, immutable: true },
+      opportunityId: { type: String, immutable: true },
+      unitId: { type: String, required: true, immutable: true },
+      unitCode: { type: String, required: true, immutable: true },
+      projectId: { type: String, required: true, immutable: true },
+      listPrice: { type: money, required: true, immutable: true },
+      agreedPrice: { type: money, required: true, immutable: true },
+      discountPercentage: { type: String, required: true, immutable: true },
+      paymentPlan: { type: paymentPlan, required: true, immutable: true },
+      rows: { type: [scheduleRow], required: true, immutable: true },
+      total: { type: money, required: true, immutable: true },
+      validUntil: { type: String, required: true, immutable: true },
+      state: { type: String, required: true, enum: ['active', 'superseded', 'withdrawn'] },
+      withdrawalReason: { type: String },
+      notes: { type: String, immutable: true },
+      salesOwnerAccountId: { type: String, required: true, immutable: true },
+      legalEntityId: { type: String, required: true, immutable: true },
+      branchId: { type: String, required: true, immutable: true },
+      departmentId: { type: String, immutable: true },
+      teamId: { type: String, immutable: true },
+      idempotencyKey: { type: String, immutable: true },
+      idempotencyFingerprint: { type: String, immutable: true },
+      createdAt: { type: Date, required: true, immutable: true },
+      updatedAt: { type: Date, required: true },
+    },
+    { collection: QUOTATIONS_COLLECTION, strict: 'throw', versionKey: false, timestamps: false },
+  );
+  refuseDeletion(schema);
+  schema.index(
+    { quotationId: 1, revision: 1 },
+    { unique: true, name: 'salesQuotations_revision_unique' },
+  );
+  schema.index(
+    { quotationId: 1 },
+    {
+      unique: true,
+      name: 'salesQuotations_activePerQuotation_unique',
+      partialFilterExpression: { state: 'active' },
+    },
+  );
+  schema.index(
+    { idempotencyKey: 1 },
+    {
+      unique: true,
+      name: 'salesQuotations_idempotency_unique',
+      partialFilterExpression: { idempotencyKey: { $type: 'string' } },
+    },
+  );
+  schema.index(
+    { createdAt: -1, quotationId: -1, revision: -1 },
+    { name: 'salesQuotations_keyset' },
+  );
+  schema.index({ customerId: 1, createdAt: -1 }, { name: 'salesQuotations_customer' });
+  schema.index({ leadId: 1, createdAt: -1 }, { name: 'salesQuotations_lead' });
+  schema.index({ opportunityId: 1 }, { name: 'salesQuotations_opportunity' });
+  schema.index({ unitId: 1, state: 1 }, { name: 'salesQuotations_unit' });
+  schema.index({ legalEntityId: 1, branchId: 1 }, { name: 'salesQuotations_scope' });
+  schema.index({ teamId: 1 }, { name: 'salesQuotations_scope_team' });
+  schema.index({ salesOwnerAccountId: 1 }, { name: 'salesQuotations_owner' });
+  return schema;
+}
+
 function counterSchema(): Schema<CounterDocument> {
   const schema = new Schema<CounterDocument>(
     { key: { type: String, required: true }, value: { type: Number, required: true } },
@@ -424,6 +740,10 @@ export function contractModel(connection: Connection): Model<ContractDocument> {
 
 export function installmentModel(connection: Connection): Model<InstallmentDocument> {
   return model(connection, INSTALLMENTS_COLLECTION, installmentSchema);
+}
+
+export function quotationModel(connection: Connection): Model<QuotationDocument> {
+  return model(connection, QUOTATIONS_COLLECTION, quotationSchema);
 }
 
 export function counterModel(connection: Connection): Model<CounterDocument> {

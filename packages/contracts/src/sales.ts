@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BusinessCodeSchema, NoteSchema, RecordIdSchema } from './identifiers';
+import { LocalizedLabelSchema } from './localized';
 import {
   CurrencyCodeSchema,
   MoneySchema,
@@ -7,6 +8,7 @@ import {
   allocateMoney,
   compareMoney,
   isNegativeMoney,
+  isZeroMoney,
   money,
   subtractMoney,
   type Money,
@@ -42,6 +44,40 @@ export const MONTHS_PER_FREQUENCY: Readonly<Record<InstallmentFrequency, number>
 /** How many installments one plan may carry. A demo bound, not a business rule. */
 export const MAX_INSTALLMENTS = 240;
 
+/** How many dated milestone rows one plan may carry. A bound, not a business rule. */
+export const MAX_MILESTONES = 24;
+
+/**
+ * A payment tied to a date the parties agree — handover, completion of the structure — rather than to
+ * the periodic cycle (COL-SCHEDULE-001). Part of the price: the periodic instalments split what is left
+ * after the down payment, the final payment and every milestone.
+ */
+export const PlanMilestoneSchema = z.strictObject({
+  dueOn: BusinessDateSchema,
+  amount: MoneySchema,
+  /** What the payment is tied to, in both languages (I18N-009). */
+  label: LocalizedLabelSchema.optional(),
+});
+export type PlanMilestone = z.infer<typeof PlanMilestoneSchema>;
+
+/**
+ * Money held for the building's upkeep. It is **added to** the price, never taken from it, and
+ * appears as its own row. There is no default amount: until `BD-32` decides one, a plan carries a
+ * maintenance deposit only when the person entering it states one.
+ */
+export const MaintenanceDepositSchema = z.strictObject({
+  amount: MoneySchema,
+  dueOn: BusinessDateSchema,
+});
+export type MaintenanceDeposit = z.infer<typeof MaintenanceDepositSchema>;
+
+/**
+ * The rounding rule every schedule uses (`BD-32`, proposed): an amount that does not divide evenly
+ * gives its odd piastres to the earliest instalments, one each. Stated on every preview so a person
+ * approving a schedule sees the rule rather than trusting it.
+ */
+export const SCHEDULE_ROUNDING_RULE = 'oddPiastresToEarliestRows' as const;
+
 export const PaymentPlanSchema = z.strictObject({
   /** Paid at signing. May be zero. */
   downPayment: MoneySchema,
@@ -63,10 +99,20 @@ export const PaymentPlanSchema = z.strictObject({
   downPaymentDueOn: BusinessDateSchema.optional(),
   /** A balloon payment after the last installment. May be omitted. */
   finalPayment: MoneySchema.optional(),
+  /** Dated rows tied to milestones, part of the price (COL-SCHEDULE-001). */
+  milestones: z.array(PlanMilestoneSchema).max(MAX_MILESTONES).optional(),
+  /** Added to the price as its own row (`BD-32`). */
+  maintenanceDeposit: MaintenanceDepositSchema.optional(),
 });
 export type PaymentPlan = z.infer<typeof PaymentPlanSchema>;
 
-export const INSTALLMENT_KINDS = ['downPayment', 'installment', 'finalPayment'] as const;
+export const INSTALLMENT_KINDS = [
+  'downPayment',
+  'installment',
+  'finalPayment',
+  'milestone',
+  'maintenanceDeposit',
+] as const;
 export const InstallmentKindSchema = z.enum(INSTALLMENT_KINDS);
 export type InstallmentKind = z.infer<typeof InstallmentKindSchema>;
 
@@ -76,6 +122,8 @@ export const ScheduleRowSchema = z.strictObject({
   kind: InstallmentKindSchema,
   dueOn: BusinessDateSchema,
   amount: MoneySchema,
+  /** A milestone's wording. */
+  label: LocalizedLabelSchema.optional(),
 });
 export type ScheduleRow = z.infer<typeof ScheduleRowSchema>;
 
@@ -87,6 +135,8 @@ export class PaymentPlanError extends Error {
       | 'NEGATIVE_AMOUNT'
       | 'DOWN_PAYMENT_EXCEEDS_TOTAL'
       | 'FINAL_PAYMENT_EXCEEDS_REMAINDER'
+      | 'MILESTONES_EXCEED_REMAINDER'
+      | 'EMPTY_ROW'
       | 'NO_INSTALLMENTS_FOR_REMAINDER'
       | 'SCHEDULE_DOES_NOT_RECONCILE',
   ) {
@@ -108,15 +158,25 @@ export class PaymentPlanError extends Error {
  */
 export function buildInstallmentSchedule(total: Money, plan: PaymentPlan): ScheduleRow[] {
   const currency = total.currency;
-  if (plan.downPayment.currency !== currency) throw new PaymentPlanError('CURRENCY_MISMATCH');
-  if (plan.finalPayment && plan.finalPayment.currency !== currency) {
+  const milestones = plan.milestones ?? [];
+  const extras: Money[] = [
+    plan.downPayment,
+    ...(plan.finalPayment ? [plan.finalPayment] : []),
+    ...milestones.map((milestone) => milestone.amount),
+    ...(plan.maintenanceDeposit ? [plan.maintenanceDeposit.amount] : []),
+  ];
+  if (extras.some((amount) => amount.currency !== currency)) {
     throw new PaymentPlanError('CURRENCY_MISMATCH');
   }
-  if (isNegativeMoney(total) || isNegativeMoney(plan.downPayment)) {
+  if (isNegativeMoney(total) || extras.some((amount) => isNegativeMoney(amount))) {
     throw new PaymentPlanError('NEGATIVE_AMOUNT');
   }
-  if (plan.finalPayment && isNegativeMoney(plan.finalPayment)) {
-    throw new PaymentPlanError('NEGATIVE_AMOUNT');
+  // A milestone or maintenance row of nothing is a row nobody can pay; refuse it rather than store it.
+  if (
+    milestones.some((milestone) => isZeroMoney(milestone.amount)) ||
+    (plan.maintenanceDeposit && isZeroMoney(plan.maintenanceDeposit.amount))
+  ) {
+    throw new PaymentPlanError('EMPTY_ROW');
   }
   if (compareMoney(plan.downPayment, total) > 0) {
     throw new PaymentPlanError('DOWN_PAYMENT_EXCEEDS_TOTAL');
@@ -128,20 +188,25 @@ export function buildInstallmentSchedule(total: Money, plan: PaymentPlan): Sched
   if (compareMoney(finalPayment, afterDownPayment) > 0) {
     throw new PaymentPlanError('FINAL_PAYMENT_EXCEEDS_REMAINDER');
   }
-  const installmentTotal = subtractMoney(afterDownPayment, finalPayment);
+  const milestoneTotal = milestones.reduce<Money>(
+    (running, milestone) => addMoney(running, milestone.amount),
+    zero,
+  );
+  const afterFinal = subtractMoney(afterDownPayment, finalPayment);
+  if (compareMoney(milestoneTotal, afterFinal) > 0) {
+    throw new PaymentPlanError('MILESTONES_EXCEED_REMAINDER');
+  }
+  const installmentTotal = subtractMoney(afterFinal, milestoneTotal);
 
   // Money left to spread and nowhere to spread it: refuse rather than silently drop it.
   if (plan.installmentCount === 0 && compareMoney(installmentTotal, zero) !== 0) {
     throw new PaymentPlanError('NO_INSTALLMENTS_FOR_REMAINDER');
   }
 
-  const rows: ScheduleRow[] = [];
-  let sequence = 0;
+  const rows: Omit<ScheduleRow, 'sequence'>[] = [];
 
   if (compareMoney(plan.downPayment, zero) !== 0) {
-    sequence += 1;
     rows.push({
-      sequence,
       kind: 'downPayment',
       // Due at signing when the caller says so; otherwise the day the installments start.
       dueOn: plan.downPaymentDueOn ?? plan.firstDueOn,
@@ -157,9 +222,7 @@ export function buildInstallmentSchedule(total: Money, plan: PaymentPlan): Sched
     );
     const step = MONTHS_PER_FREQUENCY[plan.frequency];
     for (let index = 0; index < plan.installmentCount; index += 1) {
-      sequence += 1;
       rows.push({
-        sequence,
         kind: 'installment',
         // Installment 1 falls on firstDueOn itself. Every date is computed from that origin rather
         // than from the previous row, so a clamped month can never shift the whole tail.
@@ -169,11 +232,18 @@ export function buildInstallmentSchedule(total: Money, plan: PaymentPlan): Sched
     }
   }
 
+  for (const milestone of milestones) {
+    rows.push({
+      kind: 'milestone',
+      dueOn: milestone.dueOn,
+      amount: milestone.amount,
+      ...(milestone.label ? { label: milestone.label } : {}),
+    });
+  }
+
   if (compareMoney(finalPayment, zero) !== 0) {
-    sequence += 1;
     const step = MONTHS_PER_FREQUENCY[plan.frequency];
     rows.push({
-      sequence,
       kind: 'finalPayment',
       // One period after the last installment.
       dueOn: addMonths(plan.firstDueOn, step * plan.installmentCount),
@@ -181,12 +251,40 @@ export function buildInstallmentSchedule(total: Money, plan: PaymentPlan): Sched
     });
   }
 
+  if (plan.maintenanceDeposit) {
+    rows.push({
+      kind: 'maintenanceDeposit',
+      dueOn: plan.maintenanceDeposit.dueOn,
+      amount: plan.maintenanceDeposit.amount,
+    });
+  }
+
+  // Rows in date order, numbered from one. The sort is stable, so rows due the same day keep the
+  // order above — a plan without milestones numbers exactly as it always did.
+  const ordered = rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) =>
+      a.row.dueOn === b.row.dueOn ? a.index - b.index : a.row.dueOn < b.row.dueOn ? -1 : 1,
+    )
+    .map(({ row }, index): ScheduleRow => ({ sequence: index + 1, ...row }));
+
   // The reconciliation is asserted here, not assumed. A schedule that does not add up must never be
   // stored: the arithmetic error would surface months later as a balance nobody can explain.
-  const sum = rows.reduce<Money>((running, row) => addMoney(running, row.amount), zero);
-  if (compareMoney(sum, total) !== 0) throw new PaymentPlanError('SCHEDULE_DOES_NOT_RECONCILE');
-  return rows;
+  const sum = ordered.reduce<Money>((running, row) => addMoney(running, row.amount), zero);
+  if (compareMoney(sum, scheduleTotal(total, plan)) !== 0) {
+    throw new PaymentPlanError('SCHEDULE_DOES_NOT_RECONCILE');
+  }
+  return ordered;
 }
+
+/**
+ * What a schedule adds up to: the price plus any maintenance deposit. This is the contract total —
+ * paid plus outstanding always equals it.
+ */
+export function scheduleTotal(price: Money, plan: PaymentPlan): Money {
+  return plan.maintenanceDeposit ? addMoney(price, plan.maintenanceDeposit.amount) : price;
+}
+
 
 /* ----------------------------------------------------------------- reservation */
 
@@ -375,12 +473,26 @@ export type ReservationPage = z.infer<typeof ReservationPageSchema>;
 
 /* -------------------------------------------------------------------- contract */
 
-export const CONTRACT_STATES = ['draft', 'active', 'cancelled', 'completed'] as const;
+/**
+ * SALE-CONTRACT-001, 003. A contract is created as a **draft** that carries snapshots and a proposed
+ * schedule; nothing is collectible and the unit is still the reservation's. Activation freezes the
+ * schedule into instalments and commits the unit (`pendingApproval` while a contract exception waits
+ * on its approval). Contracts made before BMP-1 were created active and keep that state.
+ */
+export const CONTRACT_STATES = [
+  'draft',
+  'pendingApproval',
+  'active',
+  'cancelled',
+  'completed',
+] as const;
 export const ContractStateSchema = z.enum(CONTRACT_STATES);
 export type ContractState = z.infer<typeof ContractStateSchema>;
 
 export const CONTRACT_TRANSITIONS: Readonly<Record<ContractState, readonly ContractState[]>> = {
-  draft: ['active', 'cancelled'],
+  draft: ['pendingApproval', 'active', 'cancelled'],
+  // Back to `draft` when the exception approval is rejected; the draft can then be corrected.
+  pendingApproval: ['draft', 'active', 'cancelled'],
   active: ['completed', 'cancelled'],
   cancelled: [],
   completed: [],
@@ -390,6 +502,146 @@ export function canTransitionContract(from: ContractState, to: ContractState): b
   return CONTRACT_TRANSITIONS[from].includes(to);
 }
 
+/** SALE-CONTRACT-002. Buyers and co-buyers own shares; a guarantor or representative owns none. */
+export const CONTRACT_PARTY_ROLES = ['buyer', 'coBuyer', 'guarantor', 'representative'] as const;
+export const ContractPartyRoleSchema = z.enum(CONTRACT_PARTY_ROLES);
+export type ContractPartyRole = z.infer<typeof ContractPartyRoleSchema>;
+
+/** A share of ownership, in percent, to four decimal places: `50`, `33.3333`. */
+export const SharePercentSchema = z
+  .string()
+  .regex(/^(100(\.0{1,4})?|\d{1,2}(\.\d{1,4})?)$/, { message: 'SHARE_PERCENT_EXPECTED' });
+
+export const ContractPartyInputSchema = z.strictObject({
+  role: ContractPartyRoleSchema,
+  customerId: RecordIdSchema,
+  /** Required for a buyer or co-buyer, refused for anyone else. */
+  sharePercent: SharePercentSchema.optional(),
+});
+export type ContractPartyInput = z.infer<typeof ContractPartyInputSchema>;
+
+export const ContractPartySchema = z.strictObject({
+  role: ContractPartyRoleSchema,
+  customerId: RecordIdSchema,
+  sharePercent: SharePercentSchema.optional(),
+  /** The name as it stood when the party was added — a snapshot, never re-read. */
+  name: z.string().max(200).optional(),
+});
+export type ContractParty = z.infer<typeof ContractPartySchema>;
+
+/** At most ten parties on one contract. */
+export const MAX_CONTRACT_PARTIES = 10;
+
+/**
+ * The identity on the customer snapshot. Kept apart from the CRM schema (which imports inventory,
+ * which imports this file) and restricted on the contract exactly as on the customer (SEC-029).
+ */
+export const ContractIdentitySnapshotSchema = z.strictObject({
+  type: z.string().min(1).max(40),
+  number: z.string().min(1).max(60),
+  issuingCountry: z.string().max(3).optional(),
+});
+
+/** The buyer as they stood on the day the contract was drafted. Immutable (SALE-CONTRACT-001). */
+export const ContractCustomerSnapshotSchema = z.strictObject({
+  customerId: RecordIdSchema,
+  kind: z.string().max(40),
+  name: z.string().max(200),
+  alternateName: z.string().max(200).optional(),
+  primaryPhone: z.string().max(40),
+  email: z.string().max(254).optional(),
+  address: z.string().max(400).optional(),
+  city: z.string().max(80).optional(),
+  /** Field-restricted: absent without `crm.customer.viewIdentity`. */
+  identity: ContractIdentitySnapshotSchema.optional(),
+});
+export type ContractCustomerSnapshot = z.infer<typeof ContractCustomerSnapshotSchema>;
+
+/** The unit as it stood on the day the contract was drafted. Immutable. */
+export const ContractUnitSnapshotSchema = z.strictObject({
+  unitId: RecordIdSchema,
+  code: z.string().max(80),
+  projectId: RecordIdSchema,
+  projectCode: z.string().max(80).optional(),
+  projectName: LocalizedLabelSchema.optional(),
+  buildingId: RecordIdSchema.optional(),
+  buildingCode: z.string().max(80).optional(),
+  floor: z.number().int().optional(),
+  propertyType: z.string().max(40).optional(),
+  usageType: z.string().max(40).optional(),
+  finishingStatus: z.string().max(40).optional(),
+  area: z.string().max(40).optional(),
+  gardenArea: z.string().max(40).optional(),
+  roofArea: z.string().max(40).optional(),
+  bedrooms: z.number().int().optional(),
+  bathrooms: z.number().int().optional(),
+});
+export type ContractUnitSnapshot = z.infer<typeof ContractUnitSnapshotSchema>;
+
+/** The price as agreed. Immutable. */
+export const ContractPricingSnapshotSchema = z.strictObject({
+  listPrice: MoneySchema.optional(),
+  agreedPrice: MoneySchema,
+  discountPercentage: z.string().max(20),
+  reservationAmount: MoneySchema,
+  maintenanceDeposit: MoneySchema.optional(),
+});
+export type ContractPricingSnapshot = z.infer<typeof ContractPricingSnapshotSchema>;
+
+/**
+ * Why activation asks for a `sales.contract.exception` approval where a policy governs it. A plan
+ * changed from the one the reservation was approved with is the one exception today.
+ */
+export const CONTRACT_EXCEPTIONS = ['planChanged'] as const;
+export type ContractException = (typeof CONTRACT_EXCEPTIONS)[number];
+
+/**
+ * What the product points out but does not block — each waits on a decision (`BD-34` identity,
+ * `BD-35` signed copy) before it may block anything.
+ */
+export const CONTRACT_WARNINGS = ['identityMissing', 'notSigned'] as const;
+export type ContractWarning = (typeof CONTRACT_WARNINGS)[number];
+
+export const SIGNING_STATES = ['unsigned', 'signed'] as const;
+export const ContractSigningSchema = z.strictObject({
+  state: z.enum(SIGNING_STATES),
+  signedOn: BusinessDateSchema.optional(),
+  /** The signed copy, a `CORE-DOC` document owned by this contract. */
+  documentId: RecordIdSchema.optional(),
+  recordedBy: z.string().max(200).optional(),
+  recordedAt: InstantSchema.optional(),
+});
+export type ContractSigning = z.infer<typeof ContractSigningSchema>;
+
+/** SALE-CHANGE-001. The new terms for what is still unpaid. */
+export const AmendmentPlanSchema = z.strictObject({
+  installmentCount: z.number().int().min(1).max(MAX_INSTALLMENTS),
+  frequency: InstallmentFrequencySchema,
+  firstDueOn: BusinessDateSchema,
+  finalPayment: MoneySchema.optional(),
+});
+export type AmendmentPlan = z.infer<typeof AmendmentPlanSchema>;
+
+export const AMENDMENT_STATES = ['pending', 'applied', 'rejected', 'stale'] as const;
+export type AmendmentState = (typeof AMENDMENT_STATES)[number];
+
+export const ContractAmendmentSchema = z.strictObject({
+  amendmentId: RecordIdSchema,
+  state: z.enum(AMENDMENT_STATES),
+  reason: z.string().max(500),
+  requestId: z.string().max(200).optional(),
+  plan: AmendmentPlanSchema,
+  /** The unpaid rows the amendment replaces; they become `rescheduled`, never deleted. */
+  replacedInstallmentIds: z.array(RecordIdSchema).max(MAX_INSTALLMENTS + MAX_MILESTONES + 3),
+  /** What those rows still owed — the new rows add up to exactly this. */
+  amount: MoneySchema,
+  rows: z.array(ScheduleRowSchema),
+  requestedBy: z.string().max(200),
+  requestedAt: InstantSchema,
+  decidedAt: InstantSchema.optional(),
+});
+export type ContractAmendment = z.infer<typeof ContractAmendmentSchema>;
+
 export const ContractSchema = z.strictObject({
   contractId: RecordIdSchema,
   /** Immutable once issued, and unique. It appears on documents people keep. */
@@ -398,7 +650,10 @@ export const ContractSchema = z.strictObject({
   unitId: RecordIdSchema,
   projectId: RecordIdSchema,
   reservationId: RecordIdSchema,
+  leadId: RecordIdSchema.optional(),
+  opportunityId: RecordIdSchema.optional(),
   contractedOn: BusinessDateSchema,
+  /** The schedule total: the agreed price plus any maintenance deposit. */
   totalPrice: MoneySchema,
   /** Credited against the schedule; it is money already received on the reservation. */
   reservationAmount: MoneySchema,
@@ -406,12 +661,31 @@ export const ContractSchema = z.strictObject({
   /** Sum of every unpaid installment. Maintained by the collections module. */
   outstandingAmount: MoneySchema,
   paidAmount: MoneySchema,
+  /** Snapshots taken when the draft was made (SALE-CONTRACT-001); absent on pre-BMP-1 contracts. */
+  customerSnapshot: ContractCustomerSnapshotSchema.optional(),
+  unitSnapshot: ContractUnitSnapshotSchema.optional(),
+  pricing: ContractPricingSnapshotSchema.optional(),
+  parties: z.array(ContractPartySchema).max(MAX_CONTRACT_PARTIES),
+  signing: ContractSigningSchema,
+  exceptions: z.array(z.enum(CONTRACT_EXCEPTIONS)),
+  /** Computed on read; never stored. */
+  warnings: z.array(z.enum(CONTRACT_WARNINGS)),
+  approvals: z.array(
+    z.strictObject({ operationType: z.string(), requestId: z.string().min(1).max(200) }),
+  ),
+  amendments: z.array(ContractAmendmentSchema),
+  pendingCancellation: z.strictObject({ requestId: z.string(), reason: z.string() }).optional(),
+  /** Set when the contract ends with money taken on it; BMP-2 settles it. */
+  refundHandoff: z.enum(REFUND_HANDOFF_STATES),
+  /** The rows a draft would freeze — computed from the plan on read, for the preview. */
+  draftSchedule: z.array(ScheduleRowSchema).optional(),
   salesOwnerAccountId: z.string().min(1).max(200),
   legalEntityId: RecordIdSchema,
   branchId: RecordIdSchema,
   departmentId: RecordIdSchema.optional(),
   teamId: RecordIdSchema.optional(),
   state: ContractStateSchema,
+  activatedAt: InstantSchema.optional(),
   cancellationReason: z.string().max(500).optional(),
   /** Placeholder for the signed document once `CORE-DOC` exists. Never a file, never a URL yet. */
   documentRef: z.string().max(200).optional(),
@@ -426,9 +700,36 @@ export const CreateContractSchema = z.strictObject({
   contractedOn: BusinessDateSchema,
   /** Omitted keeps the reservation's plan. Supplying one replaces it wholesale. */
   paymentPlan: PaymentPlanSchema.optional(),
+  /** Omitted: the reservation's customer as the only buyer, owning 100 %. */
+  parties: z.array(ContractPartyInputSchema).min(1).max(MAX_CONTRACT_PARTIES).optional(),
   idempotencyKey: z.string().min(8).max(200),
 });
 export type CreateContract = z.infer<typeof CreateContractSchema>;
+
+export const SetContractPartiesSchema = z.strictObject({
+  parties: z.array(ContractPartyInputSchema).min(1).max(MAX_CONTRACT_PARTIES),
+  expectedVersion: z.number().int().positive(),
+});
+export type SetContractParties = z.infer<typeof SetContractPartiesSchema>;
+
+export const ActivateContractSchema = z.strictObject({
+  expectedVersion: z.number().int().positive(),
+});
+export type ActivateContract = z.infer<typeof ActivateContractSchema>;
+
+export const RecordSigningSchema = z.strictObject({
+  signedOn: BusinessDateSchema,
+  documentId: RecordIdSchema.optional(),
+  expectedVersion: z.number().int().positive(),
+});
+export type RecordSigning = z.infer<typeof RecordSigningSchema>;
+
+export const AmendContractSchema = z.strictObject({
+  plan: AmendmentPlanSchema,
+  reason: z.string().trim().min(3).max(500),
+  expectedVersion: z.number().int().positive(),
+});
+export type AmendContract = z.infer<typeof AmendContractSchema>;
 
 export const CancelContractSchema = z.strictObject({
   reason: z.string().trim().min(3).max(500),
@@ -454,6 +755,121 @@ export const ContractPageSchema = z.strictObject({
   nextCursor: z.string().optional(),
 });
 export type ContractPage = z.infer<typeof ContractPageSchema>;
+
+/**
+ * SALE-CONTRACT-004. The contract's own trail, read from the audit record: what happened, when, by
+ * whom. Change details stay behind the audit permissions; this is the summary a contract viewer sees.
+ */
+export const ContractHistoryEntrySchema = z.strictObject({
+  action: z.string(),
+  outcome: z.string(),
+  occurredAt: InstantSchema,
+  actorAccountId: z.string().optional(),
+  actorKind: z.string(),
+  reason: z.string().optional(),
+});
+export type ContractHistoryEntry = z.infer<typeof ContractHistoryEntrySchema>;
+export const ContractHistorySchema = z.strictObject({
+  items: z.array(ContractHistoryEntrySchema),
+});
+
+/* ------------------------------------------------------------------- quotation */
+
+/**
+ * SALE-QUOTE-001. A priced offer for one unit and one plan. It **never reserves inventory**: the unit
+ * stays on sale and anyone may reserve it. A revision is a new record with the next revision number;
+ * the one it replaces becomes `superseded`. `expired` is computed from the validity the person stated
+ * (`BD-36` decides nothing yet) and never stored.
+ */
+export const QUOTATION_STATES = ['active', 'superseded', 'withdrawn', 'expired'] as const;
+export const QuotationStateSchema = z.enum(QUOTATION_STATES);
+export type QuotationState = z.infer<typeof QuotationStateSchema>;
+
+export const QuotationSchema = z.strictObject({
+  quotationId: RecordIdSchema,
+  quotationNumber: BusinessCodeSchema,
+  revision: z.number().int().positive(),
+  customerId: RecordIdSchema.optional(),
+  leadId: RecordIdSchema.optional(),
+  opportunityId: RecordIdSchema.optional(),
+  unitId: RecordIdSchema,
+  unitCode: z.string().max(80),
+  projectId: RecordIdSchema,
+  /** The unit's effective price when the quotation was made. */
+  listPrice: MoneySchema,
+  agreedPrice: MoneySchema,
+  discountPercentage: z.string().max(20),
+  paymentPlan: PaymentPlanSchema,
+  rows: z.array(ScheduleRowSchema),
+  total: MoneySchema,
+  validUntil: BusinessDateSchema,
+  state: QuotationStateSchema,
+  withdrawalReason: z.string().max(500).optional(),
+  notes: NoteSchema.optional(),
+  salesOwnerAccountId: z.string().min(1).max(200),
+  legalEntityId: RecordIdSchema,
+  branchId: RecordIdSchema,
+  departmentId: RecordIdSchema.optional(),
+  teamId: RecordIdSchema.optional(),
+  createdAt: InstantSchema,
+  updatedAt: InstantSchema,
+});
+export type Quotation = z.infer<typeof QuotationSchema>;
+
+export const CreateQuotationSchema = z
+  .strictObject({
+    customerId: RecordIdSchema.optional(),
+    leadId: RecordIdSchema.optional(),
+    opportunityId: RecordIdSchema.optional(),
+    unitId: RecordIdSchema,
+    agreedPrice: MoneySchema,
+    paymentPlan: PaymentPlanSchema,
+    validUntil: BusinessDateSchema,
+    notes: NoteSchema.optional(),
+    idempotencyKey: z.string().min(8).max(200),
+  })
+  .refine((value) => value.customerId !== undefined || value.leadId !== undefined, {
+    message: 'QUOTATION_NEEDS_RECIPIENT',
+    path: ['customerId'],
+  });
+export type CreateQuotation = z.infer<typeof CreateQuotationSchema>;
+
+export const ReviseQuotationSchema = z.strictObject({
+  agreedPrice: MoneySchema,
+  paymentPlan: PaymentPlanSchema,
+  validUntil: BusinessDateSchema,
+  notes: NoteSchema.optional(),
+  /** The revision being replaced; a stale one is refused. */
+  expectedRevision: z.number().int().positive(),
+});
+export type ReviseQuotation = z.infer<typeof ReviseQuotationSchema>;
+
+export const WithdrawQuotationSchema = z.strictObject({
+  reason: z.string().trim().min(3).max(500),
+  expectedRevision: z.number().int().positive(),
+});
+export type WithdrawQuotation = z.infer<typeof WithdrawQuotationSchema>;
+
+export const QuotationQuerySchema = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  cursor: z.string().min(1).max(200).optional(),
+  customerId: RecordIdSchema.optional(),
+  leadId: RecordIdSchema.optional(),
+  opportunityId: RecordIdSchema.optional(),
+  unitId: RecordIdSchema.optional(),
+});
+export type QuotationQuery = z.infer<typeof QuotationQuerySchema>;
+
+export const QuotationPageSchema = z.strictObject({
+  items: z.array(QuotationSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  nextCursor: z.string().optional(),
+});
+export type QuotationPage = z.infer<typeof QuotationPageSchema>;
+
+export const QuotationRevisionsSchema = z.strictObject({ items: z.array(QuotationSchema) });
+
 
 /* ----------------------------------------------------------------- installment */
 
@@ -482,6 +898,10 @@ export const InstallmentSchema = z.strictObject({
   paidAmount: MoneySchema,
   remainingAmount: MoneySchema,
   state: InstallmentStateSchema,
+  /** A milestone's wording. */
+  label: LocalizedLabelSchema.optional(),
+  /** The amendment that created this row (SALE-CHANGE-001). */
+  amendmentId: RecordIdSchema.optional(),
   legalEntityId: RecordIdSchema,
   branchId: RecordIdSchema,
   teamId: RecordIdSchema.optional(),
@@ -517,7 +937,12 @@ export type InstallmentPage = z.infer<typeof InstallmentPageSchema>;
 /** What a schedule preview returns, before anything is stored. */
 export const SchedulePreviewSchema = z.strictObject({
   rows: z.array(ScheduleRowSchema),
+  /** The schedule total: the price plus any maintenance deposit. */
   total: MoneySchema,
+  price: MoneySchema,
+  maintenanceDeposit: MoneySchema.optional(),
+  /** Stated, not implied (`BD-32`). */
+  roundingRule: z.literal(SCHEDULE_ROUNDING_RULE),
   /** Present so a caller can see the reconciliation rather than trust it. */
   rowsTotal: MoneySchema,
 });
@@ -583,7 +1008,18 @@ export const SALES_AUDIT_ACTIONS = {
   reservationCancellationRequested: 'sales.reservation.cancellationRequested',
   contractCreated: 'sales.contract.created',
   contractActivated: 'sales.contract.activated',
+  contractActivationRequested: 'sales.contract.activationRequested',
+  contractActivationRejected: 'sales.contract.activationRejected',
+  contractPartiesChanged: 'sales.contract.partiesChanged',
+  contractSigned: 'sales.contract.signed',
+  contractAmendmentRequested: 'sales.contract.amendmentRequested',
+  contractAmended: 'sales.contract.amended',
+  contractAmendmentRejected: 'sales.contract.amendmentRejected',
+  contractCancellationRequested: 'sales.contract.cancellationRequested',
   contractCancelled: 'sales.contract.cancelled',
+  quotationCreated: 'sales.quotation.created',
+  quotationRevised: 'sales.quotation.revised',
+  quotationWithdrawn: 'sales.quotation.withdrawn',
   contractRefused: 'sales.contract.refused',
   scheduleGenerated: 'sales.schedule.generated',
   installmentsRefreshed: 'sales.installments.refreshed',
@@ -593,7 +1029,13 @@ export const SALES_AUDIT_ACTIONS = {
 export function lastDueDate(plan: PaymentPlan): BusinessDate {
   const step = MONTHS_PER_FREQUENCY[plan.frequency];
   const cycles = Math.max(plan.installmentCount - 1, 0) + (plan.finalPayment ? 1 : 0);
-  return plan.installmentCount === 0 && !plan.finalPayment
-    ? (plan.downPaymentDueOn ?? plan.firstDueOn)
-    : addMonths(plan.firstDueOn, step * cycles);
+  const periodic =
+    plan.installmentCount === 0 && !plan.finalPayment
+      ? (plan.downPaymentDueOn ?? plan.firstDueOn)
+      : addMonths(plan.firstDueOn, step * cycles);
+  // Milestones and a maintenance deposit may fall after the periodic rows.
+  return [
+    ...(plan.milestones ?? []).map((milestone) => milestone.dueOn),
+    ...(plan.maintenanceDeposit ? [plan.maintenanceDeposit.dueOn] : []),
+  ].reduce<BusinessDate>((latest, date) => (date > latest ? date : latest), periodic);
 }

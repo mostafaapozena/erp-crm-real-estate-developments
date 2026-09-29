@@ -1,5 +1,16 @@
 import {
+  ActivateContractSchema,
+  AmendContractSchema,
   CONTRACT_STATES,
+  ContractHistorySchema,
+  CreateQuotationSchema,
+  QuotationPageSchema,
+  QuotationRevisionsSchema,
+  QuotationSchema,
+  RecordSigningSchema,
+  ReviseQuotationSchema,
+  SetContractPartiesSchema,
+  WithdrawQuotationSchema,
   CancelContractSchema,
   CancelReservationSchema,
   ExtendReservationSchema,
@@ -51,11 +62,22 @@ export const salesComponents = {
   CreateContractRequest: CreateContractSchema,
   CreateContractResult: CreateContractResultSchema,
   CancelContractRequest: CancelContractSchema,
+  SetContractPartiesRequest: SetContractPartiesSchema,
+  ActivateContractRequest: ActivateContractSchema,
+  RecordSigningRequest: RecordSigningSchema,
+  AmendContractRequest: AmendContractSchema,
+  ContractHistory: ContractHistorySchema,
   Installment: InstallmentSchema,
   InstallmentPage: InstallmentPageSchema,
   InstallmentList: InstallmentListSchema,
   ContractSummary: ContractSummarySchema,
   CustomerFinancialSummary: CustomerFinancialSummarySchema,
+  Quotation: QuotationSchema,
+  QuotationPage: QuotationPageSchema,
+  QuotationRevisions: QuotationRevisionsSchema,
+  CreateQuotationRequest: CreateQuotationSchema,
+  ReviseQuotationRequest: ReviseQuotationSchema,
+  WithdrawQuotationRequest: WithdrawQuotationSchema,
 } as const;
 
 export function salesPaths(h: OpenApiHelpers): PathMap {
@@ -218,17 +240,19 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
       },
       post: {
         operationId: 'createContract',
-        summary: 'Convert a confirmed reservation into a contract and its schedule',
+        summary: 'Draft a contract from a confirmed reservation',
         description:
-          'Requires sales.contract.create. The contract, every installment, the unit becoming ' +
-          'contracted and the reservation becoming converted are **one transaction**. The contract ' +
-          'number is allocated from an atomic counter and is immutable in the schema, not only in the ' +
-          'service. The schedule is asserted to reconcile to the contract total before anything is ' +
-          'stored. The reservation amount is credited against the earliest rows, because that is where ' +
-          'a customer expects to see the deposit they paid. Idempotent on the key.',
+          'Requires sales.contract.create (SALE-CONTRACT-001, 002). Creates a **draft** carrying ' +
+          'immutable snapshots of the buyer, the unit and the agreed price, its parties (default: the ' +
+          "reservation's customer as sole buyer at 100 %; buyer and co-buyer shares must total exactly " +
+          '100), its number, and draftSchedule — the rows activation will freeze. Nothing is ' +
+          'committed: installments is empty, the unit stays reserved, and the reservation records the ' +
+          'draft so it can neither expire nor be cancelled underneath it (CONTRACT_IN_PROGRESS). A plan ' +
+          "different from the reservation's is recorded as the planChanged exception. Idempotent on " +
+          'the key. The buyer identity snapshot is absent without crm.customer.viewIdentity.',
         requestBody: requestBody(h.ref('CreateContractRequest')),
         responses: {
-          '201': h.json('CreateContractResult', 'The contract and its generated schedule'),
+          '201': h.json('CreateContractResult', 'The draft (no installments yet)'),
           '200': h.json('CreateContractResult', 'The original contract, replayed'),
           ...h.conflictErrors,
         },
@@ -238,9 +262,148 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
       get: {
         operationId: 'getContract',
         summary: 'Read one contract',
-        description: 'Requires sales.contract.view. Out of scope answers 404 (SEC-030).',
+        description:
+          'Requires sales.contract.view. Out of scope answers 404 (SEC-030). warnings (identityMissing ' +
+          'for BD-34, notSigned for BD-35) are computed on read and block nothing.',
         parameters: [pathParameter('contractId', 'Opaque contract identifier')],
         responses: { '200': h.json('Contract', 'The contract'), ...h.notFoundErrors },
+      },
+    },
+    '/api/v1/sales/contracts/{contractId}/parties': {
+      put: {
+        operationId: 'setContractParties',
+        summary: "Replace a draft contract's parties",
+        description:
+          'Requires sales.contract.create (SALE-CONTRACT-002). Draft only (CONTRACT_NOT_DRAFT). One ' +
+          "buyer, the reservation's customer; shares on buyer and co-buyers totalling exactly 100, " +
+          'compared as decimals; none on a guarantor or representative; every person must be a ' +
+          'customer the actor can see (PARTY_NOT_FOUND). Names are snapshotted.',
+        parameters: [pathParameter('contractId', 'Opaque contract identifier')],
+        requestBody: requestBody(h.ref('SetContractPartiesRequest')),
+        responses: { '200': h.json('Contract', 'The draft'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/sales/contracts/{contractId}/activate': {
+      post: {
+        operationId: 'activateContract',
+        summary: 'Activate a draft: freeze the schedule and commit the unit',
+        description:
+          'Requires sales.contract.activate (SALE-CONTRACT-003). In one transaction the contract ' +
+          'becomes active, its rows become installments (the reservation money credited earliest ' +
+          'first), the reservation converted, the unit contracted, and the lead and opportunity won. ' +
+          'A draft with an exception, where a published policy governs sales.contract.exception, ' +
+          'becomes pendingApproval instead and is activated when the approval is granted (back to ' +
+          'draft when refused). Signing is recorded but not required until BD-35 decides it.',
+        parameters: [pathParameter('contractId', 'Opaque contract identifier')],
+        requestBody: requestBody(h.ref('ActivateContractRequest')),
+        responses: { '200': h.json('Contract', 'The contract'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/sales/contracts/{contractId}/signing': {
+      post: {
+        operationId: 'recordContractSigning',
+        summary: "Record the contract's signing, once",
+        description:
+          'Requires sales.contract.sign. The date may not be in the future (SIGNED_IN_FUTURE); a ' +
+          'signed copy must be a CORE-DOC document this contract owns ' +
+          '(DOCUMENT_NOT_OWNED_BY_CONTRACT); a second recording is ALREADY_SIGNED.',
+        parameters: [pathParameter('contractId', 'Opaque contract identifier')],
+        requestBody: requestBody(h.ref('RecordSigningRequest')),
+        responses: { '200': h.json('Contract', 'The contract'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/sales/contracts/{contractId}/amendments': {
+      post: {
+        operationId: 'requestContractAmendment',
+        summary: 'Request a plan-change amendment of the unpaid rows',
+        description:
+          'Requires sales.contract.amend (SALE-CHANGE-001, COL-SCHEDULE-002). Replaces every row that ' +
+          'still owes its whole amount (partly paid rows and the maintenance deposit are kept) with a ' +
+          'new plan reconciling exactly to what those rows owed, numbered after the last row. A ' +
+          'confirmed schedule changes only by an approved amendment: refused (AMENDMENT_NEEDS_POLICY) ' +
+          'where no published policy governs sales.contract.amendment. On approval the replaced rows ' +
+          'become rescheduled — never deleted — and the new rows are inserted in one transaction; if a ' +
+          'replaced row took money meanwhile the amendment is stale and nothing changes.',
+        parameters: [pathParameter('contractId', 'Opaque contract identifier')],
+        requestBody: requestBody(h.ref('AmendContractRequest')),
+        responses: { '200': h.json('Contract', 'The contract'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/sales/contracts/{contractId}/history': {
+      get: {
+        operationId: 'getContractHistory',
+        summary: "The contract's audit trail, as a summary",
+        description:
+          'Requires sales.contract.view and a contract in scope (SALE-CONTRACT-004). Action, outcome, ' +
+          'time, actor and reason only — change details and request context stay behind the audit ' +
+          'permissions.',
+        parameters: [pathParameter('contractId', 'Opaque contract identifier')],
+        responses: { '200': h.json('ContractHistory', 'The trail, newest first'), ...h.notFoundErrors },
+      },
+    },
+    '/api/v1/sales/quotations': {
+      get: {
+        operationId: 'listQuotations',
+        summary: 'List quotations (latest revision of each)',
+        description:
+          'Requires sales.quotation.view (SALE-QUOTE-001). Scoped like reservations; expired is ' +
+          'computed from validUntil and never stored.',
+        parameters: [
+          queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100, default: 25 }),
+          queryParameter('cursor', { type: 'string' }),
+          queryParameter('customerId', { type: 'string' }),
+          queryParameter('leadId', { type: 'string' }),
+          queryParameter('opportunityId', { type: 'string' }),
+          queryParameter('unitId', { type: 'string' }),
+        ],
+        responses: { '200': h.json('QuotationPage', 'A page of quotations'), ...h.authorizedErrors },
+      },
+      post: {
+        operationId: 'createQuotation',
+        summary: 'Price a unit on a plan for a customer or lead',
+        description:
+          'Requires sales.quotation.manage. **Never reserves inventory**: the unit stays on sale. The ' +
+          "list price is the unit's current price as the actor may see it (PRICE_NOT_VISIBLE without " +
+          'price visibility); the schedule comes from the same builder as every contract. validUntil ' +
+          'is what the person states (BD-36 has decided no default) and may not be in the past. ' +
+          'Idempotent on the key.',
+        requestBody: requestBody(h.ref('CreateQuotationRequest')),
+        responses: {
+          '201': h.json('Quotation', 'The quotation'),
+          '200': h.json('Quotation', 'The original quotation, replayed'),
+          ...h.conflictErrors,
+        },
+      },
+    },
+    '/api/v1/sales/quotations/{quotationId}': {
+      get: {
+        operationId: 'getQuotationRevisions',
+        summary: 'Every revision of a quotation, latest first',
+        description: 'Requires sales.quotation.view. Out of scope answers 404 (SEC-030).',
+        parameters: [pathParameter('quotationId', 'Opaque quotation identifier')],
+        responses: { '200': h.json('QuotationRevisions', 'The revisions'), ...h.notFoundErrors },
+      },
+    },
+    '/api/v1/sales/quotations/{quotationId}/revisions': {
+      post: {
+        operationId: 'reviseQuotation',
+        summary: 'Revise a quotation into a new revision',
+        description:
+          "Requires sales.quotation.manage. Priced from the unit's current price; the replaced " +
+          'revision becomes superseded. expectedRevision must be the active one (STALE_VERSION).',
+        parameters: [pathParameter('quotationId', 'Opaque quotation identifier')],
+        requestBody: requestBody(h.ref('ReviseQuotationRequest')),
+        responses: { '201': h.json('Quotation', 'The new revision'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/sales/quotations/{quotationId}/withdraw': {
+      post: {
+        operationId: 'withdrawQuotation',
+        summary: 'Withdraw a quotation',
+        description: 'Requires sales.quotation.manage. Kept with its reason, never deleted.',
+        parameters: [pathParameter('quotationId', 'Opaque quotation identifier')],
+        requestBody: requestBody(h.ref('WithdrawQuotationRequest')),
+        responses: { '200': h.json('Quotation', 'The withdrawn quotation'), ...h.conflictErrors },
       },
     },
     '/api/v1/sales/contracts/{contractId}/installments': {
@@ -255,13 +418,15 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
     '/api/v1/sales/contracts/{contractId}/cancel': {
       post: {
         operationId: 'cancelContract',
-        summary: 'Cancel a contract',
+        summary: 'Cancel a contract before any collection',
         description:
-          'Requires sales.contract.cancel. **Refused when any money has been collected**: reversing ' +
-          'collected money is a refund, which is an accounting operation with its own controls, and a ' +
-          'cancellation that stranded receipts would put the books out by exactly that amount. ' +
-          'Installments are cancelled rather than deleted, and the unit optionally returns to the ' +
-          'market in the same transaction.',
+          'Requires sales.contract.cancel (SALE-CANCEL-001). A draft is withdrawn and its reservation ' +
+          'can be drafted again. An active contract is **refused when money beyond the reservation ' +
+          "deposit has been collected** (contractHasCollections): that is a refund with penalties " +
+          'and accounting, SALE-CANCEL-002 in BMP-2. With a policy governing ' +
+          'sales.contract.cancellation it waits in pendingCancellation for the decision. ' +
+          'Installments are cancelled rather than deleted, the unit optionally returns to the market ' +
+          'in the same transaction, and reservation money becomes refundHandoff=pending.',
         parameters: [pathParameter('contractId', 'Opaque contract identifier')],
         requestBody: requestBody(h.ref('CancelContractRequest')),
         responses: { '200': h.json('Contract', 'The cancelled contract'), ...h.conflictErrors },

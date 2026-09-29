@@ -305,7 +305,14 @@ const modules: ApiModule[] = [
       guard,
     }),
   },
-  { basePath: '/sales', router: salesRouter({ getService: getSalesService, guard }) },
+  {
+    basePath: '/sales',
+    router: salesRouter({
+      getService: getSalesService,
+      getQuotations: services.quotations,
+      guard,
+    }),
+  },
   {
     basePath: '/collections',
     router: collectionRouter({ getService: getCollectionService, guard }),

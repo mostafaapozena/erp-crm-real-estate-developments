@@ -12,7 +12,7 @@ import {
   type Logger,
   type PrivateFileStore,
 } from '@alola/security';
-import { DOCUMENT_MAX_BYTES } from '@alola/contracts';
+import { ContractHistorySchema, DOCUMENT_MAX_BYTES } from '@alola/contracts';
 import { resolve } from 'node:path';
 import { businessDateInZone, nowInstant } from '@alola/contracts';
 import type { Connection } from 'mongoose';
@@ -42,7 +42,7 @@ import {
 import { NotificationReminderDelivery } from './reminder-delivery';
 import { APPROVAL_AUDIT_ACTIONS } from '@alola/contracts';
 import { OrganizationService } from '../modules/organization';
-import { SalesService, type DepositRule } from '../modules/sales';
+import { QuotationService, SalesService, type DepositRule } from '../modules/sales';
 import { SecurityService } from '../modules/security';
 import { SettingsService, referenceItemImporter } from '../modules/settings';
 import { ImportService, readFirstSheet } from '../modules/imports';
@@ -96,6 +96,7 @@ export interface DomainServices {
   crm: () => CrmService;
   opportunities: () => OpportunityService;
   sales: () => SalesService;
+  quotations: () => QuotationService;
   collections: () => CollectionService;
   marketing: () => MarketingService;
   company: () => CompanyService;
@@ -127,6 +128,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let crmService: CrmService | undefined;
   let opportunityService: OpportunityService | undefined;
   let salesService: SalesService | undefined;
+  let quotationService: QuotationService | undefined;
   let collectionService: CollectionService | undefined;
   let marketingService: MarketingService | undefined;
   let companyService: CompanyService | undefined;
@@ -892,9 +894,162 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
           }
         },
       },
+      // Contract drafting (SALE-CONTRACT-001 … 004): snapshots, parties, signed copies, the trail.
+      unitSnapshots: {
+        snapshot: async (unitId, session) => {
+          const unit = await getInventoryService().findUnitForUpdate(unitId, session);
+          if (!unit) return undefined;
+          const project = await getInventoryService().findProjectUnscoped(unit.projectId);
+          return {
+            unitId: unit.unitId,
+            code: unit.code,
+            projectId: unit.projectId,
+            ...(project ? { projectCode: project.code, projectName: project.name } : {}),
+            buildingId: unit.buildingId,
+            floor: unit.floor,
+            propertyType: unit.propertyType,
+            usageType: unit.usageType,
+            finishingStatus: unit.finishingStatus,
+            area: unit.area,
+            ...(unit.gardenArea ? { gardenArea: unit.gardenArea } : {}),
+            ...(unit.roofArea ? { roofArea: unit.roofArea } : {}),
+            ...(unit.bedrooms !== undefined ? { bedrooms: unit.bedrooms } : {}),
+            ...(unit.bathrooms !== undefined ? { bathrooms: unit.bathrooms } : {}),
+          };
+        },
+      },
+      customers: {
+        snapshot: async (actor, customerId) => {
+          // Scoped and field-restricted first; a drafter outside the customer's scope still records
+          // the name and phone, never the identity.
+          const customer = await getCrmService()
+            .customerForSnapshot(actor, customerId)
+            .catch(() => getCrmService().findCustomerUnscoped(customerId));
+          if (!customer) return undefined;
+          return {
+            customerId: customer.customerId,
+            kind: customer.kind,
+            name: customer.name,
+            ...(customer.alternateName ? { alternateName: customer.alternateName } : {}),
+            primaryPhone: customer.primaryPhone,
+            ...(customer.email ? { email: customer.email } : {}),
+            ...(customer.address ? { address: customer.address } : {}),
+            ...(customer.city ? { city: customer.city } : {}),
+            ...('identity' in customer && customer.identity
+              ? {
+                  identity: {
+                    type: customer.identity.type,
+                    number: customer.identity.number,
+                    ...(customer.identity.issuingCountry
+                      ? { issuingCountry: customer.identity.issuingCountry }
+                      : {}),
+                  },
+                }
+              : {}),
+          };
+        },
+        inScope: async (actor, customerId) => {
+          try {
+            const customer = await getCrmService().getCustomer(actor, customerId);
+            return { name: customer.name };
+          } catch {
+            return undefined;
+          }
+        },
+      },
+      signedCopies: {
+        ownerOf: async (actor, documentId) => {
+          try {
+            return (await getDocumentService().getDocument(actor, documentId)).owner;
+          } catch {
+            return undefined;
+          }
+        },
+      },
+      history: {
+        targetHistory: async (target, limit) =>
+          ContractHistorySchema.shape.items.parse(
+            await getAuditService().targetHistory(target, limit),
+          ),
+      },
       today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
     });
     return salesService;
+  }
+
+  /**
+   * Quotations (SALE-QUOTE-001). The unit is read through the actor's own scope and price visibility,
+   * and nothing here can change a unit: a quotation never reserves inventory.
+   */
+  function getQuotationService(): QuotationService {
+    const connection = requireConnection();
+    quotationService ??= new QuotationService({
+      connection,
+      audit: getAuditService(),
+      units: {
+        priced: async (actor, unitId) => {
+          const unit = await getInventoryService().getUnit(actor, unitId);
+          return {
+            unitId: unit.unitId,
+            code: unit.code,
+            projectId: unit.projectId,
+            legalEntityId: unit.legalEntityId,
+            branchId: unit.branchId,
+            ...(unit.currentPrice ? { currentPrice: unit.currentPrice } : {}),
+          };
+        },
+      },
+      recipients: {
+        customerInScope: async (actor, customerId) => {
+          try {
+            await getCrmService().getCustomer(actor, customerId);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        leadInScope: async (actor, leadId) => {
+          try {
+            await getCrmService().getLead(actor, leadId);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        opportunity: async (actor, opportunityId) => {
+          try {
+            const opportunity = await getOpportunityService().get(actor, opportunityId);
+            return { customerId: opportunity.customerId };
+          } catch {
+            return undefined;
+          }
+        },
+      },
+      issueNumber: async (input, session) => {
+        const project = await getInventoryService().findProjectUnscoped(input.projectId);
+        try {
+          const issued = await getNumberingService().issue(
+            { accountId: 'system:sales' },
+            {
+              type: 'quotation',
+              issueDate: input.issueDate,
+              ...(project ? { projectCode: project.code } : {}),
+              source: input.source,
+              idempotencyKey: `quotation-${input.source.id}`,
+            },
+            session,
+          );
+          return issued.number;
+        } catch (error) {
+          const issue = (error as { issues?: { code: string }[] }).issues?.[0]?.code;
+          if (issue === 'NO_ACTIVE_SEQUENCE') return undefined;
+          throw error;
+        }
+      },
+      legacyNumber: (prefix, session) => getSalesService().allocateNumber(prefix, session),
+      today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
+    });
+    return quotationService;
   }
 
   /**
@@ -1038,6 +1193,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     crm: getCrmService,
     opportunities: getOpportunityService,
     sales: getSalesService,
+    quotations: getQuotationService,
     collections: getCollectionService,
     marketing: getMarketingService,
     company: getCompanyService,

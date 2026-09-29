@@ -1,5 +1,6 @@
 import {
   BusinessDateSchema,
+  ContractHistorySchema,
   DecimalStringSchema,
   SALES_AUDIT_ACTIONS,
   ScopeAssignmentSchema,
@@ -54,11 +55,13 @@ import {
   CONTRACTS_COLLECTION,
   COUNTERS_COLLECTION,
   INSTALLMENTS_COLLECTION,
+  QUOTATIONS_COLLECTION,
   RESERVATIONS_COLLECTION,
   contractModel,
   installmentModel,
   reservationModel,
 } from './model';
+import { QuotationService } from './quotations';
 import { salesRouter } from './router';
 import type { DepositRule } from './reservation-rules';
 import { SalesService } from './service';
@@ -95,7 +98,10 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
   let sales: SalesService;
   let holds: HoldService;
   let opportunities: OpportunityService;
+  let quotations: QuotationService;
   let app: Express;
+  /** Which record owns each signed-copy document the fake document port knows. */
+  const signedCopyOwners = new Map<string, { type: string; id: string }>();
 
   /** The configured commercial rules (BD-01 … BD-03); `null` is not configured. */
   let validityDays: number | null = 14;
@@ -125,6 +131,7 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
     return {
       get: (path: string) => withAccount(api().get(path)),
       post: (path: string) => withAccount(api().post(path).set('Origin', ALLOWED_ORIGIN)),
+      put: (path: string) => withAccount(api().put(path).set('Origin', ALLOWED_ORIGIN)),
     };
   };
 
@@ -184,7 +191,8 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
   }
 
   async function makeCustomer(ownerAccountId = REP_ONE, branchId = BRANCH_A) {
-    const actor = await actorFor(MANAGER);
+    // Created by its owner: naming another owner needs `crm.customer.transfer` (CRM-OWNER-001).
+    const actor = await actorFor(ownerAccountId);
     return crm.createCustomer(
       actor,
       {
@@ -234,6 +242,70 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       })
       .expect(options.expectStatus ?? 201);
     return response.body as ReservationBody;
+  }
+
+  interface ContractBody {
+    contractId: string;
+    contractNumber: string;
+    customerId: string;
+    state: string;
+    version: number;
+    paidAmount: Money;
+    outstandingAmount: Money;
+    totalPrice: Money;
+  }
+
+  interface InstallmentBody {
+    installmentId: string;
+    sequence: number;
+    kind: string;
+    dueOn: string;
+    amount: Money;
+    paidAmount: Money;
+    remainingAmount: Money;
+    state: string;
+  }
+
+  /** Draft a contract from a confirmed reservation; the body of the create call. */
+  async function draftFor(
+    accountId: string,
+    reservationId: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<ContractBody> {
+    const response = await as(accountId)
+      .post('/api/v1/sales/contracts')
+      .send({
+        reservationId,
+        contractedOn: '2026-09-22',
+        idempotencyKey: nextKey('idem-ctr-'),
+        ...extra,
+      });
+    // The body names the issue when a draft is refused, which a bare status would not.
+    expect(response.status, JSON.stringify(response.body)).toBe(201);
+    return (response.body as { contract: ContractBody }).contract;
+  }
+
+  /**
+   * Draft and activate — the two steps every active contract takes (SALE-CONTRACT-003). Returns the
+   * active contract and its frozen schedule.
+   */
+  async function contractFor(
+    accountId: string,
+    reservationId: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<{ contract: ContractBody; installments: InstallmentBody[] }> {
+    const draft = await draftFor(accountId, reservationId, extra);
+    const activated = await as(accountId)
+      .post(`/api/v1/sales/contracts/${draft.contractId}/activate`)
+      .send({ expectedVersion: draft.version })
+      .expect(200);
+    const rows = await as(accountId)
+      .get(`/api/v1/sales/contracts/${draft.contractId}/installments`)
+      .expect(200);
+    return {
+      contract: activated.body as ContractBody,
+      installments: (rows.body as { items: InstallmentBody[] }).items,
+    };
   }
 
   beforeAll(async () => {
@@ -340,6 +412,97 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
         maximumDiscountPercent: () => Promise.resolve(maximumDiscountPercent),
       },
       numbers: { issue: () => Promise.resolve(officialNumber) },
+      unitSnapshots: {
+        snapshot: async (unitId, session) => {
+          const unit = await inventory.findUnitForUpdate(unitId, session);
+          return unit
+            ? {
+                unitId: unit.unitId,
+                code: unit.code,
+                projectId: unit.projectId,
+                buildingId: unit.buildingId,
+                floor: unit.floor,
+                propertyType: unit.propertyType,
+                area: unit.area,
+              }
+            : undefined;
+        },
+      },
+      customers: {
+        snapshot: async (actor, customerId) => {
+          const customer = await crm.customerForSnapshot(actor, customerId).catch(() => undefined);
+          return customer
+            ? {
+                customerId: customer.customerId,
+                kind: customer.kind,
+                name: customer.name,
+                primaryPhone: customer.primaryPhone,
+                ...(customer.identity
+                  ? { identity: { type: customer.identity.type, number: customer.identity.number } }
+                  : {}),
+              }
+            : undefined;
+        },
+        inScope: async (actor, customerId) => {
+          try {
+            return { name: (await crm.getCustomer(actor, customerId)).name };
+          } catch {
+            return undefined;
+          }
+        },
+      },
+      signedCopies: {
+        ownerOf: (_actor, documentId) =>
+          Promise.resolve(signedCopyOwners.get(documentId)),
+      },
+      history: {
+        targetHistory: async (target, limit) =>
+          ContractHistorySchema.shape.items.parse(await audit.targetHistory(target, limit)),
+      },
+      today: () => TODAY,
+    });
+    quotations = new QuotationService({
+      connection,
+      audit,
+      units: {
+        priced: async (actor, unitId) => {
+          const unit = await inventory.getUnit(actor, unitId);
+          return {
+            unitId: unit.unitId,
+            code: unit.code,
+            projectId: unit.projectId,
+            legalEntityId: unit.legalEntityId,
+            branchId: unit.branchId,
+            ...(unit.currentPrice ? { currentPrice: unit.currentPrice } : {}),
+          };
+        },
+      },
+      recipients: {
+        customerInScope: async (actor, customerId) => {
+          try {
+            await crm.getCustomer(actor, customerId);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        leadInScope: async (actor, leadId) => {
+          try {
+            await crm.getLead(actor, leadId);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        opportunity: async (actor, opportunityId) => {
+          try {
+            return { customerId: (await opportunities.get(actor, opportunityId)).customerId };
+          } catch {
+            return undefined;
+          }
+        },
+      },
+      legacyNumber: (prefix, session) => sales.allocateNumber(prefix, session),
       today: () => TODAY,
     });
     holds = new HoldService({
@@ -377,7 +540,12 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       'crm.opportunity.manage',
       'sales.contract.view',
       'sales.contract.create',
+      'sales.contract.activate',
+      'sales.contract.sign',
+      'sales.contract.amend',
       'sales.contract.cancel',
+      'sales.quotation.view',
+      'sales.quotation.manage',
       'collection.installment.view',
     ];
     await bootstrapRole(connection, { key: R_SALES, name: label('sales'), permissions: full });
@@ -423,7 +591,10 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
     };
 
     const modules: ApiModule[] = [
-      { basePath: '/sales', router: salesRouter({ getService: () => sales }) },
+      {
+        basePath: '/sales',
+        router: salesRouter({ getService: () => sales, getQuotations: () => quotations }),
+      },
     ];
     app = createApp({
       config: { CORS_ALLOWED_ORIGINS: [ALLOWED_ORIGIN], TRUST_PROXY_HOPS: 1, APP_ENV: 'test' },
@@ -441,6 +612,7 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
     for (const name of [
       INSTALLMENTS_COLLECTION,
       CONTRACTS_COLLECTION,
+      QUOTATIONS_COLLECTION,
       RESERVATIONS_COLLECTION,
       COUNTERS_COLLECTION,
       HOLDS_COLLECTION,
@@ -466,9 +638,11 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
   });
 
   beforeEach(async () => {
+    signedCopyOwners.clear();
     for (const name of [
       INSTALLMENTS_COLLECTION,
       CONTRACTS_COLLECTION,
+      QUOTATIONS_COLLECTION,
       RESERVATIONS_COLLECTION,
       HOLDS_COLLECTION,
       OPPORTUNITIES_COLLECTION,
@@ -827,57 +1001,32 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
         frequency: 'monthly',
         firstDueOn: BusinessDateSchema.parse('2026-10-01'),
       });
-      const created = await as(MANAGER)
-        .post('/api/v1/sales/contracts')
-        .send({
-          reservationId: reservation.reservationId,
-          contractedOn: '2026-09-22',
-          idempotencyKey: nextKey('idem-ctr-'),
-        })
-        .expect(201);
+      const created = await contractFor(MANAGER, reservation.reservationId);
 
-      const rows = created.body.installments as { amount: Money }[];
+      const rows = created.installments;
       const total = rows.reduce<Money>((running, row) => addMoney(running, row.amount), egp('0'));
       expect(compareMoney(total, egp('1000000'))).toBe(0);
       expect(rows.map((row) => row.amount.amount)).toEqual(['333333.34', '333333.33', '333333.33']);
-      expect(created.body.contract.contractNumber).toMatch(/^CTR-\d{4}-\d{5}$/);
+      expect(created.contract.contractNumber).toMatch(/^CTR-\d{4}-\d{5}$/);
     });
 
     it('credits the reservation amount against the earliest rows', async () => {
       const { reservation } = await confirmedReservation('3000000');
-      const created = await as(MANAGER)
-        .post('/api/v1/sales/contracts')
-        .send({
-          reservationId: reservation.reservationId,
-          contractedOn: '2026-09-22',
-          idempotencyKey: nextKey('idem-ctr-'),
-        })
-        .expect(201);
+      const created = await contractFor(MANAGER, reservation.reservationId);
 
-      const rows = created.body.installments as {
-        kind: string;
-        paidAmount: Money;
-        state: string;
-      }[];
+      const rows = created.installments;
       // The 100,000 reservation lands on the 600,000 down payment, leaving it partially paid.
       expect(rows[0]?.kind).toBe('downPayment');
       expect(rows[0]?.paidAmount.amount).toBe('100000');
       expect(rows[0]?.state).toBe('partiallyPaid');
       expect(rows[1]?.paidAmount.amount).toBe('0');
-      expect(created.body.contract.paidAmount.amount).toBe('100000');
-      expect(created.body.contract.outstandingAmount.amount).toBe('2900000');
+      expect(created.contract.paidAmount.amount).toBe('100000');
+      expect(created.contract.outstandingAmount.amount).toBe('2900000');
     });
 
     it('moves the unit to contracted and the reservation to converted, in one transaction', async () => {
       const { unit, reservation } = await confirmedReservation();
-      await as(MANAGER)
-        .post('/api/v1/sales/contracts')
-        .send({
-          reservationId: reservation.reservationId,
-          contractedOn: '2026-09-22',
-          idempotencyKey: nextKey('idem-ctr-'),
-        })
-        .expect(201);
+      await contractFor(MANAGER, reservation.reservationId);
 
       const storedUnit = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
       expect(storedUnit?.status).toBe('contracted');
@@ -928,7 +1077,18 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
         .expect(200);
 
       expect(replay.body.contract.contractId).toBe(first.body.contract.contractId);
+      expect(replay.body.contract.state).toBe('draft');
       expect(await contractModel(connection).countDocuments({})).toBe(1);
+      // A draft freezes nothing: no instalment exists until activation.
+      expect(
+        await installmentModel(connection).countDocuments({
+          contractId: first.body.contract.contractId,
+        }),
+      ).toBe(0);
+      await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${first.body.contract.contractId}/activate`)
+        .send({ expectedVersion: first.body.contract.version })
+        .expect(200);
       expect(
         await installmentModel(connection).countDocuments({
           contractId: first.body.contract.contractId,
@@ -953,27 +1113,50 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       expect(numbers.size).toBe(3);
     });
 
-    it('refuses to cancel a contract that has money against it', async () => {
+    it('refuses to cancel a contract with money collected beyond the reservation (BMP-2)', async () => {
       const { reservation } = await confirmedReservation();
-      const created = await as(MANAGER)
-        .post('/api/v1/sales/contracts')
-        .send({
-          reservationId: reservation.reservationId,
-          contractedOn: '2026-09-22',
-          idempotencyKey: nextKey('idem-ctr-'),
-        })
-        .expect(201);
-      // The reservation amount is already credited, so paidAmount is above zero.
+      const { contract } = await contractFor(MANAGER, reservation.reservationId);
+      // A receipt, as the collections module would record it: paid now exceeds the reservation's own.
+      await connection
+        .collection(CONTRACTS_COLLECTION)
+        .updateOne(
+          { contractId: contract.contractId },
+          { $set: { 'paidAmount.amount': new mongoose.Types.Decimal128('150000') } },
+        );
       const refused = await as(MANAGER)
-        .post(`/api/v1/sales/contracts/${created.body.contract.contractId}/cancel`)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/cancel`)
         .send({ reason: 'trying to cancel a paid contract' })
         .expect(409);
       expect(refused.body.error.code).toBe('CONFLICT');
       const stored = await contractModel(connection)
-        .findOne({ contractId: created.body.contract.contractId })
+        .findOne({ contractId: contract.contractId })
         .lean()
         .exec();
       expect(stored?.state).toBe('active');
+    });
+
+    it('cancels with only the reservation money on it, and hands the refund to finance', async () => {
+      const { unit, reservation } = await confirmedReservation();
+      const { contract } = await contractFor(MANAGER, reservation.reservationId);
+      const cancelled = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/cancel`)
+        .send({ reason: 'customer withdrew before paying more' })
+        .expect(200);
+      expect(cancelled.body).toMatchObject({ state: 'cancelled', refundHandoff: 'pending' });
+      const rows = await installmentModel(connection)
+        .find({ contractId: contract.contractId })
+        .lean()
+        .exec();
+      // Every row is cancelled, none deleted; the money taken stays on the contract for the refund.
+      expect(rows).toHaveLength(13);
+      expect(rows.every((row) => row.state === 'cancelled')).toBe(true);
+      const stored = await contractModel(connection)
+        .findOne({ contractId: contract.contractId })
+        .lean()
+        .exec();
+      expect(stored?.paidAmount.amount.toString()).toBe('100000');
+      const storedUnit = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(storedUnit?.status).toBe('available');
     });
 
     it('cancels an unpaid contract, cancels its installments, and returns the unit', async () => {
@@ -988,24 +1171,18 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       await as(MANAGER)
         .post(`/api/v1/sales/reservations/${reservation.reservationId}/confirm`)
         .expect(200);
-      const created = await as(MANAGER)
-        .post('/api/v1/sales/contracts')
-        .send({
-          reservationId: reservation.reservationId,
-          contractedOn: '2026-09-22',
-          idempotencyKey: nextKey('idem-ctr-'),
-        })
-        .expect(201);
+      const created = await contractFor(MANAGER, reservation.reservationId);
 
-      await as(MANAGER)
-        .post(`/api/v1/sales/contracts/${created.body.contract.contractId}/cancel`)
+      const cancelled = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${created.contract.contractId}/cancel`)
         .send({ reason: 'customer defaulted before paying', releaseUnit: true })
         .expect(200);
+      expect(cancelled.body.refundHandoff).toBe('notApplicable');
 
       const storedUnit = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
       expect(storedUnit?.status).toBe('available');
       const installments = await installmentModel(connection)
-        .find({ contractId: created.body.contract.contractId })
+        .find({ contractId: created.contract.contractId })
         .lean()
         .exec();
       // Cancelled, never deleted: the schedule that existed is part of the history (ADR-0009).
@@ -1013,22 +1190,16 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       expect(installments.every((row) => row.state === 'cancelled')).toBe(true);
     });
 
-    it('audits the contract creation and the schedule generation', async () => {
+    it('audits the draft, the activation and the schedule generation', async () => {
       const { reservation } = await confirmedReservation();
-      const created = await as(MANAGER)
-        .post('/api/v1/sales/contracts')
-        .send({
-          reservationId: reservation.reservationId,
-          contractedOn: '2026-09-22',
-          idempotencyKey: nextKey('idem-ctr-'),
-        })
-        .expect(201);
+      const created = await contractFor(MANAGER, reservation.reservationId);
       const events = await connection
         .collection(AUDIT_COLLECTION)
-        .find({ 'target.id': created.body.contract.contractId })
+        .find({ 'target.id': created.contract.contractId })
         .toArray();
       const actions = events.map((event) => event['action'] as string);
       expect(actions).toContain(SALES_AUDIT_ACTIONS.contractCreated);
+      expect(actions).toContain(SALES_AUDIT_ACTIONS.contractActivated);
       expect(actions).toContain(SALES_AUDIT_ACTIONS.scheduleGenerated);
     });
   });
@@ -1084,15 +1255,7 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       await as(MANAGER)
         .post(`/api/v1/sales/reservations/${reservation.reservationId}/confirm`)
         .expect(200);
-      const created = await as(MANAGER)
-        .post('/api/v1/sales/contracts')
-        .send({
-          reservationId: reservation.reservationId,
-          contractedOn: '2026-09-22',
-          idempotencyKey: nextKey('idem-ctr-'),
-        })
-        .expect(201);
-      return created.body as { contract: { contractId: string; customerId: string } };
+      return contractFor(MANAGER, reservation.reservationId);
     }
 
     it('separates overdue, due and upcoming against the organization date', async () => {
@@ -1173,14 +1336,7 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
         await as(owner)
           .post(`/api/v1/sales/reservations/${reservation.reservationId}/confirm`)
           .expect(200);
-        await as(owner)
-          .post('/api/v1/sales/contracts')
-          .send({
-            reservationId: reservation.reservationId,
-            contractedOn: '2026-09-22',
-            idempotencyKey: nextKey('idem-ctr-'),
-          })
-          .expect(201);
+        await contractFor(owner, reservation.reservationId);
       }
       // Amounts whose float sum is not exact: 0.1 + 0.2 style values at contract scale.
       await contractAs(REP_ONE, '1000000.10');
@@ -1575,13 +1731,18 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       }).expect(201);
       const reservationId = second.body.reservationId as string;
       await as(MANAGER).post(`/api/v1/sales/reservations/${reservationId}/confirm`).expect(200);
+      // A draft wins nothing: the opportunity is won when the contract is activated (CRM-OPP-002).
+      const draft = await draftFor(MANAGER, reservationId);
+      expect((await opportunities.findUnscoped(opportunity.opportunityId))?.stage).toBe(
+        'reservation',
+      );
       await as(MANAGER)
-        .post('/api/v1/sales/contracts')
-        .send({ reservationId, contractedOn: TODAY, idempotencyKey: nextKey('idem-ctr-') })
-        .expect(201);
+        .post(`/api/v1/sales/contracts/${draft.contractId}/activate`)
+        .send({ expectedVersion: draft.version })
+        .expect(200);
       const won = await opportunities.findUnscoped(opportunity.opportunityId);
       expect(won?.stage).toBe('won');
-      expect(won?.contractId).toBeDefined();
+      expect(won?.contractId).toBe(draft.contractId);
     });
 
     it('takes the official number when a format is active, and the legacy series otherwise', async () => {
@@ -1620,13 +1781,600 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       const reservationId = made.body.reservationId as string;
       expect(made.body.paymentPlan.downPaymentDueOn).toBe('2026-09-22');
       await as(MANAGER).post(`/api/v1/sales/reservations/${reservationId}/confirm`).expect(200);
-      const created = await as(MANAGER)
-        .post('/api/v1/sales/contracts')
-        .send({ reservationId, contractedOn: TODAY, idempotencyKey: nextKey('idem-ctr-') })
-        .expect(201);
-      const rows = created.body.installments as { kind: string; dueOn: string }[];
+      const { installments: rows } = await contractFor(MANAGER, reservationId);
       expect(rows[0]).toMatchObject({ kind: 'downPayment', dueOn: '2026-09-22' });
       expect(rows[1]).toMatchObject({ kind: 'installment', dueOn: '2026-10-22' });
+    });
+  });
+
+  /* ------------------------------------------------ BMP-1 package 6: contracts */
+
+  const contractsContext = { correlationId: 'it-sales-contracts' };
+
+  async function confirmed(options: { plan?: PaymentPlan; price?: string; amount?: string } = {}) {
+    const price = options.price ?? '3000000';
+    const { unit } = await makeUnit(price);
+    const customer = await makeCustomer();
+    const reservation = await reserve(MANAGER, {
+      unitId: unit.unitId,
+      customerId: customer.customerId,
+      agreedPrice: egp(price),
+      reservationAmount: egp(options.amount ?? '100000'),
+      paymentPlan: options.plan ?? defaultPlan,
+    });
+    await as(MANAGER)
+      .post(`/api/v1/sales/reservations/${reservation.reservationId}/confirm`)
+      .expect(200);
+    return { unit, customer, reservation };
+  }
+
+  const latestRequest = async (contractId: string) => {
+    const stored = await contractModel(connection).findOne({ contractId }).lean().exec();
+    return stored?.approvals?.at(-1)?.requestId ?? '';
+  };
+
+  describe('contract drafts (SALE-CONTRACT-001, 002)', () => {
+    it('drafts with snapshots and a proposed schedule, and commits nothing', async () => {
+      const { unit, reservation } = await confirmed();
+      const draft = await as(MANAGER)
+        .post('/api/v1/sales/contracts')
+        .send({
+          reservationId: reservation.reservationId,
+          contractedOn: '2026-09-22',
+          idempotencyKey: nextKey('idem-ctr-'),
+        })
+        .expect(201);
+      const contract = draft.body.contract;
+      expect(contract).toMatchObject({
+        state: 'draft',
+        exceptions: [],
+        parties: [{ role: 'buyer', sharePercent: '100' }],
+        signing: { state: 'unsigned' },
+        pricing: { agreedPrice: egp('3000000'), reservationAmount: egp('100000') },
+        unitSnapshot: { unitId: unit.unitId, code: unit.code },
+      });
+      expect(contract.warnings).toEqual(expect.arrayContaining(['identityMissing', 'notSigned']));
+      expect(contract.draftSchedule).toHaveLength(13);
+      expect(draft.body.installments).toEqual([]);
+      // The unit is still the reservation's, and the reservation now points at its draft.
+      const storedUnit = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(storedUnit?.status).toBe('reserved');
+      const storedReservation = await reservationModel(connection)
+        .findOne({ reservationId: reservation.reservationId })
+        .lean()
+        .exec();
+      expect(storedReservation).toMatchObject({
+        state: 'confirmed',
+        contractId: contract.contractId,
+      });
+      // A draft is not portfolio: the summary counts only committed contracts.
+      const summary = await as(MANAGER).get('/api/v1/sales/contracts/summary').expect(200);
+      expect(summary.body.contracts).toBe(0);
+    });
+
+    it("records the buyer's identity but shows it only to someone who may see identities", async () => {
+      const { unit } = await makeUnit();
+      const manager = await actorFor(MANAGER);
+      // A fixture-only actor who may record an identity; the manager themself may not read one.
+      const actor = {
+        ...manager,
+        permissions: [...manager.permissions, 'crm.customer.viewIdentity' as const],
+      };
+      const customer = await crm.createCustomer(
+        actor,
+        {
+          name: 'مشتري بهوية',
+          primaryPhone: `+2012${String(20000000 + counter++).padStart(8, '0')}`,
+          branchId: BRANCH_A,
+          ownerAccountId: REP_ONE,
+          identity: { type: 'nationalId', number: '29001011234567' },
+        },
+        contractsContext,
+      );
+      const reservation = await reserve(MANAGER, {
+        unitId: unit.unitId,
+        customerId: customer.customerId,
+      });
+      await as(MANAGER)
+        .post(`/api/v1/sales/reservations/${reservation.reservationId}/confirm`)
+        .expect(200);
+      // Drafted by someone who may see identities: the snapshot records it (SALE-CONTRACT-001).
+      const { contract: draft } = await sales.createContract(
+        actor,
+        {
+          reservationId: reservation.reservationId,
+          contractedOn: TODAY,
+          idempotencyKey: nextKey('idem-ctr-'),
+        },
+        contractsContext,
+      );
+      const stored = await contractModel(connection)
+        .findOne({ contractId: draft.contractId })
+        .lean()
+        .exec();
+      expect(stored?.customerSnapshot?.['identity']).toMatchObject({ number: '29001011234567' });
+      // The manager holds no `crm.customer.viewIdentity`: absent, not masked (SEC-029).
+      const read = await as(MANAGER).get(`/api/v1/sales/contracts/${draft.contractId}`).expect(200);
+      expect(read.body.customerSnapshot.name).toBe('مشتري بهوية');
+      expect(read.body.customerSnapshot.identity).toBeUndefined();
+      expect(read.body.warnings).not.toContain('identityMissing');
+    });
+
+    it('validates parties exactly, and refuses a person the actor cannot see', async () => {
+      const { reservation, customer } = await confirmed();
+      const coBuyer = await makeCustomer();
+      const refused = await as(MANAGER)
+        .post('/api/v1/sales/contracts')
+        .send({
+          reservationId: reservation.reservationId,
+          contractedOn: '2026-09-22',
+          idempotencyKey: nextKey('idem-ctr-'),
+          parties: [
+            { role: 'buyer', customerId: customer.customerId, sharePercent: '66.6666' },
+            { role: 'coBuyer', customerId: coBuyer.customerId, sharePercent: '33.3333' },
+          ],
+        })
+        .expect(400);
+      expect(refused.body.error.issues[0].code).toBe('SHARES_MUST_TOTAL_100');
+      expect(await contractModel(connection).countDocuments({})).toBe(0);
+
+      const draft = await draftFor(MANAGER, reservation.reservationId, {
+        parties: [
+          { role: 'buyer', customerId: customer.customerId, sharePercent: '66.6667' },
+          { role: 'coBuyer', customerId: coBuyer.customerId, sharePercent: '33.3333' },
+        ],
+      });
+      const changed = await as(MANAGER)
+        .put(`/api/v1/sales/contracts/${draft.contractId}/parties`)
+        .send({
+          expectedVersion: draft.version,
+          parties: [
+            { role: 'buyer', customerId: customer.customerId, sharePercent: '100' },
+            { role: 'guarantor', customerId: coBuyer.customerId },
+          ],
+        })
+        .expect(200);
+      expect(changed.body.parties).toHaveLength(2);
+      expect(changed.body.parties[1]).toMatchObject({ role: 'guarantor', name: 'عميل تجريبي' });
+    });
+
+    it('refuses a party the drafting representative cannot see', async () => {
+      const { unit } = await makeUnit();
+      const own = await makeCustomer(REP_TWO);
+      const hidden = await makeCustomer(REP_ONE);
+      const reservation = await reserve(REP_TWO, { unitId: unit.unitId, customerId: own.customerId });
+      await as(REP_TWO)
+        .post(`/api/v1/sales/reservations/${reservation.reservationId}/confirm`)
+        .expect(200);
+      const refused = await as(REP_TWO)
+        .post('/api/v1/sales/contracts')
+        .send({
+          reservationId: reservation.reservationId,
+          contractedOn: '2026-09-22',
+          idempotencyKey: nextKey('idem-ctr-'),
+          parties: [
+            { role: 'buyer', customerId: own.customerId, sharePercent: '100' },
+            { role: 'guarantor', customerId: hidden.customerId },
+          ],
+        })
+        .expect(400);
+      expect(refused.body.error.issues[0].code).toBe('PARTY_NOT_FOUND');
+    });
+
+    it('holds the reservation while a draft exists, and frees it when the draft is withdrawn', async () => {
+      const { reservation } = await confirmed();
+      const draft = await draftFor(MANAGER, reservation.reservationId);
+      const blocked = await as(MANAGER)
+        .post(`/api/v1/sales/reservations/${reservation.reservationId}/cancel`)
+        .send({ reason: 'changed mind' })
+        .expect(409);
+      expect(blocked.body.error.issues[0].code).toBe('CONTRACT_IN_PROGRESS');
+      // A second draft for the same sale is refused while the first is live.
+      await as(MANAGER)
+        .post('/api/v1/sales/contracts')
+        .send({
+          reservationId: reservation.reservationId,
+          contractedOn: '2026-09-22',
+          idempotencyKey: nextKey('idem-ctr-'),
+        })
+        .expect(409);
+      // Expiry leaves it alone too.
+      await reservationModel(connection).updateOne(
+        { reservationId: reservation.reservationId },
+        { $set: { expiresOn: '2026-01-01' } },
+      );
+      await sales.sweep(MAINTENANCE_ACTOR, contractsContext);
+      expect(
+        (await reservationModel(connection)
+          .findOne({ reservationId: reservation.reservationId })
+          .lean()
+          .exec())?.state,
+      ).toBe('confirmed');
+
+      const withdrawn = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${draft.contractId}/cancel`)
+        .send({ reason: 'redraft with a co-buyer' })
+        .expect(200);
+      expect(withdrawn.body.state).toBe('cancelled');
+      await reservationModel(connection).updateOne(
+        { reservationId: reservation.reservationId },
+        { $set: { expiresOn: '2026-12-01' } },
+      );
+      await draftFor(MANAGER, reservation.reservationId);
+    });
+  });
+
+  describe('activation and signing (SALE-CONTRACT-003, 004)', () => {
+    it('activates at once when no exception applies, freezing the schedule', async () => {
+      const { unit, reservation } = await confirmed();
+      const { contract, installments } = await contractFor(MANAGER, reservation.reservationId);
+      expect(contract.state).toBe('active');
+      expect(installments).toHaveLength(13);
+      const storedUnit = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(storedUnit?.status).toBe('contracted');
+      // Activating twice is a conflict, not a second schedule.
+      await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/activate`)
+        .send({ expectedVersion: contract.version })
+        .expect(409);
+      expect(
+        await installmentModel(connection).countDocuments({ contractId: contract.contractId }),
+      ).toBe(13);
+    });
+
+    it('sends a changed plan through the exception approval where a policy governs it', async () => {
+      governed.add('sales.contract.exception');
+      const { reservation } = await confirmed();
+      const draft = await draftFor(MANAGER, reservation.reservationId, {
+        paymentPlan: { ...defaultPlan, installmentCount: 24 },
+      });
+      const waiting = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${draft.contractId}/activate`)
+        .send({ expectedVersion: draft.version })
+        .expect(200);
+      expect(waiting.body).toMatchObject({ state: 'pendingApproval', exceptions: ['planChanged'] });
+      expect(
+        await installmentModel(connection).countDocuments({ contractId: draft.contractId }),
+      ).toBe(0);
+
+      // Refused: back to a draft that can be corrected.
+      const requestId = await latestRequest(draft.contractId);
+      approvalStates.set(requestId, 'rejected');
+      await sales.syncApproval(MAINTENANCE_ACTOR, requestId, contractsContext);
+      const again = await as(MANAGER).get(`/api/v1/sales/contracts/${draft.contractId}`).expect(200);
+      expect(again.body.state).toBe('draft');
+
+      // Asked again and granted: the engine's outcome activates it.
+      await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${draft.contractId}/activate`)
+        .send({ expectedVersion: again.body.version as number })
+        .expect(200);
+      const second = await latestRequest(draft.contractId);
+      expect(second).not.toBe(requestId);
+      approvalStates.set(second, 'approved');
+      await sales.sweep(MAINTENANCE_ACTOR, contractsContext);
+      const active = await as(MANAGER).get(`/api/v1/sales/contracts/${draft.contractId}`).expect(200);
+      expect(active.body.state).toBe('active');
+      expect(
+        await installmentModel(connection).countDocuments({ contractId: draft.contractId }),
+      ).toBe(25);
+    });
+
+    it('activates a changed plan by permission alone where no policy governs it', async () => {
+      const { reservation } = await confirmed();
+      const { contract } = await contractFor(MANAGER, reservation.reservationId, {
+        paymentPlan: { ...defaultPlan, installmentCount: 6 },
+      });
+      expect(contract.state).toBe('active');
+    });
+
+    it('records signing once, with a signed copy the contract owns', async () => {
+      const { reservation } = await confirmed();
+      const { contract } = await contractFor(MANAGER, reservation.reservationId);
+      signedCopyOwners.set('doc_signedcopy00000000000000000001', {
+        type: 'contract',
+        id: contract.contractId,
+      });
+      signedCopyOwners.set('doc_othercopy000000000000000000001', {
+        type: 'contract',
+        id: 'ctr_someotherone0000000000000000001',
+      });
+      const foreign = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/signing`)
+        .send({
+          signedOn: '2026-09-22',
+          documentId: 'doc_othercopy000000000000000000001',
+          expectedVersion: contract.version,
+        })
+        .expect(400);
+      expect(foreign.body.error.issues[0].code).toBe('DOCUMENT_NOT_OWNED_BY_CONTRACT');
+      await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/signing`)
+        .send({ signedOn: '2026-09-30', expectedVersion: contract.version })
+        .expect(400);
+      const signed = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/signing`)
+        .send({
+          signedOn: '2026-09-22',
+          documentId: 'doc_signedcopy00000000000000000001',
+          expectedVersion: contract.version,
+        })
+        .expect(200);
+      expect(signed.body.signing).toMatchObject({ state: 'signed', signedOn: '2026-09-22' });
+      expect(signed.body.warnings).not.toContain('notSigned');
+      const twice = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/signing`)
+        .send({ signedOn: '2026-09-22', expectedVersion: signed.body.version as number })
+        .expect(409);
+      expect(twice.body.error.issues[0].code).toBe('ALREADY_SIGNED');
+    });
+
+    it("shows the contract's trail to a contract viewer, without change details", async () => {
+      const { reservation } = await confirmed();
+      const { contract } = await contractFor(MANAGER, reservation.reservationId);
+      const history = await as(VIEWER)
+        .get(`/api/v1/sales/contracts/${contract.contractId}/history`)
+        .expect(200);
+      const actions = (history.body.items as { action: string }[]).map((entry) => entry.action);
+      expect(actions).toEqual(
+        expect.arrayContaining([
+          SALES_AUDIT_ACTIONS.contractCreated,
+          SALES_AUDIT_ACTIONS.contractActivated,
+        ]),
+      );
+      expect(history.body.items[0].changes).toBeUndefined();
+      await as(REP_TWO).get(`/api/v1/sales/contracts/${contract.contractId}/history`).expect(404);
+    });
+  });
+
+  describe('milestones and the maintenance deposit (COL-SCHEDULE-001)', () => {
+    it('adds the maintenance deposit to the contract total and freezes both into the schedule', async () => {
+      const plan: PaymentPlan = {
+        ...defaultPlan,
+        milestones: [
+          {
+            dueOn: BusinessDateSchema.parse('2027-03-15'),
+            amount: egp('300000'),
+            label: { ar: 'استلام الهيكل', en: 'Structure complete' },
+          },
+        ],
+        maintenanceDeposit: { amount: egp('150000'), dueOn: BusinessDateSchema.parse('2027-12-01') },
+      };
+      const { reservation } = await confirmed({ plan });
+      const { contract, installments } = await contractFor(MANAGER, reservation.reservationId);
+      expect(contract.totalPrice).toEqual(egp('3150000'));
+      expect(contract.outstandingAmount).toEqual(egp('3050000'));
+      expect(installments.map((row) => row.kind)).toEqual(
+        expect.arrayContaining(['milestone', 'maintenanceDeposit']),
+      );
+      const sum = installments.reduce<Money>((running, row) => addMoney(running, row.amount), egp('0'));
+      expect(compareMoney(sum, egp('3150000'))).toBe(0);
+      // Rows in date order, numbered from one.
+      const dates = installments.map((row) => row.dueOn);
+      expect([...dates].sort()).toEqual(dates);
+    });
+  });
+
+  describe('amendments (SALE-CHANGE-001, COL-SCHEDULE-002)', () => {
+    const newPlan = { installmentCount: 6, frequency: 'quarterly', firstDueOn: '2026-12-01' };
+
+    it('refuses an amendment no policy can approve: a confirmed schedule is immutable', async () => {
+      const { reservation } = await confirmed();
+      const { contract } = await contractFor(MANAGER, reservation.reservationId);
+      const refused = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/amendments`)
+        .send({ plan: newPlan, reason: 'customer asked for quarterly', expectedVersion: contract.version })
+        .expect(409);
+      expect(refused.body.error.issues[0].code).toBe('AMENDMENT_NEEDS_POLICY');
+      expect(
+        await installmentModel(connection).countDocuments({
+          contractId: contract.contractId,
+          state: 'rescheduled',
+        }),
+      ).toBe(0);
+    });
+
+    it('replaces only unpaid rows, keeps them as rescheduled, and reconciles to the piastre', async () => {
+      governed.add('sales.contract.amendment');
+      const { reservation } = await confirmed();
+      const { contract, installments } = await contractFor(MANAGER, reservation.reservationId);
+      const requested = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/amendments`)
+        .send({ plan: newPlan, reason: 'customer asked for quarterly', expectedVersion: contract.version })
+        .expect(200);
+      const amendment = requested.body.amendments[0];
+      // The part-paid down payment stays; the twelve unpaid instalments are replaced.
+      expect(amendment).toMatchObject({ state: 'pending', amount: egp('2400000') });
+      expect(amendment.replacedInstallmentIds).toHaveLength(12);
+      expect(amendment.rows).toHaveLength(6);
+      expect(amendment.rows[0].sequence).toBe(installments.length + 1);
+
+      approvalStates.set(amendment.requestId as string, 'approved');
+      await sales.syncApproval(MAINTENANCE_ACTOR, amendment.requestId as string, contractsContext);
+
+      const rows = await installmentModel(connection)
+        .find({ contractId: contract.contractId })
+        .lean()
+        .exec();
+      expect(rows.filter((row) => row.state === 'rescheduled')).toHaveLength(12);
+      const live = rows.filter((row) => row.state !== 'rescheduled' && row.state !== 'cancelled');
+      expect(live).toHaveLength(7);
+      const sum = live.reduce<Money>(
+        (running, row) => addMoney(running, { amount: row.amount.amount.toString() as Money['amount'], currency: 'EGP' }),
+        egp('0'),
+      );
+      expect(compareMoney(sum, egp('3000000'))).toBe(0);
+      const after = await as(MANAGER).get(`/api/v1/sales/contracts/${contract.contractId}`).expect(200);
+      expect(after.body.amendments[0].state).toBe('applied');
+      expect(after.body.outstandingAmount).toEqual(contract.outstandingAmount);
+    });
+
+    it('marks an amendment stale when a replaced row takes money before the approval', async () => {
+      governed.add('sales.contract.amendment');
+      const { reservation } = await confirmed();
+      const { contract } = await contractFor(MANAGER, reservation.reservationId);
+      const requested = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/amendments`)
+        .send({ plan: newPlan, reason: 'customer asked for quarterly', expectedVersion: contract.version })
+        .expect(200);
+      const amendment = requested.body.amendments[0];
+      // A receipt lands on one of the replaced rows meanwhile.
+      await connection.collection(INSTALLMENTS_COLLECTION).updateOne(
+        { installmentId: amendment.replacedInstallmentIds[0] },
+        {
+          $set: {
+            state: 'partiallyPaid',
+            'paidAmount.amount': new mongoose.Types.Decimal128('1000'),
+          },
+        },
+      );
+      approvalStates.set(amendment.requestId as string, 'approved');
+      await sales.syncApproval(MAINTENANCE_ACTOR, amendment.requestId as string, contractsContext);
+      const after = await as(MANAGER).get(`/api/v1/sales/contracts/${contract.contractId}`).expect(200);
+      expect(after.body.amendments[0].state).toBe('stale');
+      expect(
+        await installmentModel(connection).countDocuments({
+          contractId: contract.contractId,
+          state: 'rescheduled',
+        }),
+      ).toBe(0);
+    });
+  });
+
+  describe('contract cancellation through approval (SALE-CANCEL-001)', () => {
+    it('waits for the approval, then cancels and releases the unit', async () => {
+      governed.add('sales.contract.cancellation');
+      const { unit, reservation } = await confirmed({ amount: '0' });
+      const { contract } = await contractFor(MANAGER, reservation.reservationId);
+      const waiting = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/cancel`)
+        .send({ reason: 'customer withdrew' })
+        .expect(200);
+      expect(waiting.body.state).toBe('active');
+      expect(waiting.body.pendingCancellation.reason).toBe('customer withdrew');
+      await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/cancel`)
+        .send({ reason: 'again' })
+        .expect(409);
+      approvalStates.set(waiting.body.pendingCancellation.requestId as string, 'approved');
+      await sales.sweep(MAINTENANCE_ACTOR, contractsContext);
+      const cancelled = await as(MANAGER)
+        .get(`/api/v1/sales/contracts/${contract.contractId}`)
+        .expect(200);
+      expect(cancelled.body).toMatchObject({ state: 'cancelled', refundHandoff: 'notApplicable' });
+      const storedUnit = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(storedUnit?.status).toBe('available');
+    });
+  });
+
+  describe('quotations (SALE-QUOTE-001)', () => {
+    async function quote(accountId = REP_ONE) {
+      const { unit } = await makeUnit();
+      const customer = await makeCustomer(accountId);
+      const created = await as(accountId)
+        .post('/api/v1/sales/quotations')
+        .send({
+          customerId: customer.customerId,
+          unitId: unit.unitId,
+          agreedPrice: egp('2850000'),
+          paymentPlan: defaultPlan,
+          validUntil: '2026-10-06',
+          idempotencyKey: nextKey('idem-quo-'),
+        });
+      expect(created.status, JSON.stringify(created.body)).toBe(201);
+      return { unit, customer, quotation: created.body };
+    }
+
+    it('prices a unit without reserving it', async () => {
+      const { unit, quotation } = await quote();
+      expect(quotation).toMatchObject({
+        revision: 1,
+        state: 'active',
+        listPrice: egp('3000000'),
+        agreedPrice: egp('2850000'),
+        discountPercentage: '5',
+        total: egp('2850000'),
+      });
+      expect(quotation.quotationNumber).toMatch(/^QUO-2026-\d{5}$/);
+      expect(quotation.rows).toHaveLength(13);
+      const storedUnit = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(storedUnit?.status).toBe('available');
+      expect(storedUnit?.heldByReservationId).toBeUndefined();
+      expect(storedUnit?.heldByHoldId).toBeUndefined();
+      // Anyone may still reserve it the next minute.
+      const customer = await makeCustomer();
+      await reserve(MANAGER, { unitId: unit.unitId, customerId: customer.customerId });
+    });
+
+    it('revises into a new revision and supersedes the old one; a stale revision loses', async () => {
+      const { quotation } = await quote();
+      const revised = await as(REP_ONE)
+        .post(`/api/v1/sales/quotations/${quotation.quotationId}/revisions`)
+        .send({
+          agreedPrice: egp('2800000'),
+          paymentPlan: defaultPlan,
+          validUntil: '2026-10-10',
+          expectedRevision: 1,
+        })
+        .expect(201);
+      expect(revised.body).toMatchObject({ revision: 2, state: 'active' });
+      await as(REP_ONE)
+        .post(`/api/v1/sales/quotations/${quotation.quotationId}/revisions`)
+        .send({
+          agreedPrice: egp('2700000'),
+          paymentPlan: defaultPlan,
+          validUntil: '2026-10-10',
+          expectedRevision: 1,
+        })
+        .expect(409);
+      const history = await as(REP_ONE)
+        .get(`/api/v1/sales/quotations/${quotation.quotationId}`)
+        .expect(200);
+      expect(
+        (history.body.items as { revision: number; state: string }[]).map((item) => [
+          item.revision,
+          item.state,
+        ]),
+      ).toEqual([
+        [2, 'active'],
+        [1, 'superseded'],
+      ]);
+      const list = await as(REP_ONE).get('/api/v1/sales/quotations').expect(200);
+      expect(list.body.total).toBe(1);
+    });
+
+    it('reads as expired after its stated validity, and can be withdrawn', async () => {
+      const { quotation } = await quote();
+      await connection
+        .collection(QUOTATIONS_COLLECTION)
+        .updateOne({ quotationId: quotation.quotationId }, { $set: { validUntil: '2026-09-01' } });
+      const expired = await as(REP_ONE).get(`/api/v1/sales/quotations/${quotation.quotationId}`).expect(200);
+      expect(expired.body.items[0].state).toBe('expired');
+
+      const { quotation: other } = await quote();
+      const withdrawn = await as(REP_ONE)
+        .post(`/api/v1/sales/quotations/${other.quotationId}/withdraw`)
+        .send({ reason: 'customer chose another unit', expectedRevision: 1 })
+        .expect(200);
+      expect(withdrawn.body).toMatchObject({ state: 'withdrawn' });
+    });
+
+    it("keeps one representative's quotations from another, and refuses a validity in the past", async () => {
+      const { quotation, unit, customer } = await quote(REP_ONE);
+      await as(REP_TWO).get(`/api/v1/sales/quotations/${quotation.quotationId}`).expect(404);
+      await as(VIEWER).get('/api/v1/sales/quotations').expect(403);
+      const past = await as(REP_ONE)
+        .post('/api/v1/sales/quotations')
+        .send({
+          customerId: customer.customerId,
+          unitId: unit.unitId,
+          agreedPrice: egp('2850000'),
+          paymentPlan: defaultPlan,
+          validUntil: '2026-09-01',
+          idempotencyKey: nextKey('idem-quo-'),
+        })
+        .expect(400);
+      expect(past.body.error.issues[0].code).toBe('VALIDITY_IN_PAST');
     });
   });
 });

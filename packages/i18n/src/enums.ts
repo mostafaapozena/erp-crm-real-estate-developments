@@ -1,5 +1,11 @@
 import {
   ACTIVITY_KINDS,
+  AMENDMENT_STATES,
+  CONTRACT_EXCEPTIONS,
+  CONTRACT_PARTY_ROLES,
+  CONTRACT_WARNINGS,
+  QUOTATION_STATES,
+  SIGNING_STATES,
   CONSENT_SOURCES,
   CONTACT_CHANNELS,
   CUSTOMER_KINDS,
@@ -111,6 +117,12 @@ export const DISPLAYED_ENUMS: Readonly<Record<string, readonly string[]>> = {
     ...Object.values(SALES_APPROVAL_OPERATIONS),
     ...Object.values(INVENTORY_APPROVAL_OPERATIONS),
   ],
+  contractPartyRole: CONTRACT_PARTY_ROLES,
+  contractException: CONTRACT_EXCEPTIONS,
+  contractWarning: CONTRACT_WARNINGS,
+  signingState: SIGNING_STATES,
+  amendmentState: AMENDMENT_STATES,
+  quotationState: QUOTATION_STATES,
 };
 
 export interface EnumLabelProblem {

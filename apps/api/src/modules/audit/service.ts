@@ -302,4 +302,44 @@ export class AuditService {
     );
     return { rows: restrictDocuments('auditEvent', actor, rows) as AuditEvent[], truncated };
   }
+
+  /**
+   * The trail of one business record, as a **summary**: action, outcome, time, actor and reason — never
+   * the change details or the request context, which stay behind the audit permissions (SEC-029).
+   *
+   * Unscoped by design: the owning module calls it only after the caller has read the record itself
+   * through its own scoped query, so the trail can reveal nothing the caller could not already see.
+   */
+  async targetHistory(
+    target: { type: string; id: string },
+    limit = 200,
+  ): Promise<
+    {
+      action: string;
+      outcome: string;
+      occurredAt: string;
+      actorKind: string;
+      actorAccountId?: string;
+      reason?: string;
+    }[]
+  > {
+    assertSafeFilter({ type: target.type, id: target.id });
+    const documents = await this.model
+      .find({ 'target.type': target.type, 'target.id': target.id })
+      .sort({ occurredAt: -1, eventId: -1 })
+      .limit(Math.min(Math.max(limit, 1), 500))
+      .lean<AuditEventDocument[]>()
+      .exec();
+    return documents.map((document) => {
+      const event = toContract(document);
+      return {
+        action: event.action,
+        outcome: event.outcome,
+        occurredAt: event.occurredAt,
+        actorKind: event.actor.kind,
+        ...(event.actor.accountId ? { actorAccountId: event.actor.accountId } : {}),
+        ...(event.reason ? { reason: event.reason } : {}),
+      };
+    });
+  }
 }

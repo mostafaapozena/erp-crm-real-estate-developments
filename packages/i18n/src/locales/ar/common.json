@@ -428,7 +428,8 @@
     "draft": "مسودة",
     "active": "ساري",
     "cancelled": "ملغي",
-    "completed": "مكتمل السداد"
+    "completed": "مكتمل السداد",
+    "pendingApproval": "بانتظار اعتماد التفعيل"
   },
   "frequency": {
     "monthly": "شهري",
@@ -439,7 +440,9 @@
   "installmentKind": {
     "downPayment": "دفعة مقدمة",
     "installment": "قسط",
-    "finalPayment": "دفعة أخيرة"
+    "finalPayment": "دفعة أخيرة",
+    "milestone": "دفعة مرتبطة بمرحلة",
+    "maintenanceDeposit": "وديعة صيانة"
   },
   "installmentState": {
     "upcoming": "قادم",
@@ -1084,5 +1087,34 @@
         "extension": "تمديد حجز مؤقت"
       }
     }
+  },
+  "contractPartyRole": {
+    "buyer": "المشتري",
+    "coBuyer": "مشتري شريك",
+    "guarantor": "ضامن",
+    "representative": "وكيل"
+  },
+  "contractException": {
+    "planChanged": "خطة سداد مختلفة عن خطة الحجز"
+  },
+  "contractWarning": {
+    "identityMissing": "لا توجد وثيقة هوية مسجلة للمشتري",
+    "notSigned": "لم يُسجل توقيع العقد بعد"
+  },
+  "signingState": {
+    "unsigned": "غير موقّع",
+    "signed": "موقّع"
+  },
+  "amendmentState": {
+    "pending": "بانتظار الاعتماد",
+    "applied": "مطبّق",
+    "rejected": "مرفوض",
+    "stale": "لم يعد قابلًا للتطبيق"
+  },
+  "quotationState": {
+    "active": "سارٍ",
+    "superseded": "استُبدل بنسخة أحدث",
+    "withdrawn": "مسحوب",
+    "expired": "منتهي الصلاحية"
   }
 }

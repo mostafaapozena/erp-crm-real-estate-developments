@@ -38,6 +38,7 @@ export const SEQUENCE_TYPES = [
   'supplier',
   'employee',
   'asset',
+  'quotation',
 ] as const;
 export const SequenceTypeSchema = z.enum(SEQUENCE_TYPES);
 export type SequenceType = z.infer<typeof SequenceTypeSchema>;

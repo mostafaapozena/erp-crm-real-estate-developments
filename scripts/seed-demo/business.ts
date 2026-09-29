@@ -698,6 +698,14 @@ async function seedJourneys(
           },
           context,
         );
+        // A contract is drafted, then activated: activation freezes the schedule and commits the unit
+        // (SALE-CONTRACT-003). No exception is raised here, so no approval is asked for.
+        await sales.activateContract(
+          actors.salesManager,
+          created.contract.contractId,
+          { expectedVersion: created.contract.version },
+          context,
+        );
         return created.contract.contractId;
       },
     );

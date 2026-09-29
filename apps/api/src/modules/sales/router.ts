@@ -1,15 +1,23 @@
 import {
+  ActivateContractSchema,
+  AmendContractSchema,
   CancelContractSchema,
   CancelReservationSchema,
   ExtendReservationSchema,
   ContractQuerySchema,
   ContractSummaryQuerySchema,
   CreateContractSchema,
+  CreateQuotationSchema,
   CreateReservationSchema,
   InstallmentQuerySchema,
   PreviewScheduleSchema,
+  QuotationQuerySchema,
   RecordIdSchema,
+  RecordSigningSchema,
   ReservationQuerySchema,
+  ReviseQuotationSchema,
+  SetContractPartiesSchema,
+  WithdrawQuotationSchema,
   type ActorContext,
 } from '@alola/contracts';
 import { Router, type Request, type Response } from 'express';
@@ -19,6 +27,7 @@ import { currentActor, requirePermission, type GuardOptions } from '../../http/a
 import { markAuditExempt } from '../../http/audit-context';
 import { correlationIdOf } from '../../http/correlation';
 import { validate, validated } from '../../http/validate';
+import type { QuotationService } from './quotations';
 import type { RequestContext, SalesService } from './service';
 
 /**
@@ -30,10 +39,13 @@ import type { RequestContext, SalesService } from './service';
  */
 export interface SalesRouterOptions {
   getService: () => SalesService;
+  /** Quotations (SALE-QUOTE-001); absent answers 404. */
+  getQuotations?: () => QuotationService;
   guard?: GuardOptions;
 }
 
 const ReservationParamsSchema = z.strictObject({ reservationId: RecordIdSchema });
+const QuotationParamsSchema = z.strictObject({ quotationId: RecordIdSchema });
 const ContractParamsSchema = z.strictObject({ contractId: RecordIdSchema });
 const CustomerParamsSchema = z.strictObject({ customerId: RecordIdSchema });
 
@@ -239,6 +251,96 @@ export function salesRouter(options: SalesRouterOptions): Router {
     },
   );
 
+  router.get(
+    '/contracts/:contractId/history',
+    requirePermission('sales.contract.view', options.guard),
+    validate({ params: ContractParamsSchema }),
+    async (_req, res) => {
+      const { contractId } = validated<typeof ContractParamsSchema._output>(res, 'params');
+      res.json(await options.getService().contractHistory(actorOf(res), contractId));
+    },
+  );
+
+  router.put(
+    '/contracts/:contractId/parties',
+    requirePermission('sales.contract.create', options.guard),
+    validate({ params: ContractParamsSchema, body: SetContractPartiesSchema }),
+    async (req, res) => {
+      const { contractId } = validated<typeof ContractParamsSchema._output>(res, 'params');
+      const body = validated<typeof SetContractPartiesSchema._output>(res, 'body');
+      res.json(
+        await options
+          .getService()
+          .setParties(
+            actorOf(res),
+            contractId,
+            body,
+            requestContext(req, res, `${base}/contracts/:contractId/parties`),
+          ),
+      );
+    },
+  );
+
+  router.post(
+    '/contracts/:contractId/activate',
+    requirePermission('sales.contract.activate', options.guard),
+    validate({ params: ContractParamsSchema, body: ActivateContractSchema }),
+    async (req, res) => {
+      const { contractId } = validated<typeof ContractParamsSchema._output>(res, 'params');
+      const body = validated<typeof ActivateContractSchema._output>(res, 'body');
+      res.json(
+        await options
+          .getService()
+          .activateContract(
+            actorOf(res),
+            contractId,
+            body,
+            requestContext(req, res, `${base}/contracts/:contractId/activate`),
+          ),
+      );
+    },
+  );
+
+  router.post(
+    '/contracts/:contractId/signing',
+    requirePermission('sales.contract.sign', options.guard),
+    validate({ params: ContractParamsSchema, body: RecordSigningSchema }),
+    async (req, res) => {
+      const { contractId } = validated<typeof ContractParamsSchema._output>(res, 'params');
+      const body = validated<typeof RecordSigningSchema._output>(res, 'body');
+      res.json(
+        await options
+          .getService()
+          .recordSigning(
+            actorOf(res),
+            contractId,
+            body,
+            requestContext(req, res, `${base}/contracts/:contractId/signing`),
+          ),
+      );
+    },
+  );
+
+  router.post(
+    '/contracts/:contractId/amendments',
+    requirePermission('sales.contract.amend', options.guard),
+    validate({ params: ContractParamsSchema, body: AmendContractSchema }),
+    async (req, res) => {
+      const { contractId } = validated<typeof ContractParamsSchema._output>(res, 'params');
+      const body = validated<typeof AmendContractSchema._output>(res, 'body');
+      res.json(
+        await options
+          .getService()
+          .requestAmendment(
+            actorOf(res),
+            contractId,
+            body,
+            requestContext(req, res, `${base}/contracts/:contractId/amendments`),
+          ),
+      );
+    },
+  );
+
   router.post(
     '/contracts/:contractId/cancel',
     requirePermission('sales.contract.cancel', options.guard),
@@ -255,6 +357,88 @@ export function salesRouter(options: SalesRouterOptions): Router {
             body,
             requestContext(req, res, `${base}/contracts/:contractId/cancel`),
           ),
+      );
+    },
+  );
+
+  /* ----------------------------------------------------------- quotations */
+
+  const quotations = () => {
+    const service = options.getQuotations?.();
+    if (!service) throw new AppError('NOT_FOUND', 404);
+    return service;
+  };
+
+  router.get(
+    '/quotations',
+    requirePermission('sales.quotation.view', options.guard),
+    validate({ query: QuotationQuerySchema }),
+    async (_req, res) => {
+      const query = validated<typeof QuotationQuerySchema._output>(res, 'query');
+      res.json(await quotations().list(actorOf(res), query));
+    },
+  );
+
+  router.post(
+    '/quotations',
+    requirePermission('sales.quotation.manage', options.guard),
+    validate({ body: CreateQuotationSchema }),
+    async (req, res) => {
+      const body = validated<typeof CreateQuotationSchema._output>(res, 'body');
+      const result = await quotations().create(
+        actorOf(res),
+        body,
+        requestContext(req, res, `${base}/quotations`),
+      );
+      if (result.replayed) markAuditExempt(res);
+      res.status(result.replayed ? 200 : 201).json(result.quotation);
+    },
+  );
+
+  router.get(
+    '/quotations/:quotationId',
+    requirePermission('sales.quotation.view', options.guard),
+    validate({ params: QuotationParamsSchema }),
+    async (_req, res) => {
+      const { quotationId } = validated<typeof QuotationParamsSchema._output>(res, 'params');
+      res.json(await quotations().revisions(actorOf(res), quotationId));
+    },
+  );
+
+  router.post(
+    '/quotations/:quotationId/revisions',
+    requirePermission('sales.quotation.manage', options.guard),
+    validate({ params: QuotationParamsSchema, body: ReviseQuotationSchema }),
+    async (req, res) => {
+      const { quotationId } = validated<typeof QuotationParamsSchema._output>(res, 'params');
+      const body = validated<typeof ReviseQuotationSchema._output>(res, 'body');
+      res
+        .status(201)
+        .json(
+          await quotations().revise(
+            actorOf(res),
+            quotationId,
+            body,
+            requestContext(req, res, `${base}/quotations/:quotationId/revisions`),
+          ),
+        );
+    },
+  );
+
+  router.post(
+    '/quotations/:quotationId/withdraw',
+    requirePermission('sales.quotation.manage', options.guard),
+    validate({ params: QuotationParamsSchema, body: WithdrawQuotationSchema }),
+    async (req, res) => {
+      const { quotationId } = validated<typeof QuotationParamsSchema._output>(res, 'params');
+      const body = validated<typeof WithdrawQuotationSchema._output>(res, 'body');
+      res.json(
+        await quotations().withdraw(
+          actorOf(res),
+          quotationId,
+          body,
+          requestContext(req, res, `${base}/quotations/:quotationId/withdraw`),
+        ),
       );
     },
   );

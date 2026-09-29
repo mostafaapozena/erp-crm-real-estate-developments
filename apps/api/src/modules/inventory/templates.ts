@@ -2,7 +2,9 @@ import {
   INVENTORY_AUDIT_ACTIONS,
   PlanTemplateSchema,
   addMoney,
+  SCHEDULE_ROUNDING_RULE,
   buildInstallmentSchedule,
+  scheduleTotal,
   money,
   planFromTemplate,
   type ActorContext,
@@ -247,7 +249,14 @@ export class PlanTemplateService {
       unitId: unit.unitId,
       unitPrice: price,
       plan,
-      schedule: { rows, total: price, rowsTotal },
+      schedule: {
+        rows,
+        total: scheduleTotal(price, plan),
+        price,
+        ...(plan.maintenanceDeposit ? { maintenanceDeposit: plan.maintenanceDeposit.amount } : {}),
+        roundingRule: SCHEDULE_ROUNDING_RULE,
+        rowsTotal,
+      },
     };
   }
 

@@ -191,7 +191,15 @@ describe.skipIf(!gate.available)(`collections module — ${gate.reason}`, () => 
       },
       context,
     );
-    return { contract: created.contract, installments: created.installments, customer, unit };
+    // Drafted, then activated: only an active contract has a collectible schedule.
+    const contract = await sales.activateContract(
+      actor,
+      created.contract.contractId,
+      { expectedVersion: created.contract.version },
+      context,
+    );
+    const installments = await sales.listContractInstallments(actor, contract.contractId);
+    return { contract, installments, customer, unit };
   }
 
   beforeAll(async () => {

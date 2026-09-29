@@ -53,6 +53,7 @@ import {
   contractModel,
   counterModel,
   installmentModel,
+  quotationModel,
   reservationModel,
 } from '../modules/sales/model';
 import {
@@ -106,6 +107,7 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     reservationModel(connection),
     contractModel(connection),
     installmentModel(connection),
+    quotationModel(connection),
     counterModel(connection),
     receiptModel(connection),
     instrumentModel(connection),
