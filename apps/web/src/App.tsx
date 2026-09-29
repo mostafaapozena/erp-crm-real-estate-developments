@@ -1,13 +1,17 @@
 import Box from '@mui/material/Box';
 import { StateView } from '@alola/ui';
 import type { i18n } from 'i18next';
-import { BrowserRouter } from 'react-router';
+import { Suspense, lazy } from 'react';
+import { BrowserRouter, Route, Routes } from 'react-router';
 import { SessionProvider, useSession } from './api/session';
 import { BrandingProvider } from './branding';
 import { LocaleProvider, useLocale } from './locale';
 import { SignInPage } from './pages/SignInPage';
-import { AppRoutes } from './routes';
+import { AppRoutes, PAGE_MODULES } from './routes';
 import { AppShell } from './shell/AppShell';
+
+/** The public verification page (CORE-DOC-005): its own chunk, loaded only when a QR code is opened. */
+const VerifyPage = lazy(PAGE_MODULES.Verify);
 
 /**
  * The application root.
@@ -53,9 +57,28 @@ export function App({ i18n }: { i18n: i18n }) {
     <BrandingProvider>
       <LocaleProvider i18n={i18n}>
         <BrowserRouter>
-          <SessionProvider>
-            <Authenticated />
-          </SessionProvider>
+          <Routes>
+            {/*
+              A scanned QR code opens this route. It sits outside the session provider, so no session
+              is probed and no refresh cookie is presented: the answer is the same for everyone.
+            */}
+            <Route
+              path="/verify/:token"
+              element={
+                <Suspense fallback={null}>
+                  <VerifyPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="*"
+              element={
+                <SessionProvider>
+                  <Authenticated />
+                </SessionProvider>
+              }
+            />
+          </Routes>
         </BrowserRouter>
       </LocaleProvider>
     </BrandingProvider>

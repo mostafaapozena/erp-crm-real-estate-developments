@@ -1259,5 +1259,61 @@
       "stamp": "Company stamp",
       "cashier": "Received by"
     }
+  },
+  "issuedDocumentType": {
+    "quotation": "Quotation",
+    "reservation": "Reservation document",
+    "contractSummary": "Contract summary",
+    "installmentSchedule": "Instalment schedule",
+    "receipt": "Receipt",
+    "customerStatement": "Customer statement"
+  },
+  "issuedState": {
+    "issued": "Current",
+    "superseded": "Superseded",
+    "revoked": "Revoked"
+  },
+  "verificationResult": {
+    "valid": "Genuine and current",
+    "superseded": "A newer version has been issued",
+    "revoked": "This document has been revoked",
+    "expired": "This document has expired",
+    "invalid": "No document matches this code"
+  },
+  "issueWarning": {
+    "draft": "The record is still a draft; the file will be marked DRAFT.",
+    "notFinal": "This is an informational summary, not the final legal contract.",
+    "cancelled": "The record is cancelled; the file will say so.",
+    "identityMissing": "The buyer's identity is not recorded on the contract.",
+    "noApprovedWording": "No approved legal wording is published for this type; the file is issued without terms.",
+    "expired": "The quotation has expired.",
+    "withdrawn": "The quotation was withdrawn.",
+    "superseded": "A newer revision of this quotation exists.",
+    "reversed": "The receipt was reversed; the file will say so."
+  },
+  "verify": {
+    "title": "Document verification",
+    "lead": "This page shows only the status of a document the company issued.",
+    "loading": "Verifying the document",
+    "describe": {
+      "valid": "This document was issued by the company, is the latest version and has not been revoked.",
+      "superseded": "This document was issued by the company, but a newer version followed it. Ask for the latest copy before relying on it.",
+      "revoked": "The company revoked this document; do not rely on it.",
+      "expired": "This document was issued by the company, but the validity it states has ended.",
+      "invalid": "The code is wrong or unknown. Make sure you scanned the code printed on the document, or contact the company."
+    },
+    "field": {
+      "company": "Issued by",
+      "type": "Document type",
+      "reference": "Reference",
+      "issuedOn": "Issued on",
+      "version": "Version",
+      "fingerprint": "Fingerprint",
+      "checkedAt": "Checked at"
+    },
+    "compare": "Compare the fingerprint shown here with the one printed at the foot of the document. If they differ, the document in your hands is not the copy the company issued.",
+    "privacy": "The verification page shows no personal data, amounts or addresses. No sign-in is needed.",
+    "throttled": "Too many verification requests from this device. Wait a minute and try again.",
+    "failed": "The document could not be verified right now. Try again shortly."
   }
 }

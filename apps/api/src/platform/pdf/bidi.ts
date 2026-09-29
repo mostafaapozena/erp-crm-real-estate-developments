@@ -70,7 +70,8 @@ export function visualPieces(line: string, base: Direction): VisualPiece[] {
   // Work in UTF-16 indices, which is what bidi-js reports.
   const levels = bidi.getEmbeddingLevels(line, base);
   const order = Array.from({ length: line.length }, (_, index) => index);
-  for (const [start, end] of bidi.getReorderSegments(line, levels)) {
+  // Each segment is an inclusive [start, end] pair, typed by the package as number[].
+  for (const [start = 0, end = -1] of bidi.getReorderSegments(line, levels)) {
     const reversed = order.slice(start, end + 1).reverse();
     order.splice(start, reversed.length, ...reversed);
   }

@@ -45,6 +45,7 @@ export const PAGE_MODULES = {
   Imports: () => import('./pages/ImportsPage'),
   CompanyIdentity: () => import('./pages/CompanyIdentityPage'),
   NotFound: () => import('./pages/NotFoundPage'),
+  Verify: () => import('./pages/VerifyPage'),
 } as const;
 
 export function preloadPages(): Promise<unknown[]> {

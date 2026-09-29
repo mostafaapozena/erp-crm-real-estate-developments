@@ -5,6 +5,10 @@ import {
   CONTRACT_PARTY_ROLES,
   CONTRACT_WARNINGS,
   QUOTATION_STATES,
+  ISSUED_DOCUMENT_TYPES,
+  ISSUED_STATES,
+  ISSUE_WARNINGS,
+  VERIFICATION_RESULTS,
   SIGNING_STATES,
   CONSENT_SOURCES,
   CONTACT_CHANNELS,
@@ -123,6 +127,10 @@ export const DISPLAYED_ENUMS: Readonly<Record<string, readonly string[]>> = {
   signingState: SIGNING_STATES,
   amendmentState: AMENDMENT_STATES,
   quotationState: QUOTATION_STATES,
+  issuedDocumentType: ISSUED_DOCUMENT_TYPES,
+  issuedState: ISSUED_STATES,
+  issueWarning: ISSUE_WARNINGS,
+  verificationResult: VERIFICATION_RESULTS,
 };
 
 export interface EnumLabelProblem {

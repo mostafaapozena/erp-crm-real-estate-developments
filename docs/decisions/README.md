@@ -55,6 +55,7 @@ silently violate a constraint whose reason was never written down.
 | [ADR-0030](adr-0030-ui-design-system-icons-and-charts.md) | UI design system: layout scale and elevation, type scale, `lucide-react` icons through `@alola/ui/icons`, `recharts` in route-level chunks | Accepted | Design, Frontend |
 | [ADR-0031](adr-0031-people-lookup-for-account-references.md) | People lookup: account references render as directory names through one narrow, authenticated endpoint | Accepted | Security, Frontend |
 | [ADR-0032](adr-0032-three-business-master-prompts.md) | Three business master prompts replace the five-prompt sequence; BMP-1 is the whole commercial journey to the contract and its schedule | Accepted | Delivery, Governance |
+| [ADR-0033](adr-0033-issued-documents-and-public-verification.md) | Issued business PDFs are drawn on the server as immutable document versions; public QR verification returns a minimal answer for a random, stored token | Accepted | Documents, Security |
 
 ## Open items
 

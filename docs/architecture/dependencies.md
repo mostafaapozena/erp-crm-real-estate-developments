@@ -60,7 +60,7 @@ Runtime: **Node.js 24** (`engines: >=24`, `.nvmrc`). Verified on Node 24.14.1 / 
 | Package | Version | Why this version |
 |---|---|---|
 | pdfkit | 0.20.2 | Server-side PDF writer (never browser print). Embeds and subsets TrueType/WOFF fonts through fontkit, which performs OpenType shaping — Arabic joining forms and ligatures — and reverses right-to-left glyph runs. MIT; depends on fontkit, linebreak, png-js, fflate and the audited `@noble` hash/cipher libraries (no `crypto-js`). 0 audit findings at install. Its own line wrapper is not used: `apps/api/src/platform/pdf/` breaks and orders lines itself. The ligature text-extraction fix reads one private table (`_fontFamilies[…].unicode`); the pin and `pdf.test.ts` guard it |
-| bidi-js | 1.1.0 | The Unicode Bidirectional Algorithm (UAX #9), including isolates, for placing mixed Arabic/Latin lines in visual order. MIT, one dependency. Ships no types; `platform/pdf/bidi-js.d.ts` declares the three functions used |
+| bidi-js | 1.1.0 | The Unicode Bidirectional Algorithm (UAX #9), including isolates, for placing mixed Arabic/Latin lines in visual order. MIT, one dependency. Ships its own type declarations |
 | qrcode-generator | 2.0.4 | QR matrix for verification links, drawn as vector squares. Zero dependencies, MIT, typed. Chosen over `qrcode`, which pulls in a CLI (`yargs`) the server does not need |
 | @fontsource/alexandria, @fontsource/inter | 5.3.0 | The approved fonts, at the versions the web self-hosts, read by the API to embed in PDFs (Alexandria Arabic and Latin subsets; Inter Latin). SIL Open Font License |
 | pdfjs-dist *(dev)* | 6.3.289 | Tests and visual review only: extracts the text of a generated PDF and renders its pages. Never shipped |
