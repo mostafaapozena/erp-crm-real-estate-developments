@@ -1,6 +1,12 @@
 import {
   AssignLeadSchema,
+  AssignOpportunitySchema,
   ChangeLeadStageSchema,
+  ChangeOpportunityStageSchema,
+  ConvertLeadSchema,
+  CreateOpportunitySchema,
+  OpportunityQuerySchema,
+  UpdateOpportunitySchema,
   CreateActivitySchema,
   CreateCustomerSchema,
   CreateLeadSchema,
@@ -23,6 +29,7 @@ import { currentActor, requirePermission, type GuardOptions } from '../../http/a
 import { markAuditExempt } from '../../http/audit-context';
 import { correlationIdOf } from '../../http/correlation';
 import { validate, validated } from '../../http/validate';
+import type { OpportunityService } from './opportunities';
 import type { CrmService, RequestContext } from './service';
 
 /**
@@ -36,11 +43,13 @@ import type { CrmService, RequestContext } from './service';
  */
 export interface CrmRouterOptions {
   getService: () => CrmService;
+  getOpportunities: () => OpportunityService;
   guard?: GuardOptions;
 }
 
 const LeadParamsSchema = z.strictObject({ leadId: RecordIdSchema });
 const CustomerParamsSchema = z.strictObject({ customerId: RecordIdSchema });
+const OpportunityParamsSchema = z.strictObject({ opportunityId: RecordIdSchema });
 
 function requestContext(req: Request, res: Response, route: string): RequestContext {
   return {
@@ -226,6 +235,157 @@ export function crmRouter(options: CrmRouterOptions): Router {
     },
   );
 
+  /* --------------------------------------------------------- opportunities */
+
+  router.get(
+    '/opportunities',
+    requirePermission('crm.opportunity.view', options.guard),
+    validate({ query: OpportunityQuerySchema }),
+    async (_req, res) => {
+      const query = validated<typeof OpportunityQuerySchema._output>(res, 'query');
+      res.json(await options.getOpportunities().list(actorOf(res), query));
+    },
+  );
+
+  // Declared before '/opportunities/:opportunityId' so "summary" is never read as an identifier.
+  router.get(
+    '/opportunities/summary',
+    requirePermission('crm.opportunity.view', options.guard),
+    async (_req, res) => {
+      res.json(await options.getOpportunities().summary(actorOf(res)));
+    },
+  );
+
+  router.post(
+    '/opportunities',
+    requirePermission('crm.opportunity.manage', options.guard),
+    validate({ body: CreateOpportunitySchema }),
+    async (req, res) => {
+      const body = validated<typeof CreateOpportunitySchema._output>(res, 'body');
+      res
+        .status(201)
+        .json(
+          await options
+            .getOpportunities()
+            .create(actorOf(res), body, requestContext(req, res, `${base}/opportunities`)),
+        );
+    },
+  );
+
+  router.get(
+    '/opportunities/:opportunityId',
+    requirePermission('crm.opportunity.view', options.guard),
+    validate({ params: OpportunityParamsSchema }),
+    async (_req, res) => {
+      const { opportunityId } = validated<typeof OpportunityParamsSchema._output>(res, 'params');
+      res.json(await options.getOpportunities().get(actorOf(res), opportunityId));
+    },
+  );
+
+  router.patch(
+    '/opportunities/:opportunityId',
+    requirePermission('crm.opportunity.manage', options.guard),
+    validate({ params: OpportunityParamsSchema, body: UpdateOpportunitySchema }),
+    async (req, res) => {
+      const { opportunityId } = validated<typeof OpportunityParamsSchema._output>(res, 'params');
+      const body = validated<typeof UpdateOpportunitySchema._output>(res, 'body');
+      res.json(
+        await options
+          .getOpportunities()
+          .update(
+            actorOf(res),
+            opportunityId,
+            body,
+            requestContext(req, res, `${base}/opportunities/:opportunityId`),
+          ),
+      );
+    },
+  );
+
+  router.post(
+    '/opportunities/:opportunityId/stage',
+    requirePermission('crm.opportunity.manage', options.guard),
+    validate({ params: OpportunityParamsSchema, body: ChangeOpportunityStageSchema }),
+    async (req, res) => {
+      const { opportunityId } = validated<typeof OpportunityParamsSchema._output>(res, 'params');
+      const body = validated<typeof ChangeOpportunityStageSchema._output>(res, 'body');
+      res.json(
+        await options
+          .getOpportunities()
+          .changeStage(
+            actorOf(res),
+            opportunityId,
+            body,
+            requestContext(req, res, `${base}/opportunities/:opportunityId/stage`),
+          ),
+      );
+    },
+  );
+
+  router.post(
+    '/opportunities/:opportunityId/assign',
+    requirePermission('crm.opportunity.assign', options.guard),
+    validate({ params: OpportunityParamsSchema, body: AssignOpportunitySchema }),
+    async (req, res) => {
+      const { opportunityId } = validated<typeof OpportunityParamsSchema._output>(res, 'params');
+      const body = validated<typeof AssignOpportunitySchema._output>(res, 'body');
+      res.json(
+        await options
+          .getOpportunities()
+          .assign(
+            actorOf(res),
+            opportunityId,
+            body,
+            requestContext(req, res, `${base}/opportunities/:opportunityId/assign`),
+          ),
+      );
+    },
+  );
+
+  router.get(
+    '/opportunities/:opportunityId/ownership',
+    requirePermission('crm.opportunity.view', options.guard),
+    validate({ params: OpportunityParamsSchema }),
+    async (_req, res) => {
+      const { opportunityId } = validated<typeof OpportunityParamsSchema._output>(res, 'params');
+      res.json({
+        items: await options.getOpportunities().ownershipHistory(actorOf(res), opportunityId),
+      });
+    },
+  );
+
+  router.get(
+    '/opportunities/:opportunityId/activities',
+    requirePermission('crm.opportunity.view', options.guard),
+    validate({ params: OpportunityParamsSchema }),
+    async (_req, res) => {
+      const { opportunityId } = validated<typeof OpportunityParamsSchema._output>(res, 'params');
+      res.json({ items: await options.getOpportunities().activities(actorOf(res), opportunityId) });
+    },
+  );
+
+  router.post(
+    '/opportunities/:opportunityId/activities',
+    requirePermission('crm.activity.create', options.guard),
+    validate({ params: OpportunityParamsSchema, body: CreateActivitySchema }),
+    async (req, res) => {
+      const { opportunityId } = validated<typeof OpportunityParamsSchema._output>(res, 'params');
+      const body = validated<typeof CreateActivitySchema._output>(res, 'body');
+      res
+        .status(201)
+        .json(
+          await options
+            .getOpportunities()
+            .addActivity(
+              actorOf(res),
+              opportunityId,
+              body,
+              requestContext(req, res, `${base}/opportunities/:opportunityId/activities`),
+            ),
+        );
+    },
+  );
+
   /* ---------------------------------------------------------------- leads */
 
   router.get(
@@ -331,15 +491,29 @@ export function crmRouter(options: CrmRouterOptions): Router {
   router.post(
     '/leads/:leadId/convert',
     requirePermission('crm.lead.convert', options.guard),
-    validate({ params: LeadParamsSchema }),
+    validate({ params: LeadParamsSchema, body: ConvertLeadSchema }),
     async (req, res) => {
       const { leadId } = validated<typeof LeadParamsSchema._output>(res, 'params');
+      const body = validated<typeof ConvertLeadSchema._output>(res, 'body');
+      const actor = actorOf(res);
+      const context = requestContext(req, res, `${base}/leads/:leadId/convert`);
+      // Opening an opportunity on the way is an opportunity action, with its own permission.
+      if (body.opportunity && !can(actor, 'crm.opportunity.manage')) {
+        throw new AppError('FORBIDDEN', 403);
+      }
+      const extras = body.opportunity;
       const { replayed, ...result } = await options
         .getService()
         .convertLead(
-          actorOf(res),
+          actor,
           leadId,
-          requestContext(req, res, `${base}/leads/:leadId/convert`),
+          context,
+          extras
+            ? (lead, customer, session) =>
+                options
+                  .getOpportunities()
+                  .createFromLead(actor, lead, customer, extras, context, session)
+            : undefined,
         );
       // Converting a converted lead is a replay: it stored nothing and recorded nothing.
       if (replayed) markAuditExempt(res);

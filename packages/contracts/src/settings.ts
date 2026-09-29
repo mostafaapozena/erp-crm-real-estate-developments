@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { PAYMENT_METHODS } from './collections';
-import { LEAD_SOURCES, LEAD_STAGES } from './crm';
+import { LEAD_SOURCES, LEAD_STAGES, OPEN_OPPORTUNITY_STAGES, OPPORTUNITY_STAGES } from './crm';
 import { FINISHING_STATUSES, PROPERTY_TYPES, USAGE_TYPES } from './inventory';
 import { DecimalStringSchema } from './money';
 import { BusinessDateSchema, InstantSchema } from './time';
@@ -56,6 +56,24 @@ export const SETTING_DEFINITIONS = {
     schema: z.number().int().min(1).max(12),
     defaultValue: null,
     decision: 'SD-21',
+  },
+  /**
+   * Win probability per open opportunity stage, as a percentage string (BD-27). Not configured, the
+   * product shows no probability and no weighted pipeline: a forecast built on a guess is worse than
+   * none. When configured, every open stage must have one.
+   */
+  'sales.opportunityStageProbabilities': {
+    category: 'sales',
+    schema: z
+      .record(z.enum(OPEN_OPPORTUNITY_STAGES), DecimalStringSchema)
+      .refine((value) => OPEN_OPPORTUNITY_STAGES.every((stage) => value[stage] !== undefined), {
+        message: 'EVERY_OPEN_STAGE_REQUIRED',
+      })
+      .refine((value) => Object.values(value).every((rate) => isPercentage(rate)), {
+        message: 'RATE_OUT_OF_RANGE',
+      }),
+    defaultValue: null,
+    decision: 'BD-27',
   },
   'sales.reservationValidityDays': {
     category: 'sales',
@@ -187,6 +205,7 @@ export const REFERENCE_LISTS = [
   'finishingStatuses',
   'leadSources',
   'pipelineStages',
+  'opportunityStages',
   'paymentMethods',
   'lossReasons',
   'reservationReasons',
@@ -207,11 +226,15 @@ export const BOUND_REFERENCE_LISTS: Partial<Record<ReferenceList, readonly strin
   finishingStatuses: FINISHING_STATUSES,
   leadSources: LEAD_SOURCES,
   pipelineStages: LEAD_STAGES,
+  opportunityStages: OPPORTUNITY_STAGES,
   paymentMethods: PAYMENT_METHODS,
 };
 
 /** Bound lists whose items may not even be deactivated: a state machine depends on every one. */
-export const LOCKED_REFERENCE_LISTS: readonly ReferenceList[] = ['pipelineStages'];
+export const LOCKED_REFERENCE_LISTS: readonly ReferenceList[] = [
+  'pipelineStages',
+  'opportunityStages',
+];
 
 /** The `common` translation namespace holding a bound list's default labels (I18N-002). */
 export const BOUND_LIST_LABEL_NAMESPACES: Partial<Record<ReferenceList, string>> = {
@@ -220,6 +243,7 @@ export const BOUND_LIST_LABEL_NAMESPACES: Partial<Record<ReferenceList, string>>
   finishingStatuses: 'finishingStatus',
   leadSources: 'leadSource',
   pipelineStages: 'leadStage',
+  opportunityStages: 'opportunityStage',
   paymentMethods: 'paymentMethod',
 };
 

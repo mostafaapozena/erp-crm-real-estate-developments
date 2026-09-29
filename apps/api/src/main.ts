@@ -193,6 +193,7 @@ const getApprovalService = services.approval;
 const getOrganizationService = services.organization;
 const getInventoryService = services.inventory;
 const getCrmService = services.crm;
+const getOpportunityService = services.opportunities;
 const getSalesService = services.sales;
 const getCollectionService = services.collections;
 const getMarketingService = services.marketing;
@@ -272,7 +273,14 @@ const modules: ApiModule[] = [
     router: organizationRouter({ getService: getOrganizationService, guard }),
   },
   { basePath: '/inventory', router: inventoryRouter({ getService: getInventoryService, guard }) },
-  { basePath: '/crm', router: crmRouter({ getService: getCrmService, guard }) },
+  {
+    basePath: '/crm',
+    router: crmRouter({
+      getService: getCrmService,
+      getOpportunities: getOpportunityService,
+      guard,
+    }),
+  },
   { basePath: '/sales', router: salesRouter({ getService: getSalesService, guard }) },
   {
     basePath: '/collections',

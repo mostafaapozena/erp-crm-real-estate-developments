@@ -167,6 +167,12 @@ export const PERMISSIONS = [
   'crm.lead.export',
   /** Bring leads in from a file, previewed and committed as one transaction (CRM-LEAD-006). */
   'crm.lead.import',
+  // Opportunities (CRM-OPP). Breadth is the data scope; the owner fields resolve `self`/`assigned`.
+  'crm.opportunity.view',
+  /** Open, edit and move an opportunity between the open stages, or close it as lost. */
+  'crm.opportunity.manage',
+  /** Hand an opportunity to another owner, or name the owner when opening one (CRM-OWNER-001). */
+  'crm.opportunity.assign',
   'crm.lead.create',
   'crm.lead.edit',
   /** Hand a lead to another sales owner — a manager's action, not an owner's. */

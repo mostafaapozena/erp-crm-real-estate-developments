@@ -17,6 +17,7 @@ import type { ActorResolver } from '../../http/actor';
 import { noteAuditWrite } from '../../http/audit-context';
 import { ensureIndexes } from '../../platform/indexes';
 import { configureMongoose } from '../../platform/mongo';
+import { withTransaction } from '../../platform/transactions';
 import { AUDIT_COLLECTION, AuditService } from '../audit';
 import {
   ACCOUNT_GRANTS_COLLECTION,
@@ -30,6 +31,7 @@ import {
   CONSENTS_COLLECTION,
   CUSTOMERS_COLLECTION,
   LEADS_COLLECTION,
+  OPPORTUNITIES_COLLECTION,
   OWNERSHIP_CHANGES_COLLECTION,
   activityModel,
   customerModel,
@@ -37,6 +39,7 @@ import {
   ownershipChangeModel,
 } from './model';
 import { crmRouter } from './router';
+import { OpportunityService } from './opportunities';
 import { CrmService } from './service';
 
 /**
@@ -74,6 +77,10 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
   let audit: AuditService;
   let security: SecurityService;
   let crm: CrmService;
+  let opportunities: OpportunityService;
+  /** The configured win probabilities (BD-27); 
+ull is not configured. */
+  let probabilities: Record<string, string> | null = null;
   let app: Express;
 
   const R_MANAGER = `${RUN}-r-manager`;
@@ -173,6 +180,13 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
       },
       isActiveReason: (_list, code) => Promise.resolve(ACTIVE_LOSS_REASONS.has(code)),
     });
+    opportunities = new OpportunityService({
+      connection,
+      audit,
+      crm,
+      probabilities: () => Promise.resolve(probabilities),
+      isActiveReason: (_list, code) => Promise.resolve(ACTIVE_LOSS_REASONS.has(code)),
+    });
 
     const managerPermissions: Permission[] = [
       'crm.customer.view',
@@ -185,6 +199,9 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
       'crm.customer.transfer',
       'crm.customer.viewIdentity',
       'crm.lead.convert',
+      'crm.opportunity.view',
+      'crm.opportunity.manage',
+      'crm.opportunity.assign',
     ];
     const repPermissions: Permission[] = [
       'crm.customer.view',
@@ -193,6 +210,8 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
       'crm.lead.edit',
       'crm.activity.create',
       'crm.lead.convert',
+      'crm.opportunity.view',
+      'crm.opportunity.manage',
     ];
     await bootstrapRole(connection, {
       key: R_MANAGER,
@@ -254,7 +273,10 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
     };
 
     const modules: ApiModule[] = [
-      { basePath: '/crm', router: crmRouter({ getService: () => crm }) },
+      {
+        basePath: '/crm',
+        router: crmRouter({ getService: () => crm, getOpportunities: () => opportunities }),
+      },
     ];
     app = createApp({
       config: { CORS_ALLOWED_ORIGINS: [ALLOWED_ORIGIN], TRUST_PROXY_HOPS: 1, APP_ENV: 'test' },
@@ -275,6 +297,7 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
       CUSTOMERS_COLLECTION,
       CONSENTS_COLLECTION,
       OWNERSHIP_CHANGES_COLLECTION,
+      OPPORTUNITIES_COLLECTION,
     ]) {
       await connection.collection(name).deleteMany({});
     }
@@ -295,6 +318,7 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
       CUSTOMERS_COLLECTION,
       CONSENTS_COLLECTION,
       OWNERSHIP_CHANGES_COLLECTION,
+      OPPORTUNITIES_COLLECTION,
     ]) {
       await connection.collection(name).deleteMany({});
     }
@@ -1063,6 +1087,275 @@ describe.skipIf(!gate.available)(`crm module — ${gate.reason}`, () => {
         .send({ stage: 'lost', reason: 'bought elsewhere' })
         .expect(200);
       await as(REP_ONE).post(`/api/v1/crm/leads/${lead.leadId}/convert`).expect(409);
+    });
+  });
+
+  describe('opportunities (CRM-OPP-001, CRM-OPP-002, CRM-PIPE-001)', () => {
+    const egp = (amount: string) => ({ amount, currency: 'EGP' });
+
+    async function openOpportunity(accountId: string, overrides: Record<string, unknown> = {}) {
+      const customer = await createCustomer(MANAGER, { ownerAccountId: accountId });
+      const response = await as(accountId)
+        .post('/api/v1/crm/opportunities')
+        .send({ customerId: customer.customerId, ...overrides })
+        .expect(201);
+      return response.body as {
+        opportunityId: string;
+        version: number;
+        stage: string;
+        customerId: string;
+      };
+    }
+
+    const move = (accountId: string, id: string, stage: string, version: number, extra = {}) =>
+      as(accountId)
+        .post(`/api/v1/crm/opportunities/${id}/stage`)
+        .send({ stage, expectedVersion: version, ...extra });
+
+    it('opens an opportunity only on a customer the actor can see', async () => {
+      const opportunity = await openOpportunity(REP_ONE, { expectedValue: egp('2500000.00') });
+      expect(opportunity).toMatchObject({ stage: 'discovery' });
+      const hidden = await createCustomer(MANAGER, { ownerAccountId: REP_TWO });
+      await as(REP_ONE)
+        .post('/api/v1/crm/opportunities')
+        .send({ customerId: hidden.customerId })
+        .expect(404);
+    });
+
+    it('lets several opportunities run for one customer, each visible to its owner only', async () => {
+      const customer = await createCustomer(MANAGER, { ownerAccountId: REP_ONE });
+      for (const projectId of [PROJECT_A, 'prj_crmtestprojectbbbbbbbbbbbbb0002']) {
+        await as(REP_ONE)
+          .post('/api/v1/crm/opportunities')
+          .send({ customerId: customer.customerId, projectId })
+          .expect(201);
+      }
+      const mine = await as(REP_ONE)
+        .get(`/api/v1/crm/opportunities?customerId=${customer.customerId}`)
+        .expect(200);
+      expect(mine.body.total).toBe(2);
+      const theirs = await as(REP_TWO)
+        .get(`/api/v1/crm/opportunities?customerId=${customer.customerId}`)
+        .expect(200);
+      expect(theirs.body.total).toBe(0);
+    });
+
+    it('refuses the stages sales owns, audits the attempt, and changes nothing', async () => {
+      const opportunity = await openOpportunity(REP_ONE);
+      for (const stage of ['reservation', 'won']) {
+        const refused = await move(REP_ONE, opportunity.opportunityId, stage, 1).expect(409);
+        expect(refused.body.error.issues[0].code).toBe('STAGE_SET_BY_SALES');
+      }
+      const refusals = await connection.collection(AUDIT_COLLECTION).countDocuments({
+        action: CRM_AUDIT_ACTIONS.opportunityStageRefused,
+        'target.id': opportunity.opportunityId,
+      });
+      expect(refusals).toBe(2);
+      const read = await as(REP_ONE)
+        .get(`/api/v1/crm/opportunities/${opportunity.opportunityId}`)
+        .expect(200);
+      expect(read.body).toMatchObject({ stage: 'discovery', version: 1 });
+    });
+
+    it('moves between open stages, requires a reason to lose, and reopens a lost one', async () => {
+      const { opportunityId } = await openOpportunity(REP_ONE);
+      await move(REP_ONE, opportunityId, 'proposal', 1).expect(200);
+      await move(REP_ONE, opportunityId, 'lost', 2).expect(400);
+      const lost = await move(REP_ONE, opportunityId, 'lost', 2, {
+        reason: 'chose another developer',
+        reasonCode: 'priceTooHigh',
+      }).expect(200);
+      expect(lost.body).toMatchObject({ stage: 'lost', lostReasonCode: 'priceTooHigh' });
+      expect(lost.body.closedAt).toBeDefined();
+      const reopened = await move(REP_ONE, opportunityId, 'discovery', 3).expect(200);
+      expect(reopened.body.closedAt).toBeUndefined();
+      expect(reopened.body.lostReason).toBeUndefined();
+      await move(REP_ONE, opportunityId, 'proposal', 1).expect(409);
+      const history = await as(REP_ONE)
+        .get(`/api/v1/crm/opportunities/${opportunityId}/activities`)
+        .expect(200);
+      expect(
+        (history.body.items as { toStage?: string }[]).map((item) => item.toStage).reverse(),
+      ).toEqual(['discovery', 'proposal', 'lost', 'discovery']);
+    });
+
+    it('lets sales take it to reservation and won, and back to negotiation on cancellation', async () => {
+      const { opportunityId } = await openOpportunity(REP_ONE);
+      const manager = await security.resolveActor(MANAGER);
+      const reserveId = 'rsv_crmtestreservationaaaaaaa0001';
+      await withTransaction(connection, (session) =>
+        opportunities.advanceInternal(
+          manager!,
+          opportunityId,
+          'reservation',
+          { reservationId: reserveId },
+          'reservation RSV-1',
+          context,
+          session,
+        ),
+      );
+      // Once a reservation holds it, a person cannot move it; the reservation does.
+      const refused = await move(REP_ONE, opportunityId, 'negotiation', 2).expect(409);
+      expect(refused.body.error.issues[0].code).toBe('STAGE_SET_BY_SALES');
+      const released = await withTransaction(connection, (session) =>
+        opportunities.advanceInternal(
+          manager!,
+          opportunityId,
+          'negotiation',
+          {},
+          'reservation cancelled',
+          context,
+          session,
+        ),
+      );
+      expect(released.reservationId).toBeUndefined();
+      await withTransaction(connection, (session) =>
+        opportunities.advanceInternal(
+          manager!,
+          opportunityId,
+          'reservation',
+          { reservationId: reserveId },
+          'reserved again',
+          context,
+          session,
+        ),
+      );
+      const won = await withTransaction(connection, (session) =>
+        opportunities.advanceInternal(
+          manager!,
+          opportunityId,
+          'won',
+          { contractId: 'ctr_crmtestcontractaaaaaaaaaaa0001' },
+          'contract activated',
+          context,
+          session,
+        ),
+      );
+      expect(won).toMatchObject({ stage: 'won', contractId: 'ctr_crmtestcontractaaaaaaaaaaa0001' });
+      expect(won.closedAt).toBeDefined();
+      await expect(
+        withTransaction(connection, (session) =>
+          opportunities.advanceInternal(
+            manager!,
+            opportunityId,
+            'reservation',
+            {},
+            'again',
+            context,
+            session,
+          ),
+        ),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+    });
+
+    it('converts a lead into a customer and an opportunity in one step, carrying attribution', async () => {
+      const { lead } = await createLead(REP_ONE, {
+        source: 'instagram',
+        interestedProjectId: PROJECT_A,
+        preferredPropertyType: 'apartment',
+        budgetMin: egp('1500000.00'),
+        budgetMax: egp('2000000.00'),
+      });
+      const converted = await as(REP_ONE)
+        .post(`/api/v1/crm/leads/${lead.leadId}/convert`)
+        .send({ opportunity: { expectedValue: egp('1800000.00') } })
+        .expect(200);
+      expect(converted.body.opportunity).toMatchObject({
+        leadId: lead.leadId,
+        customerId: converted.body.customer.customerId,
+        source: 'instagram',
+        projectId: PROJECT_A,
+        propertyType: 'apartment',
+        budgetMax: egp('2000000.00'),
+        expectedValue: egp('1800000.00'),
+        ownerAccountId: REP_ONE,
+        stage: 'discovery',
+      });
+    });
+
+    it('refuses to open an opportunity during conversion without the permission, converting nothing', async () => {
+      await bootstrapRole(connection, {
+        key: `${RUN}-r-converter`,
+        name: label('converter'),
+        permissions: ['crm.lead.view', 'crm.lead.create', 'crm.lead.convert'],
+      });
+      const CONVERTER = `${RUN}-converter`;
+      await bootstrapGrant(connection, {
+        accountId: CONVERTER,
+        roleKeys: [`${RUN}-r-converter`],
+        scope: scope('assigned'),
+        updatedBy: 'test',
+      });
+      const { lead } = await createLead(CONVERTER);
+      await as(CONVERTER)
+        .post(`/api/v1/crm/leads/${lead.leadId}/convert`)
+        .send({ opportunity: {} })
+        .expect(403);
+      const stored = await leadModel(connection).findOne({ leadId: lead.leadId }).lean().exec();
+      expect(stored?.customerId).toBeUndefined();
+      // Without the opportunity, the same person may convert.
+      await as(CONVERTER).post(`/api/v1/crm/leads/${lead.leadId}/convert`).expect(200);
+    });
+
+    it('hands an opportunity to an eligible colleague with history, and refuses one in another branch', async () => {
+      const { opportunityId } = await openOpportunity(REP_ONE);
+      const refused = await as(MANAGER)
+        .post(`/api/v1/crm/opportunities/${opportunityId}/assign`)
+        .send({ toAccountId: REP_OTHER_BRANCH, reason: 'covering the north coast' })
+        .expect(409);
+      expect(refused.body.error.issues[0].code).toBe('ASSIGNEE_OUTSIDE_BRANCH');
+      const moved = await as(MANAGER)
+        .post(`/api/v1/crm/opportunities/${opportunityId}/assign`)
+        .send({ toAccountId: REP_TEAM_B, reason: 'project specialist' })
+        .expect(200);
+      expect(moved.body).toMatchObject({ ownerAccountId: REP_TEAM_B, teamId: TEAM_B });
+      await as(REP_ONE).get(`/api/v1/crm/opportunities/${opportunityId}`).expect(404);
+      const history = await as(MANAGER)
+        .get(`/api/v1/crm/opportunities/${opportunityId}/ownership`)
+        .expect(200);
+      expect(history.body.items[0]).toMatchObject({
+        fromAccountId: REP_ONE,
+        toAccountId: REP_TEAM_B,
+      });
+    });
+
+    it('sums the pipeline exactly per stage and currency, and weights it only when configured', async () => {
+      const first = await openOpportunity(REP_ONE, { expectedValue: egp('1000000.00') });
+      const second = await openOpportunity(REP_ONE, { expectedValue: egp('2000000.10') });
+      await openOpportunity(REP_ONE, { expectedValue: { amount: '50000.00', currency: 'USD' } });
+      await openOpportunity(REP_ONE);
+      await move(REP_ONE, second.opportunityId, 'negotiation', 1).expect(200);
+
+      probabilities = null;
+      const plain = await as(REP_ONE).get('/api/v1/crm/opportunities/summary').expect(200);
+      expect(plain.body.probabilitiesConfigured).toBe(false);
+      expect(plain.body.weightedOpenValue).toBeUndefined();
+      const discovery = (
+        plain.body.byStage as { stage: string; count: number; expectedValue: unknown[] }[]
+      ).find((row) => row.stage === 'discovery');
+      expect(discovery).toEqual({
+        stage: 'discovery',
+        count: 3,
+        expectedValue: [egp('1000000.00'), { amount: '50000.00', currency: 'USD' }],
+      });
+      const read = await as(REP_ONE)
+        .get(`/api/v1/crm/opportunities/${first.opportunityId}`)
+        .expect(200);
+      expect(read.body).not.toHaveProperty('probability');
+
+      probabilities = { discovery: '10', unitSelection: '25', proposal: '50', negotiation: '75' };
+      const weighted = await as(REP_ONE).get('/api/v1/crm/opportunities/summary').expect(200);
+      // 1,000,000.00 × 10% + 2,000,000.10 × 75% = 100,000.00 + 1,500,000.075 → 1,600,000.08 (half-even, once, at the end)
+      expect(weighted.body.weightedOpenValue).toContainEqual(egp('1600000.08'));
+      expect(weighted.body.weightedOpenValue).toContainEqual({
+        amount: '5000.00',
+        currency: 'USD',
+      });
+      const withProbability = await as(REP_ONE)
+        .get(`/api/v1/crm/opportunities/${second.opportunityId}`)
+        .expect(200);
+      expect(withProbability.body.probability).toBe('75');
+      probabilities = null;
     });
   });
 

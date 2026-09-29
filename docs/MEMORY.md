@@ -85,8 +85,8 @@ idempotent seed extensions.
 | Package | State | Commit |
 |---|---|---|
 | 1 Scope consolidation, ADR-0032, discovery IDs, decisions, Arabic questionnaire | **complete** | the commit containing this row |
-| 2 CRM and customer completion | **complete** | `feat(crm): …` (package 2 commit) |
-| 3 Opportunities and ownership | not started | — |
+| 2 CRM and customer completion | **complete** | `9a8eb7b` |
+| 3 Opportunities and ownership | **complete** | the commit containing this row |
 | 4 Inventory and pricing | not started | — |
 | 5 Reservations and approvals | not started | — |
 | 6 Contracts and schedules | not started | — |
@@ -141,6 +141,22 @@ idempotent seed extensions.
   CRM + imports integration **70 passed**; full integration gate **534 passed / 0 failed / 0 skipped**, 27 files (501 before).
 - Not yet done here, by design: screens (package 8), opportunities (package 3), seed extension for the
   new permissions (the demonstration roles do not yet hold `crm.lead.convert` etc.).
+
+### Package 3 — opportunities
+
+- `crmOpportunities` (`crm/model.ts`) and `OpportunityService` (`crm/opportunities.ts`, published in
+  the module index, wired as `services.opportunities`, routed under `/api/v1/crm/opportunities`).
+  Stages `discovery → unitSelection → proposal → negotiation → reservation → won | lost`;
+  `reservation` and `won` only through `advanceInternal` (the port sales will call in packages 5–6).
+- Permissions `crm.opportunity.view`, `.manage`, `.assign`. Setting
+  `sales.opportunityStageProbabilities` (`BD-27`, default `null`); reference list `opportunityStages`
+  (bound and locked, relabel only). The settings catalog test now accepts `BD-nn` as a decision name.
+- `CrmService.convertLead` takes an optional `openOpportunity` callback, so conversion can open an
+  opportunity in its transaction without CRM's customer code knowing about opportunities; eligibility
+  helpers (`assertEligibleOwner`, `ownPlacement`, `placementUpdate`) are now shared inside the module.
+- Weighted pipeline: Σ expected value × rate ÷ 100 in decimal arithmetic, rounded to 2 places at the
+  end and written with exactly two decimals (the money helpers otherwise drop trailing zeros).
+- Measured: unit **610 passed**; CRM integration **64 passed**; full integration gate **543 passed / 0 failed / 0 skipped**, 27 files.
 
 ## Foundation completion (post-demo master prompt) — COMPLETE, stopped at the foundation gate
 

@@ -16,8 +16,9 @@ describe('settings catalog (PLAT-024, PLAT-026)', () => {
     for (const key of SETTING_KEYS) {
       const definition: SettingDefinition = SETTING_DEFINITIONS[key];
       if (definition.defaultValue === null) {
-        // An undecided value must say which open decision it waits for.
-        expect(definition.decision, key).toMatch(/^SD-\d{2}$/);
+        // An undecided value must say which open decision it waits for: a stakeholder item (SD-nn) or
+        // one of its refined entries in the business decision register (BD-nn).
+        expect(definition.decision, key).toMatch(/^(SD|BD)-\d{2}$/);
         continue;
       }
       expect(definition.schema.safeParse(definition.defaultValue).success, key).toBe(true);

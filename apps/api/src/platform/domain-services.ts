@@ -22,7 +22,7 @@ import { AuditService } from '../modules/audit';
 import { CollectionService } from '../modules/collections';
 import { CompanyService } from '../modules/company';
 import { DocumentService, TemplateService, type OwnerResolver } from '../modules/documents';
-import { CrmService, leadImporter } from '../modules/crm';
+import { CrmService, OpportunityService, leadImporter } from '../modules/crm';
 import { AuthThrottle, IdentityService } from '../modules/identity';
 import { InventoryService } from '../modules/inventory';
 import { MarketingService } from '../modules/marketing';
@@ -84,6 +84,7 @@ export interface DomainServices {
   organization: () => OrganizationService;
   inventory: () => InventoryService;
   crm: () => CrmService;
+  opportunities: () => OpportunityService;
   sales: () => SalesService;
   collections: () => CollectionService;
   marketing: () => MarketingService;
@@ -111,6 +112,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   let organizationService: OrganizationService | undefined;
   let inventoryService: InventoryService | undefined;
   let crmService: CrmService | undefined;
+  let opportunityService: OpportunityService | undefined;
   let salesService: SalesService | undefined;
   let collectionService: CollectionService | undefined;
   let marketingService: MarketingService | undefined;
@@ -552,6 +554,24 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
   }
 
   /**
+   * Opportunities (CRM-OPP). Win probabilities are the deployment's configuration (BD-27); with none
+   * configured the service shows no probability and no weighted pipeline.
+   */
+  function getOpportunityService(): OpportunityService {
+    const connection = requireConnection();
+    opportunityService ??= new OpportunityService({
+      connection,
+      audit: getAuditService(),
+      crm: getCrmService(),
+      probabilities: () =>
+        getSettingsService().valueOf<Record<string, string>>('sales.opportunityStageProbabilities'),
+      isActiveReason: async (list, code) =>
+        (await getSettingsService().activeCodes(list)).includes(code),
+    });
+    return opportunityService;
+  }
+
+  /**
    * What a module needs to know before handing work to a colleague (CRM-ASSIGN-001): whether the
    * account is active (SEC), what it may do (SEC, effective permissions after denials), and where it
    * sits (CORE-ORG). Each fact comes from its owner; none is stored twice.
@@ -850,6 +870,7 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     organization: getOrganizationService,
     inventory: getInventoryService,
     crm: getCrmService,
+    opportunities: getOpportunityService,
     sales: getSalesService,
     collections: getCollectionService,
     marketing: getMarketingService,

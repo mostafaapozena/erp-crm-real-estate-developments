@@ -447,14 +447,6 @@ export const AssignLeadSchema = z.strictObject({
 });
 export type AssignLead = z.infer<typeof AssignLeadSchema>;
 
-/** CRM-LEAD-005. Idempotent: converting a converted lead returns the customer it already has. */
-export const ConvertLeadResultSchema = z.strictObject({
-  lead: LeadSchema,
-  customer: CustomerSchema,
-  /** False when the lead was already converted, or an existing customer matched its phone. */
-  customerCreated: z.boolean(),
-});
-
 /* -------------------------------------------------------------------- activity */
 
 export const ACTIVITY_KINDS = [
@@ -613,6 +605,207 @@ export const CrmDashboardSchema = z.strictObject({
 });
 export type CrmDashboard = z.infer<typeof CrmDashboardSchema>;
 
+/* ----------------------------------------------------------------- opportunity */
+
+/**
+ * CRM-OPP-001: an opportunity is one prospective sale to one customer — several can run at once, for
+ * different projects or unit types. It is its own record: a lead is an enquiry, a reservation is a
+ * commitment, and an opportunity is the negotiation in between.
+ *
+ * The stage codes are the product's; their labels are relabelled per deployment and any win
+ * probability per stage is configuration (`BD-27`) — none is shipped.
+ */
+export const OPPORTUNITY_STAGES = [
+  'discovery',
+  'unitSelection',
+  'proposal',
+  'negotiation',
+  'reservation',
+  'won',
+  'lost',
+] as const;
+export const OpportunityStageSchema = z.enum(OPPORTUNITY_STAGES);
+export type OpportunityStage = z.infer<typeof OpportunityStageSchema>;
+
+/** The stages a person moves an opportunity between. `reservation` and `won` are set by sales. */
+export const OPEN_OPPORTUNITY_STAGES = [
+  'discovery',
+  'unitSelection',
+  'proposal',
+  'negotiation',
+] as const;
+export const TERMINAL_OPPORTUNITY_STAGES: readonly OpportunityStage[] = ['won', 'lost'];
+
+/**
+ * Permitted moves. Backwards moves in the middle are allowed, as for leads. `reservation` is entered
+ * only by creating a reservation, and `won` only by activating its contract; a cancelled reservation
+ * returns the opportunity to `negotiation`. `lost` needs a reason and may be reopened.
+ */
+export const OPPORTUNITY_TRANSITIONS: Readonly<
+  Record<OpportunityStage, readonly OpportunityStage[]>
+> = {
+  discovery: ['unitSelection', 'proposal', 'negotiation', 'reservation', 'lost'],
+  unitSelection: ['discovery', 'proposal', 'negotiation', 'reservation', 'lost'],
+  proposal: ['discovery', 'unitSelection', 'negotiation', 'reservation', 'lost'],
+  negotiation: ['unitSelection', 'proposal', 'reservation', 'lost'],
+  reservation: ['negotiation', 'won', 'lost'],
+  won: [],
+  lost: ['discovery'],
+};
+
+export function canTransitionOpportunity(from: OpportunityStage, to: OpportunityStage): boolean {
+  return OPPORTUNITY_TRANSITIONS[from].includes(to);
+}
+
+/** Stages only the sales workflow may set; a person asking for them is refused. */
+export const SYSTEM_OPPORTUNITY_STAGES: readonly OpportunityStage[] = ['reservation', 'won'];
+
+export const OpportunitySchema = z.strictObject({
+  opportunityId: RecordIdSchema,
+  customerId: RecordIdSchema,
+  /** The enquiry it came from, when there was one. */
+  leadId: RecordIdSchema.optional(),
+  /** Attribution copied from the lead and never changed afterwards (CRM-LEAD-002, MM §9 rule 14). */
+  source: LeadSourceSchema.optional(),
+  campaignId: RecordIdSchema.optional(),
+  projectId: RecordIdSchema.optional(),
+  propertyType: PropertyTypeSchema.optional(),
+  usageType: UsageTypeSchema.optional(),
+  budgetMin: MoneySchema.optional(),
+  budgetMax: MoneySchema.optional(),
+  /** What the sale is expected to be worth, as entered. Never computed from a guessed probability. */
+  expectedValue: MoneySchema.optional(),
+  expectedCloseOn: BusinessDateSchema.optional(),
+  stage: OpportunityStageSchema,
+  /**
+   * The configured win probability for the stage, as a decimal percentage string. Absent unless the
+   * deployment configured one (`sales.opportunityStageProbabilities`, `BD-27`).
+   */
+  probability: z.string().optional(),
+  lostReason: z.string().max(500).optional(),
+  lostReasonCode: ReasonCodeSchema.optional(),
+  /** The reservation that took it to `reservation`, and the contract that won it. Opaque to CRM. */
+  reservationId: RecordIdSchema.optional(),
+  contractId: RecordIdSchema.optional(),
+  notes: NoteSchema.optional(),
+  ownerAccountId: z.string().min(1).max(200),
+  legalEntityId: RecordIdSchema,
+  branchId: RecordIdSchema,
+  departmentId: RecordIdSchema.optional(),
+  teamId: RecordIdSchema.optional(),
+  stageChangedAt: InstantSchema,
+  closedAt: InstantSchema.optional(),
+  version: z.number().int().positive(),
+  createdAt: InstantSchema,
+  updatedAt: InstantSchema,
+});
+export type Opportunity = z.infer<typeof OpportunitySchema>;
+
+const opportunityDetails = {
+  projectId: RecordIdSchema.optional(),
+  propertyType: PropertyTypeSchema.optional(),
+  usageType: UsageTypeSchema.optional(),
+  budgetMin: MoneySchema.optional(),
+  budgetMax: MoneySchema.optional(),
+  expectedValue: MoneySchema.optional(),
+  expectedCloseOn: BusinessDateSchema.optional(),
+  notes: NoteSchema.optional(),
+};
+
+export const CreateOpportunitySchema = z.strictObject({
+  customerId: RecordIdSchema,
+  ...opportunityDetails,
+  /** Naming another owner needs `crm.opportunity.assign`; without it the creator owns it. */
+  ownerAccountId: z.string().min(1).max(200).optional(),
+});
+export type CreateOpportunity = z.infer<typeof CreateOpportunitySchema>;
+
+export const UpdateOpportunitySchema = z.strictObject({
+  ...opportunityDetails,
+  expectedVersion: z.number().int().positive(),
+});
+export type UpdateOpportunity = z.infer<typeof UpdateOpportunitySchema>;
+
+export const ChangeOpportunityStageSchema = z.strictObject({
+  stage: OpportunityStageSchema,
+  reason: z.string().trim().max(500).optional(),
+  reasonCode: ReasonCodeSchema.optional(),
+  expectedVersion: z.number().int().positive(),
+});
+export type ChangeOpportunityStage = z.infer<typeof ChangeOpportunityStageSchema>;
+
+export const AssignOpportunitySchema = TransferOwnershipSchema;
+
+/** What a lead's conversion may also open: an opportunity from the lead's own preferences. */
+export const ConvertLeadSchema = z.strictObject({
+  opportunity: z
+    .strictObject({
+      expectedValue: MoneySchema.optional(),
+      expectedCloseOn: BusinessDateSchema.optional(),
+      notes: NoteSchema.optional(),
+    })
+    .optional(),
+});
+export type ConvertLead = z.infer<typeof ConvertLeadSchema>;
+
+/** CRM-LEAD-005. Idempotent: converting a converted lead returns the customer it already has. */
+export const ConvertLeadResultSchema = z.strictObject({
+  lead: LeadSchema,
+  customer: CustomerSchema,
+  /** False when the lead was already converted, or an existing customer matched its phone. */
+  customerCreated: z.boolean(),
+  /** The opportunity opened by this conversion, when one was asked for. */
+  opportunity: OpportunitySchema.optional(),
+});
+
+export const OPPORTUNITY_PAGE_SIZE_DEFAULT = 25;
+export const OPPORTUNITY_PAGE_SIZE_MAX = 100;
+
+export const OpportunityQuerySchema = z.strictObject({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(OPPORTUNITY_PAGE_SIZE_MAX)
+    .default(OPPORTUNITY_PAGE_SIZE_DEFAULT),
+  cursor: z.string().min(1).max(200).optional(),
+  stage: OpportunityStageSchema.optional(),
+  /** `open` is every stage that is neither won nor lost. */
+  status: z.enum(['open', 'won', 'lost']).optional(),
+  customerId: RecordIdSchema.optional(),
+  projectId: RecordIdSchema.optional(),
+  ownerAccountId: z.string().min(1).max(200).optional(),
+});
+export type OpportunityQuery = z.infer<typeof OpportunityQuerySchema>;
+
+export const OpportunityPageSchema = z.strictObject({
+  items: z.array(OpportunitySchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  nextCursor: z.string().optional(),
+});
+export type OpportunityPage = z.infer<typeof OpportunityPageSchema>;
+
+/**
+ * The pipeline in the actor's scope (CRM-REPORT-001): counts and expected value per stage, summed by
+ * the database in `Decimal128` and never across currencies. A weighted value appears only when win
+ * probabilities are configured; the product does not forecast on a guess.
+ */
+export const OpportunitySummarySchema = z.strictObject({
+  byStage: z.array(
+    z.strictObject({
+      stage: OpportunityStageSchema,
+      count: z.number().int().nonnegative(),
+      expectedValue: z.array(MoneySchema),
+    }),
+  ),
+  open: z.number().int().nonnegative(),
+  /** Present only with configured probabilities: Σ expected value × probability, per currency. */
+  weightedOpenValue: z.array(MoneySchema).optional(),
+  probabilitiesConfigured: z.boolean(),
+});
+export type OpportunitySummary = z.infer<typeof OpportunitySummarySchema>;
+
 export const CustomerListSchema = CustomerPageSchema;
 export const ActivityListSchema = z.strictObject({ items: z.array(ActivitySchema) });
 
@@ -632,4 +825,9 @@ export const CRM_AUDIT_ACTIONS = {
   customerCorrected: 'crm.customer.corrected',
   customerOwnerTransferred: 'crm.customer.ownerTransferred',
   consentRecorded: 'crm.customer.consentRecorded',
+  opportunityCreated: 'crm.opportunity.created',
+  opportunityUpdated: 'crm.opportunity.updated',
+  opportunityStageChanged: 'crm.opportunity.stageChanged',
+  opportunityStageRefused: 'crm.opportunity.stageRefused',
+  opportunityAssigned: 'crm.opportunity.assigned',
 } as const;

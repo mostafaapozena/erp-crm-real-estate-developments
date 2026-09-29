@@ -5,7 +5,18 @@ import {
   CUSTOMER_KINDS,
   CUSTOMER_PAGE_SIZE_DEFAULT,
   CUSTOMER_PAGE_SIZE_MAX,
+  AssignOpportunitySchema,
   ChangeLeadStageSchema,
+  ChangeOpportunityStageSchema,
+  ConvertLeadSchema,
+  CreateOpportunitySchema,
+  OPPORTUNITY_PAGE_SIZE_DEFAULT,
+  OPPORTUNITY_PAGE_SIZE_MAX,
+  OPPORTUNITY_STAGES,
+  OpportunityPageSchema,
+  OpportunitySchema,
+  OpportunitySummarySchema,
+  UpdateOpportunitySchema,
   ConvertLeadResultSchema,
   CreateActivitySchema,
   CreateCustomerSchema,
@@ -49,6 +60,14 @@ export const crmComponents = {
   DuplicateReport: DuplicateReportSchema,
   QualifyLeadRequest: QualifyLeadSchema,
   ConvertLeadResult: ConvertLeadResultSchema,
+  ConvertLeadRequest: ConvertLeadSchema,
+  Opportunity: OpportunitySchema,
+  OpportunityPage: OpportunityPageSchema,
+  OpportunitySummary: OpportunitySummarySchema,
+  CreateOpportunityRequest: CreateOpportunitySchema,
+  UpdateOpportunityRequest: UpdateOpportunitySchema,
+  ChangeOpportunityStageRequest: ChangeOpportunityStageSchema,
+  AssignOpportunityRequest: AssignOpportunitySchema,
   Lead: LeadSchema,
   LeadPage: LeadPageSchema,
   CreateLeadRequest: CreateLeadSchema,
@@ -326,12 +345,135 @@ export function crmPaths(h: OpenApiHelpers): PathMap {
         description:
           "Requires crm.lead.convert. Idempotent. A customer already holding the lead's phone in the " +
           "legal entity is linked rather than duplicated — unless it is outside the actor's scope, " +
-          'which is CUSTOMER_OUTSIDE_SCOPE without describing it. A lost lead is LEAD_LOST.',
+          'which is CUSTOMER_OUTSIDE_SCOPE without describing it. A lost lead is LEAD_LOST. With an ' +
+          '`opportunity` body the conversion also opens an opportunity from the lead, in the same ' +
+          'transaction, which needs crm.opportunity.manage.',
         parameters: [pathParameter('leadId', 'Opaque lead identifier')],
+        requestBody: requestBody(h.ref('ConvertLeadRequest')),
         responses: {
-          '200': h.json('ConvertLeadResult', 'The lead and its customer'),
+          '200': h.json('ConvertLeadResult', 'The lead, its customer, and any opportunity opened'),
           ...h.conflictErrors,
         },
+      },
+    },
+    '/api/v1/crm/opportunities': {
+      get: {
+        operationId: 'listOpportunities',
+        summary: 'List opportunities with keyset pagination',
+        description:
+          "Requires crm.opportunity.view. Constrained by the actor's scope inside the query; the total " +
+          'uses the same filter. status=open is every stage but won and lost.',
+        parameters: [
+          queryParameter('limit', {
+            type: 'integer',
+            minimum: 1,
+            maximum: OPPORTUNITY_PAGE_SIZE_MAX,
+            default: OPPORTUNITY_PAGE_SIZE_DEFAULT,
+          }),
+          queryParameter('cursor', { type: 'string' }),
+          queryParameter('stage', { type: 'string', enum: [...OPPORTUNITY_STAGES] }),
+          queryParameter('status', { type: 'string', enum: ['open', 'won', 'lost'] }),
+          queryParameter('customerId', { type: 'string' }),
+          queryParameter('projectId', { type: 'string' }),
+          queryParameter('ownerAccountId', { type: 'string' }),
+        ],
+        responses: {
+          '200': h.json('OpportunityPage', 'A page of opportunities'),
+          ...h.authorizedErrors,
+        },
+      },
+      post: {
+        operationId: 'createOpportunity',
+        summary: 'Open an opportunity for a customer',
+        description:
+          "Requires crm.opportunity.manage, and the customer must be inside the actor's scope (404 " +
+          'otherwise). Naming another owner needs crm.opportunity.assign and an eligible colleague.',
+        requestBody: requestBody(h.ref('CreateOpportunityRequest')),
+        responses: { '201': h.json('Opportunity', 'The opportunity'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/crm/opportunities/summary': {
+      get: {
+        operationId: 'getOpportunitySummary',
+        summary: 'Pipeline counts and expected value per stage',
+        description:
+          "Requires crm.opportunity.view. Summed by the database in Decimal128 inside the actor's scope, " +
+          'per currency. weightedOpenValue appears only when every open stage has a configured win ' +
+          'probability (setting sales.opportunityStageProbabilities, BD-27).',
+        responses: {
+          '200': h.json('OpportunitySummary', 'The pipeline summary'),
+          ...h.authorizedErrors,
+        },
+      },
+    },
+    '/api/v1/crm/opportunities/{opportunityId}': {
+      get: {
+        operationId: 'getOpportunity',
+        summary: 'Read one opportunity',
+        description: 'Requires crm.opportunity.view. Out of scope answers 404 (SEC-030).',
+        parameters: [pathParameter('opportunityId', 'Opaque opportunity identifier')],
+        responses: { '200': h.json('Opportunity', 'The opportunity'), ...h.notFoundErrors },
+      },
+      patch: {
+        operationId: 'updateOpportunity',
+        summary: 'Edit an open opportunity',
+        description:
+          'Requires crm.opportunity.manage. States the version read (STALE_VERSION otherwise); a closed ' +
+          'opportunity is OPPORTUNITY_CLOSED.',
+        parameters: [pathParameter('opportunityId', 'Opaque opportunity identifier')],
+        requestBody: requestBody(h.ref('UpdateOpportunityRequest')),
+        responses: { '200': h.json('Opportunity', 'The opportunity'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/crm/opportunities/{opportunityId}/stage': {
+      post: {
+        operationId: 'changeOpportunityStage',
+        summary: 'Move an opportunity between open stages, or close it as lost',
+        description:
+          'Requires crm.opportunity.manage. reservation and won are set only by the sales workflow ' +
+          '(STAGE_SET_BY_SALES), and an opportunity held by a reservation moves only with it. lost ' +
+          'needs a reason; a lost opportunity may be reopened to discovery. Refusals are audited.',
+        parameters: [pathParameter('opportunityId', 'Opaque opportunity identifier')],
+        requestBody: requestBody(h.ref('ChangeOpportunityStageRequest')),
+        responses: { '200': h.json('Opportunity', 'The opportunity'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/crm/opportunities/{opportunityId}/assign': {
+      post: {
+        operationId: 'assignOpportunity',
+        summary: 'Hand an opportunity to another owner',
+        description:
+          'Requires crm.opportunity.assign. Same eligibility rules and ASSIGNEE_* codes as a lead; ' +
+          "the opportunity moves to the new owner's team and the change is kept in its history.",
+        parameters: [pathParameter('opportunityId', 'Opaque opportunity identifier')],
+        requestBody: requestBody(h.ref('AssignOpportunityRequest')),
+        responses: { '200': h.json('Opportunity', 'The opportunity'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/crm/opportunities/{opportunityId}/ownership': {
+      get: {
+        operationId: 'getOpportunityOwnershipHistory',
+        summary: "An opportunity's ownership history",
+        description: 'Requires crm.opportunity.view. Append-only.',
+        parameters: [pathParameter('opportunityId', 'Opaque opportunity identifier')],
+        responses: { '200': h.json('OwnershipHistory', 'The history'), ...h.notFoundErrors },
+      },
+    },
+    '/api/v1/crm/opportunities/{opportunityId}/activities': {
+      get: {
+        operationId: 'listOpportunityActivities',
+        summary: "An opportunity's timeline, including every stage change",
+        description: 'Requires crm.opportunity.view, and the opportunity itself must be visible.',
+        parameters: [pathParameter('opportunityId', 'Opaque opportunity identifier')],
+        responses: { '200': h.json('ActivityList', 'The timeline'), ...h.notFoundErrors },
+      },
+      post: {
+        operationId: 'addOpportunityActivity',
+        summary: 'Record a call, message, meeting, visit or note on an opportunity',
+        description: 'Requires crm.activity.create.',
+        parameters: [pathParameter('opportunityId', 'Opaque opportunity identifier')],
+        requestBody: requestBody(h.ref('CreateActivityRequest')),
+        responses: { '201': h.json('Activity', 'The activity'), ...h.notFoundErrors },
       },
     },
     '/api/v1/crm/leads/{leadId}/ownership': {

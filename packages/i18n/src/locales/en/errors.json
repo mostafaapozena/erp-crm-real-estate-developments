@@ -32,6 +32,11 @@
     "REASON_CODE_ONLY_FOR_LOST": "A loss reason is used only when closing a lead as lost.",
     "NOTHING_TO_CHECK": "Enter a phone number, e-mail or identity number to check.",
     "BRANCH_OUTSIDE_SCOPE": "The file names a branch outside your scope.",
-    "UNKNOWN_BRANCH": "No active branch has this code."
+    "UNKNOWN_BRANCH": "No active branch has this code.",
+    "STAGE_SET_BY_SALES": "This stage is set automatically by the reservation or the contract.",
+    "STAGE_NOT_ALLOWED": "The opportunity cannot move to this stage from its current one.",
+    "OPPORTUNITY_CLOSED": "This opportunity is closed.",
+    "OPPORTUNITY_NOT_OPEN": "This opportunity is not at a stage that allows this action.",
+    "REASON_REQUIRED": "Give the reason."
   }
 }

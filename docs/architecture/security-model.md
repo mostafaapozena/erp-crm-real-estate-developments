@@ -420,6 +420,7 @@ mandatory second factor (SEC-017).
 |---|---|---|---|
 | 2 | `crmConsents` | `_id_unique`, `_customer_channel_latest` | **Append-only** per-channel consent statements; the latest per channel is in force and is what `CORE-NOTIFY` checks before any external message |
 | 2 | `crmOwnershipChanges` | `_id_unique`, `_subject_time`, `_to_time` | **Append-only** ownership history of customers, leads and opportunities, with reason and actor |
+| 3 | `crmOpportunities` | `_id_unique`, `_created_keyset`, `_customer_stage`, `_lead`, `_reservation`, `_owner_stage`, scope indexes | Never deleted; `reservation` and `won` are set only by the sales workflow; attribution copied from the lead is immutable |
 
 `crmCustomers` gained duplicate-candidate indexes (`_entity_email`, `_entity_identity`, both
 non-unique) and team/department scope indexes; `crmActivities` gained customer and opportunity

@@ -10,6 +10,7 @@ export {
   CONSENTS_COLLECTION,
   CUSTOMERS_COLLECTION,
   LEADS_COLLECTION,
+  OPPORTUNITIES_COLLECTION,
   OWNERSHIP_CHANGES_COLLECTION,
   ActivityImmutableError,
   CrmRecordUndeletableError,
@@ -17,8 +18,11 @@ export {
   consentModel,
   customerModel,
   leadModel,
+  opportunityModel,
   ownershipChangeModel,
 } from './model';
+export { OPPORTUNITY_SCOPE_FIELDS, OpportunityService } from './opportunities';
+export type { OpportunityServiceOptions, StageProbabilities } from './opportunities';
 export {
   CUSTOMER_SCOPE_FIELDS,
   CrmConflictError,

@@ -1009,5 +1009,14 @@
     "phone": "Phone",
     "email": "E-mail",
     "identity": "Identity number"
+  },
+  "opportunityStage": {
+    "discovery": "Discovery",
+    "unitSelection": "Unit selection",
+    "proposal": "Proposal",
+    "negotiation": "Negotiation",
+    "reservation": "Reservation",
+    "won": "Won",
+    "lost": "Lost"
   }
 }

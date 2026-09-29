@@ -19,6 +19,7 @@ import {
   consentModel,
   customerModel,
   leadModel,
+  opportunityModel,
   ownershipChangeModel,
 } from '../modules/crm/model';
 import {
@@ -101,6 +102,7 @@ export async function ensureIndexes(connection: Connection, logger: Logger): Pro
     activityModel(connection),
     consentModel(connection),
     ownershipChangeModel(connection),
+    opportunityModel(connection),
     reservationModel(connection),
     contractModel(connection),
     installmentModel(connection),

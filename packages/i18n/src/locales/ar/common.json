@@ -1017,5 +1017,14 @@
     "phone": "الهاتف",
     "email": "البريد الإلكتروني",
     "identity": "رقم الهوية"
+  },
+  "opportunityStage": {
+    "discovery": "استكشاف الاحتياج",
+    "unitSelection": "اختيار الوحدة",
+    "proposal": "عرض سعر",
+    "negotiation": "تفاوض",
+    "reservation": "حجز",
+    "won": "تم البيع",
+    "lost": "خسارة"
   }
 }

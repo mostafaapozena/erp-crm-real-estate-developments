@@ -7,6 +7,7 @@ import {
   IDENTITY_TYPES,
   LEAD_SOURCES,
   LEAD_STAGES,
+  OPPORTUNITY_STAGES,
   QUALIFICATION_PURPOSES,
   QUALIFICATION_TIMEFRAMES,
   SUPPORTED_LOCALES,
@@ -36,6 +37,7 @@ export const LEADS_COLLECTION = 'crmLeads';
 export const ACTIVITIES_COLLECTION = 'crmActivities';
 export const CONSENTS_COLLECTION = 'crmConsents';
 export const OWNERSHIP_CHANGES_COLLECTION = 'crmOwnershipChanges';
+export const OPPORTUNITIES_COLLECTION = 'crmOpportunities';
 
 export class CrmRecordUndeletableError extends Error {
   readonly code = 'CONFLICT';
@@ -152,6 +154,37 @@ export interface ActivityDocument {
   dueOn?: string;
   actorAccountId?: string;
   occurredAt: Date;
+}
+
+export interface OpportunityDocument {
+  opportunityId: string;
+  customerId: string;
+  leadId?: string;
+  source?: (typeof LEAD_SOURCES)[number];
+  campaignId?: string;
+  projectId?: string;
+  propertyType?: string;
+  usageType?: string;
+  budgetMin?: StoredMoney;
+  budgetMax?: StoredMoney;
+  expectedValue?: StoredMoney;
+  expectedCloseOn?: string;
+  stage: (typeof OPPORTUNITY_STAGES)[number];
+  lostReason?: string;
+  lostReasonCode?: string;
+  reservationId?: string;
+  contractId?: string;
+  notes?: string;
+  ownerAccountId: string;
+  legalEntityId: string;
+  branchId: string;
+  departmentId?: string;
+  teamId?: string;
+  stageChangedAt: Date;
+  closedAt?: Date;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 /** One consent statement for one channel. The latest per channel is the consent in force. */
@@ -449,6 +482,62 @@ function ownershipChangeSchema(): Schema<OwnershipChangeDocument> {
   return schema;
 }
 
+function opportunitySchema(): Schema<OpportunityDocument> {
+  const schema = new Schema<OpportunityDocument>(
+    {
+      opportunityId: { type: String, required: true, immutable: true },
+      customerId: { type: String, required: true, immutable: true },
+      leadId: { type: String, immutable: true },
+      // Attribution is copied once from the lead and never rewritten (Master Mapping §9 rule 14).
+      source: { type: String, immutable: true, enum: [...LEAD_SOURCES] },
+      campaignId: { type: String, immutable: true },
+      projectId: { type: String },
+      propertyType: { type: String },
+      usageType: { type: String },
+      budgetMin: { type: money },
+      budgetMax: { type: money },
+      expectedValue: { type: money },
+      expectedCloseOn: { type: String },
+      stage: { type: String, required: true, enum: [...OPPORTUNITY_STAGES] },
+      lostReason: { type: String },
+      lostReasonCode: { type: String },
+      reservationId: { type: String },
+      contractId: { type: String },
+      notes: { type: String },
+      ownerAccountId: { type: String, required: true },
+      legalEntityId: { type: String, required: true, immutable: true },
+      branchId: { type: String, required: true, immutable: true },
+      departmentId: { type: String },
+      teamId: { type: String },
+      stageChangedAt: { type: Date, required: true },
+      closedAt: { type: Date },
+      version: { type: Number, required: true },
+      createdAt: { type: Date, required: true, immutable: true },
+      updatedAt: { type: Date, required: true },
+    },
+    { collection: OPPORTUNITIES_COLLECTION, strict: 'throw', versionKey: false, timestamps: false },
+  );
+  for (const operation of DELETE_OPS) {
+    schema.pre(operation, function rejectDelete() {
+      throw new CrmRecordUndeletableError(operation);
+    });
+  }
+  schema.index({ opportunityId: 1 }, { unique: true, name: 'crmOpportunities_id_unique' });
+  schema.index({ createdAt: -1, opportunityId: -1 }, { name: 'crmOpportunities_created_keyset' });
+  schema.index({ customerId: 1, stage: 1 }, { name: 'crmOpportunities_customer_stage' });
+  schema.index({ leadId: 1 }, { name: 'crmOpportunities_lead' });
+  schema.index({ reservationId: 1 }, { name: 'crmOpportunities_reservation' });
+  schema.index({ ownerAccountId: 1, stage: 1 }, { name: 'crmOpportunities_owner_stage' });
+  schema.index({ projectId: 1, stage: 1 }, { name: 'crmOpportunities_scope_project' });
+  schema.index(
+    { legalEntityId: 1, branchId: 1, stage: 1 },
+    { name: 'crmOpportunities_scope_branch' },
+  );
+  schema.index({ teamId: 1, stage: 1 }, { name: 'crmOpportunities_scope_team' });
+  schema.index({ departmentId: 1, stage: 1 }, { name: 'crmOpportunities_scope_department' });
+  return schema;
+}
+
 function model<T>(connection: Connection, name: string, build: () => Schema<T>): Model<T> {
   return (connection.models[name] as Model<T> | undefined) ?? connection.model<T>(name, build());
 }
@@ -471,4 +560,8 @@ export function consentModel(connection: Connection): Model<ConsentDocument> {
 
 export function ownershipChangeModel(connection: Connection): Model<OwnershipChangeDocument> {
   return model(connection, OWNERSHIP_CHANGES_COLLECTION, ownershipChangeSchema);
+}
+
+export function opportunityModel(connection: Connection): Model<OpportunityDocument> {
+  return model(connection, OPPORTUNITIES_COLLECTION, opportunitySchema);
 }

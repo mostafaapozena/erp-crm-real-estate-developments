@@ -7,6 +7,7 @@ import {
   DUPLICATE_MATCHES,
   IDENTITY_TYPES,
   LEAD_AGE_BANDS,
+  OPPORTUNITY_STAGES,
   QUALIFICATION_PURPOSES,
   QUALIFICATION_TIMEFRAMES,
   CAMPAIGN_OBJECTIVES,
@@ -91,6 +92,7 @@ export const DISPLAYED_ENUMS: Readonly<Record<string, readonly string[]>> = {
   decisionRole: DECISION_ROLES,
   leadAgeBand: LEAD_AGE_BANDS,
   duplicateMatch: DUPLICATE_MATCHES,
+  opportunityStage: OPPORTUNITY_STAGES,
 };
 
 export interface EnumLabelProblem {

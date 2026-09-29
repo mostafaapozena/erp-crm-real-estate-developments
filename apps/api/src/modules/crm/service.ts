@@ -420,7 +420,7 @@ export class CrmService {
    * account, one without the read permission for the work, one with no placement, one outside the
    * actor's own scope, or one placed in another branch than the record — whose branch is fixed.
    */
-  private async eligibleOwner(
+  async assertEligibleOwner(
     actor: ActorContext,
     accountId: string,
     permission: Permission,
@@ -462,7 +462,7 @@ export class CrmService {
    * The update that moves a record to a new owner's placement: team and department follow the owner,
    * and one the new owner does not have is removed rather than left pointing at the old team.
    */
-  private static placementUpdate(placement: { departmentId?: string; teamId?: string }): {
+  static placementUpdate(placement: { departmentId?: string; teamId?: string }): {
     set: Record<string, string>;
     unset: Record<string, ''>;
   } {
@@ -484,7 +484,7 @@ export class CrmService {
   }
 
   /** The actor's own team and department, when their placement is in the record's branch. */
-  private async ownPlacement(
+  async ownPlacement(
     actor: ActorContext,
     branchId: string,
   ): Promise<{ departmentId?: string; teamId?: string }> {
@@ -667,7 +667,7 @@ export class CrmService {
     const placement =
       ownerAccountId === actor.accountId
         ? await this.ownPlacement(actor, input.branchId)
-        : await this.eligibleOwner(
+        : await this.assertEligibleOwner(
             actor,
             ownerAccountId,
             'crm.customer.view',
@@ -935,7 +935,7 @@ export class CrmService {
     const before = await this.scopedCustomer(actor, customerId);
     if (input.toAccountId === before.ownerAccountId)
       throw invalid('ALREADY_OWNER', ['toAccountId']);
-    const placement = await this.eligibleOwner(
+    const placement = await this.assertEligibleOwner(
       actor,
       input.toAccountId,
       'crm.customer.view',
@@ -1441,7 +1441,7 @@ export class CrmService {
       ? (input.assignedToAccountId as string)
       : actor.accountId;
     const assigneePlacement = namesSomeoneElse
-      ? await this.eligibleOwner(
+      ? await this.assertEligibleOwner(
           actor,
           assignedToAccountId,
           'crm.lead.view',
@@ -2050,7 +2050,7 @@ export class CrmService {
     if (input.assignedToAccountId === before.assignedToAccountId) {
       throw invalid('ALREADY_OWNER', ['assignedToAccountId']);
     }
-    const placement = await this.eligibleOwner(
+    const placement = await this.assertEligibleOwner(
       actor,
       input.assignedToAccountId,
       'crm.lead.view',
@@ -2129,11 +2129,22 @@ export class CrmService {
    * customer — and a customer who already exists by phone is linked rather than duplicated. The lead
    * stays as history; its stage is not changed by conversion.
    */
-  async convertLead(
+  async convertLead<T = never>(
     actor: ActorContext,
     leadId: string,
     context: RequestContext,
-  ): Promise<{ lead: Lead; customer: Customer; customerCreated: boolean; replayed: boolean }> {
+    /**
+     * Opens an opportunity in the same transaction (CRM-LEAD-005). Supplied by the opportunity
+     * service, so CRM's customer and lead code needs no knowledge of opportunities.
+     */
+    openOpportunity?: (lead: Lead, customer: Customer, session: ClientSession) => Promise<T>,
+  ): Promise<{
+    lead: Lead;
+    customer: Customer;
+    customerCreated: boolean;
+    replayed: boolean;
+    opportunity?: T;
+  }> {
     const before = await this.getLead(actor, leadId);
     if (before.customerId) {
       // The customer is described only through the actor's own scope, like any other read.
@@ -2186,6 +2197,9 @@ export class CrmService {
           .lean<LeadDocument>()
           .exec();
         if (!result) throw conflict('STALE_VERSION');
+        const opportunity = openOpportunity
+          ? await openOpportunity(toLead(result), customer, session)
+          : undefined;
         await this.activities.create(
           [
             {
@@ -2220,7 +2234,13 @@ export class CrmService {
           },
           { session },
         );
-        return { lead: toLead(result), customer, customerCreated: created, replayed: false };
+        return {
+          lead: toLead(result),
+          customer,
+          customerCreated: created,
+          replayed: false,
+          ...(opportunity !== undefined ? { opportunity } : {}),
+        };
       });
     } catch (error) {
       // Two conversions racing on one lead create one customer: the loser reads what the winner made.
