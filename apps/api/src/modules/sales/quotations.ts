@@ -158,7 +158,9 @@ function toPlan(stored: StoredPaymentPlan): PaymentPlan {
           milestones: stored.milestones.map((milestone) => ({
             dueOn: milestone.dueOn as BusinessDate,
             amount: toMoney(milestone.amount),
-            ...(milestone.label ? { label: { ar: milestone.label.ar, en: milestone.label.en } } : {}),
+            ...(milestone.label
+              ? { label: { ar: milestone.label.ar, en: milestone.label.en } }
+              : {}),
           })),
         }
       : {}),
@@ -191,7 +193,9 @@ const toRow = (row: StoredScheduleRow): ScheduleRow => ({
 
 /** The discount from the list price, as a percentage to four places — the reservation's own rule. */
 function discountPercentage(listPrice: Money, agreedPrice: Money): string {
-  if (compareMoney(listPrice, { amount: '0' as Money['amount'], currency: listPrice.currency }) === 0) {
+  if (
+    compareMoney(listPrice, { amount: '0' as Money['amount'], currency: listPrice.currency }) === 0
+  ) {
     return '0';
   }
   const difference = subtractMoney(listPrice, agreedPrice);
@@ -206,7 +210,9 @@ function encodeCursor(createdAt: Date, id: string, revision: number): string {
   return Buffer.from(`${createdAt.toISOString()}|${id}|${revision}`, 'utf8').toString('base64url');
 }
 
-function decodeCursor(cursor: string): { createdAt: Date; id: string; revision: number } | undefined {
+function decodeCursor(
+  cursor: string,
+): { createdAt: Date; id: string; revision: number } | undefined {
   try {
     const [text, id, revision] = Buffer.from(cursor, 'base64url').toString('utf8').split('|');
     if (!text || !id || !revision) return undefined;
@@ -231,8 +237,7 @@ export class QuotationService {
 
   private toQuotation(d: QuotationDocument): Quotation {
     // Expiry is read, never written: the record keeps what was offered and until when.
-    const state =
-      d.state === 'active' && d.validUntil < this.options.today() ? 'expired' : d.state;
+    const state = d.state === 'active' && d.validUntil < this.options.today() ? 'expired' : d.state;
     return QuotationSchema.parse({
       quotationId: d.quotationId,
       quotationNumber: d.quotationNumber,
@@ -349,7 +354,12 @@ export class QuotationService {
         throw invalid('OPPORTUNITY_CUSTOMER_MISMATCH', ['opportunityId']);
       }
     }
-    const priced = this.price(unit.currentPrice, input.agreedPrice, input.paymentPlan, input.validUntil);
+    const priced = this.price(
+      unit.currentPrice,
+      input.agreedPrice,
+      input.paymentPlan,
+      input.validUntil,
+    );
 
     const quotationId = newId('quo');
     try {
@@ -401,14 +411,21 @@ export class QuotationService {
           { session },
         );
         if (!created) throw conflict('QUOTATION_NOT_CREATED');
-        await this.audit(actor, SALES_AUDIT_ACTIONS.quotationCreated, quotationId, context, session, {
-          changes: buildChangeSummary(undefined, {
-            quotationNumber,
-            unitId: unit.unitId,
-            agreedPrice: `${input.agreedPrice.amount} ${input.agreedPrice.currency}`,
-            validUntil: input.validUntil,
-          }),
-        });
+        await this.audit(
+          actor,
+          SALES_AUDIT_ACTIONS.quotationCreated,
+          quotationId,
+          context,
+          session,
+          {
+            changes: buildChangeSummary(undefined, {
+              quotationNumber,
+              unitId: unit.unitId,
+              agreedPrice: `${input.agreedPrice.amount} ${input.agreedPrice.currency}`,
+              validUntil: input.validUntil,
+            }),
+          },
+        );
         return { quotation: this.toQuotation(created.toObject()), replayed: false };
       });
     } catch (error) {
@@ -421,7 +438,10 @@ export class QuotationService {
   }
 
   /** The active revision of a quotation in the actor's scope, or not found. */
-  private async activeRevision(actor: ActorContext, quotationId: string): Promise<QuotationDocument> {
+  private async activeRevision(
+    actor: ActorContext,
+    quotationId: string,
+  ): Promise<QuotationDocument> {
     assertSafeFilter({ quotationId });
     const filter = withScope(buildScopeFilter(actor, QUOTATION_SCOPE_FIELDS), {
       quotationId,
@@ -448,7 +468,12 @@ export class QuotationService {
     }
     const unit = await this.options.units.priced(actor, current.unitId);
     if (!unit.currentPrice) throw conflict('PRICE_NOT_VISIBLE', ['unitId']);
-    const priced = this.price(unit.currentPrice, input.agreedPrice, input.paymentPlan, input.validUntil);
+    const priced = this.price(
+      unit.currentPrice,
+      input.agreedPrice,
+      input.paymentPlan,
+      input.validUntil,
+    );
     try {
       return await withTransaction(this.options.connection, async (session) => {
         const now = new Date();
@@ -493,15 +518,22 @@ export class QuotationService {
           { session },
         );
         if (!created) throw conflict('QUOTATION_NOT_CREATED');
-        await this.audit(actor, SALES_AUDIT_ACTIONS.quotationRevised, quotationId, context, session, {
-          changes: buildChangeSummary(
-            { revision: String(current.revision) },
-            {
-              revision: String(current.revision + 1),
-              agreedPrice: `${input.agreedPrice.amount} ${input.agreedPrice.currency}`,
-            },
-          ),
-        });
+        await this.audit(
+          actor,
+          SALES_AUDIT_ACTIONS.quotationRevised,
+          quotationId,
+          context,
+          session,
+          {
+            changes: buildChangeSummary(
+              { revision: String(current.revision) },
+              {
+                revision: String(current.revision + 1),
+                agreedPrice: `${input.agreedPrice.amount} ${input.agreedPrice.currency}`,
+              },
+            ),
+          },
+        );
         return this.toQuotation(created.toObject());
       });
     } catch (error) {
@@ -530,10 +562,17 @@ export class QuotationService {
         .lean<QuotationDocument>()
         .exec();
       if (!updated) throw conflict('STALE_VERSION', ['expectedRevision']);
-      await this.audit(actor, SALES_AUDIT_ACTIONS.quotationWithdrawn, quotationId, context, session, {
-        reason: input.reason,
-        changes: buildChangeSummary({ state: 'active' }, { state: 'withdrawn' }),
-      });
+      await this.audit(
+        actor,
+        SALES_AUDIT_ACTIONS.quotationWithdrawn,
+        quotationId,
+        context,
+        session,
+        {
+          reason: input.reason,
+          changes: buildChangeSummary({ state: 'active' }, { state: 'withdrawn' }),
+        },
+      );
       return this.toQuotation(updated);
     });
   }

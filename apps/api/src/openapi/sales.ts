@@ -338,7 +338,10 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
           'time, actor and reason only — change details and request context stay behind the audit ' +
           'permissions.',
         parameters: [pathParameter('contractId', 'Opaque contract identifier')],
-        responses: { '200': h.json('ContractHistory', 'The trail, newest first'), ...h.notFoundErrors },
+        responses: {
+          '200': h.json('ContractHistory', 'The trail, newest first'),
+          ...h.notFoundErrors,
+        },
       },
     },
     '/api/v1/sales/quotations': {
@@ -356,7 +359,10 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
           queryParameter('opportunityId', { type: 'string' }),
           queryParameter('unitId', { type: 'string' }),
         ],
-        responses: { '200': h.json('QuotationPage', 'A page of quotations'), ...h.authorizedErrors },
+        responses: {
+          '200': h.json('QuotationPage', 'A page of quotations'),
+          ...h.authorizedErrors,
+        },
       },
       post: {
         operationId: 'createQuotation',
@@ -422,7 +428,7 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
         description:
           'Requires sales.contract.cancel (SALE-CANCEL-001). A draft is withdrawn and its reservation ' +
           'can be drafted again. An active contract is **refused when money beyond the reservation ' +
-          "deposit has been collected** (contractHasCollections): that is a refund with penalties " +
+          'deposit has been collected** (contractHasCollections): that is a refund with penalties ' +
           'and accounting, SALE-CANCEL-002 in BMP-2. With a policy governing ' +
           'sales.contract.cancellation it waits in pendingCancellation for the decision. ' +
           'Installments are cancelled rather than deleted, the unit optionally returns to the market ' +

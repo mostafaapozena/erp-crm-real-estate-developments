@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-29 (Business Master Prompt 1 — Commercial Operations — package 5 complete)
+Last updated: 2026-09-29 (Business Master Prompt 1 — Commercial Operations — package 6 complete)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -88,8 +88,8 @@ idempotent seed extensions.
 | 2 CRM and customer completion | **complete** | `9a8eb7b` |
 | 3 Opportunities and ownership | **complete** | `d79330c` |
 | 4 Inventory and pricing | **complete** | `f6dcdc4` |
-| 5 Reservations and approvals | **complete** | the commit containing this row |
-| 6 Contracts and schedules | not started | — |
+| 5 Reservations and approvals | **complete** | `b09f1be` |
+| 6 Contracts, schedules and quotations | **complete** | the commit containing this row |
 | 7 Arabic/English PDF documents and QR verification | not started | — |
 | 8 UI journey, dashboards and reports | not started | — |
 | 9 Final verification and phase documentation | not started | — |
@@ -217,6 +217,41 @@ idempotent seed extensions.
   passed / 49 files**, OpenAPI **210 paths / 0 broken references**, full integration gate **582
   passed / 0 failed / 0 skipped**, 27 files. Lint needs `NODE_OPTIONS=--max-old-space-size=8192`
   now — the default heap ran out once.
+
+### Package 6 — contracts, schedules and quotations
+
+- **Contracts are drafted, then activated** (`SalesService.createContract` / `activateContract`).
+  A draft carries immutable `customerSnapshot`, `unitSnapshot`, `pricing`, parties and a
+  computed `draftSchedule`; nothing is committed and the reservation records `contractId` (so it
+  can be neither cancelled nor expired underneath; `CONTRACT_IN_PROGRESS`). Activation freezes the
+  instalments, converts the reservation, contracts the unit and wins the lead **and the opportunity**
+  (CRM-OPP-002 now implemented). New state `pendingApproval` for a `planChanged` exception governed
+  by `sales.contract.exception`. Pre-BMP-1 contracts read unchanged (no snapshots, sole buyer at
+  100 %, unsigned) — no migration.
+- **Every caller of createContract must now activate** to get a schedule: the seed
+  (`scripts/seed-demo/business.ts`), `collections.int-test.ts` and `sales.int-test.ts`
+  (`contractFor` helper) do. The web "create contract" button on the reservation page still only
+  drafts — **package 8 must add the activate step to the screen**, otherwise a user sees a draft with
+  no schedule.
+- Pure rules in `sales/contract-rules.ts`: `partyIssues`, `samePlan` (terms, not text),
+  `amendmentRows`. Contracts: plan `milestones` and `maintenanceDeposit` (added to the price;
+  contract total = price + deposit), `scheduleTotal`, `SCHEDULE_ROUNDING_RULE` on every preview,
+  installment kinds `milestone`/`maintenanceDeposit`, rows sorted by date (stable).
+- Signing (once; signed copy must be a contract-owned document; warning only, `BD-35`),
+  amendments (policy **required**; replaced unpaid rows → `rescheduled`; stale if paid meanwhile),
+  cancellation (draft withdrawn; active refused beyond the reservation's own money; approval where
+  governed), history (`AuditService.targetHistory`, summary only).
+- `QuotationService` (`sales/quotations.ts`, `salesQuotations`, routes `/sales/quotations`):
+  revisions, withdraw, computed expiry, no inventory call at all. Legacy prefix `QUO`; numbering
+  type `quotation` added to `SEQUENCE_TYPES`.
+- **Boundary kept:** CRM never hands identity to another module unscoped, so the buyer identity is
+  snapshotted through `CrmService.customerForSnapshot` (scoped, restricted) — recorded only when
+  the drafter may see it; otherwise the contract warns `identityMissing`.
+- Test-fixture finding: since package 2 a customer's owner other than the creator needs
+  `crm.customer.transfer`; the sales fixture now creates customers as their owner.
+- Measured: typecheck, full lint (8 GB heap), format, i18n, OpenAPI **219 paths / 0 broken
+  references**, **unit 648 passed** (two web tests timed out under load in the full run and pass
+  standalone, 9/9), full integration gate **602 passed / 0 failed / 0 skipped**, 27 files.
 
 ## Foundation completion (post-demo master prompt) — COMPLETE, stopped at the foundation gate
 

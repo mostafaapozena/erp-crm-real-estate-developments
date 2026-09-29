@@ -189,10 +189,7 @@ export interface UnitSnapshotPort {
  * checked: a person the actor cannot see cannot be added to a contract.
  */
 export interface ContractCustomerPort {
-  snapshot(
-    actor: ActorContext,
-    customerId: string,
-  ): Promise<ContractCustomerSnapshot | undefined>;
+  snapshot(actor: ActorContext, customerId: string): Promise<ContractCustomerSnapshot | undefined>;
   inScope(actor: ActorContext, customerId: string): Promise<{ name: string } | undefined>;
 }
 
@@ -206,7 +203,10 @@ export interface SignedCopyPort {
 
 /** The contract's own trail, read from the audit record (SALE-CONTRACT-004). */
 export interface HistoryPort {
-  targetHistory(target: { type: string; id: string }, limit?: number): Promise<ContractHistoryEntry[]>;
+  targetHistory(
+    target: { type: string; id: string },
+    limit?: number,
+  ): Promise<ContractHistoryEntry[]>;
 }
 
 /** Timed holds, as a reservation converts one (INV-HOLD-001). */
@@ -405,7 +405,9 @@ function toPlan(stored: StoredPaymentPlan): PaymentPlan {
           milestones: stored.milestones.map((milestone) => ({
             dueOn: milestone.dueOn as BusinessDate,
             amount: toMoney(milestone.amount),
-            ...(milestone.label ? { label: { ar: milestone.label.ar, en: milestone.label.en } } : {}),
+            ...(milestone.label
+              ? { label: { ar: milestone.label.ar, en: milestone.label.en } }
+              : {}),
           })),
         }
       : {}),
@@ -1997,9 +1999,7 @@ export class SalesService {
 
     const parties = await this.resolveParties(
       actor,
-      input.parties ?? [
-        { role: 'buyer', customerId: reservation.customerId, sharePercent: '100' },
-      ],
+      input.parties ?? [{ role: 'buyer', customerId: reservation.customerId, sharePercent: '100' }],
       reservation.customerId,
     );
     const customerSnapshot = await this.options.customers?.snapshot(actor, reservation.customerId);
@@ -2536,7 +2536,6 @@ export class SalesService {
     });
   }
 
-
   /** The rows a schedule produces must sum to the total. Asserted again before anything is stored. */
   private assertReconciles(rows: ScheduleRow[], total: Money): void {
     const sum = rows.reduce<Money>(
@@ -2695,12 +2694,16 @@ export class SalesService {
     await this.getContract(actor, contractId);
     const current = await this.findContractOrThrow(contractId);
     if (!canTransitionContract(current.state, 'cancelled')) {
-      await this.contractAudit(actor, {
-        action: SALES_AUDIT_ACTIONS.contractRefused,
-        outcome: 'denied',
-        contractId,
-        reason: `refused transition ${current.state} -> cancelled`,
-      }, context);
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.contractRefused,
+          outcome: 'denied',
+          contractId,
+          reason: `refused transition ${current.state} -> cancelled`,
+        },
+        context,
+      );
       throw new SalesConflictError('invalidTransition');
     }
 
@@ -3035,8 +3038,14 @@ export class SalesService {
         context: { amount: owed },
         summary: [
           { label: { ar: 'رقم العقد', en: 'Contract number' }, value: current.contractNumber },
-          { label: { ar: 'المبلغ المعاد جدولته', en: 'Amount rescheduled' }, value: `${owed.amount} ${owed.currency}` },
-          { label: { ar: 'عدد الأقساط الجديدة', en: 'New instalments' }, value: String(newRows.length) },
+          {
+            label: { ar: 'المبلغ المعاد جدولته', en: 'Amount rescheduled' },
+            value: `${owed.amount} ${owed.currency}`,
+          },
+          {
+            label: { ar: 'عدد الأقساط الجديدة', en: 'New instalments' },
+            value: String(newRows.length),
+          },
         ],
         idempotencyKey: `contract-amendment-${amendmentId}`,
       },
@@ -3131,8 +3140,7 @@ export class SalesService {
         current.length === amendment.replacedInstallmentIds.length &&
         current.every(
           (row) =>
-            UNPAID_STATES.includes(row.state) &&
-            compareMoney(toMoney(row.paidAmount), zero) === 0,
+            UNPAID_STATES.includes(row.state) && compareMoney(toMoney(row.paidAmount), zero) === 0,
         );
       if (!stillUnpaid) return 'stale' as const;
 
@@ -3211,7 +3219,13 @@ export class SalesService {
       return 'amended' as const;
     });
     if (outcome === 'stale') {
-      await this.settleAmendment(actor, contract.contractId, amendment.amendmentId, 'stale', context);
+      await this.settleAmendment(
+        actor,
+        contract.contractId,
+        amendment.amendmentId,
+        'stale',
+        context,
+      );
     }
     return outcome;
   }
@@ -3224,7 +3238,9 @@ export class SalesService {
     actor: ActorContext,
     requestId: string,
     context: RequestContext,
-  ): Promise<'activated' | 'amended' | 'stale' | 'cancelled' | 'rejected' | 'refused' | 'unchanged'> {
+  ): Promise<
+    'activated' | 'amended' | 'stale' | 'cancelled' | 'rejected' | 'refused' | 'unchanged'
+  > {
     if (!requestId || !this.options.approvals) return 'unchanged';
     assertSafeFilter({ requestId });
     const document = await this.contracts
@@ -3247,7 +3263,13 @@ export class SalesService {
     if (amendment) {
       if (state === 'approved') return this.applyAmendment(actor, document, amendment, context);
       if (refused) {
-        await this.settleAmendment(actor, document.contractId, amendment.amendmentId, 'rejected', context);
+        await this.settleAmendment(
+          actor,
+          document.contractId,
+          amendment.amendmentId,
+          'rejected',
+          context,
+        );
         return 'rejected';
       }
       return 'unchanged';
@@ -3255,14 +3277,24 @@ export class SalesService {
 
     if (document.pendingCancellation?.requestId === requestId) {
       if (state === 'approved' && document.state === 'active') {
-        await this.applyCancellation(actor, document, document.pendingCancellation.reason, true, context);
+        await this.applyCancellation(
+          actor,
+          document,
+          document.pendingCancellation.reason,
+          true,
+          context,
+        );
         return 'cancelled';
       }
       if (refused) {
         await this.contracts
           .updateOne(
             { contractId: document.contractId, 'pendingCancellation.requestId': requestId },
-            { $unset: { pendingCancellation: '' }, $set: { updatedAt: new Date() }, $inc: { version: 1 } },
+            {
+              $unset: { pendingCancellation: '' },
+              $set: { updatedAt: new Date() },
+              $inc: { version: 1 },
+            },
           )
           .exec();
         return 'refused';
@@ -3284,7 +3316,11 @@ export class SalesService {
         await withTransaction(this.connection, async (session) => {
           const updated = await this.contracts
             .updateOne(
-              { contractId: document.contractId, state: 'pendingApproval', version: document.version },
+              {
+                contractId: document.contractId,
+                state: 'pendingApproval',
+                version: document.version,
+              },
               { $set: { state: 'draft', updatedAt: new Date() }, $inc: { version: 1 } },
               { session },
             )
@@ -3314,7 +3350,10 @@ export class SalesService {
     contractId: string,
   ): Promise<{ items: ContractHistoryEntry[] }> {
     await this.getContract(actor, contractId);
-    return { items: (await this.options.history?.targetHistory({ type: 'contract', id: contractId })) ?? [] };
+    return {
+      items:
+        (await this.options.history?.targetHistory({ type: 'contract', id: contractId })) ?? [],
+    };
   }
 
   /** Settle every contract approval the engine decided while nobody was listening. */
@@ -3356,7 +3395,6 @@ export class SalesService {
     }
     return settled;
   }
-
 
   /* --------------------------------------------------------- installments */
 

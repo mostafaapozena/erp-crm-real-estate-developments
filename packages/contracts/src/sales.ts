@@ -285,7 +285,6 @@ export function scheduleTotal(price: Money, plan: PaymentPlan): Money {
   return plan.maintenanceDeposit ? addMoney(price, plan.maintenanceDeposit.amount) : price;
 }
 
-
 /* ----------------------------------------------------------------- reservation */
 
 /**
@@ -869,7 +868,6 @@ export const QuotationPageSchema = z.strictObject({
 export type QuotationPage = z.infer<typeof QuotationPageSchema>;
 
 export const QuotationRevisionsSchema = z.strictObject({ items: z.array(QuotationSchema) });
-
 
 /* ----------------------------------------------------------------- installment */
 

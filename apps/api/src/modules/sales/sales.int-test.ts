@@ -452,8 +452,7 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
         },
       },
       signedCopies: {
-        ownerOf: (_actor, documentId) =>
-          Promise.resolve(signedCopyOwners.get(documentId)),
+        ownerOf: (_actor, documentId) => Promise.resolve(signedCopyOwners.get(documentId)),
       },
       history: {
         targetHistory: async (target, limit) =>
@@ -1942,7 +1941,10 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       const { unit } = await makeUnit();
       const own = await makeCustomer(REP_TWO);
       const hidden = await makeCustomer(REP_ONE);
-      const reservation = await reserve(REP_TWO, { unitId: unit.unitId, customerId: own.customerId });
+      const reservation = await reserve(REP_TWO, {
+        unitId: unit.unitId,
+        customerId: own.customerId,
+      });
       await as(REP_TWO)
         .post(`/api/v1/sales/reservations/${reservation.reservationId}/confirm`)
         .expect(200);
@@ -1985,10 +1987,12 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       );
       await sales.sweep(MAINTENANCE_ACTOR, contractsContext);
       expect(
-        (await reservationModel(connection)
-          .findOne({ reservationId: reservation.reservationId })
-          .lean()
-          .exec())?.state,
+        (
+          await reservationModel(connection)
+            .findOne({ reservationId: reservation.reservationId })
+            .lean()
+            .exec()
+        )?.state,
       ).toBe('confirmed');
 
       const withdrawn = await as(MANAGER)
@@ -2041,7 +2045,9 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       const requestId = await latestRequest(draft.contractId);
       approvalStates.set(requestId, 'rejected');
       await sales.syncApproval(MAINTENANCE_ACTOR, requestId, contractsContext);
-      const again = await as(MANAGER).get(`/api/v1/sales/contracts/${draft.contractId}`).expect(200);
+      const again = await as(MANAGER)
+        .get(`/api/v1/sales/contracts/${draft.contractId}`)
+        .expect(200);
       expect(again.body.state).toBe('draft');
 
       // Asked again and granted: the engine's outcome activates it.
@@ -2053,7 +2059,9 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       expect(second).not.toBe(requestId);
       approvalStates.set(second, 'approved');
       await sales.sweep(MAINTENANCE_ACTOR, contractsContext);
-      const active = await as(MANAGER).get(`/api/v1/sales/contracts/${draft.contractId}`).expect(200);
+      const active = await as(MANAGER)
+        .get(`/api/v1/sales/contracts/${draft.contractId}`)
+        .expect(200);
       expect(active.body.state).toBe('active');
       expect(
         await installmentModel(connection).countDocuments({ contractId: draft.contractId }),
@@ -2138,7 +2146,10 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
             label: { ar: 'استلام الهيكل', en: 'Structure complete' },
           },
         ],
-        maintenanceDeposit: { amount: egp('150000'), dueOn: BusinessDateSchema.parse('2027-12-01') },
+        maintenanceDeposit: {
+          amount: egp('150000'),
+          dueOn: BusinessDateSchema.parse('2027-12-01'),
+        },
       };
       const { reservation } = await confirmed({ plan });
       const { contract, installments } = await contractFor(MANAGER, reservation.reservationId);
@@ -2147,7 +2158,10 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       expect(installments.map((row) => row.kind)).toEqual(
         expect.arrayContaining(['milestone', 'maintenanceDeposit']),
       );
-      const sum = installments.reduce<Money>((running, row) => addMoney(running, row.amount), egp('0'));
+      const sum = installments.reduce<Money>(
+        (running, row) => addMoney(running, row.amount),
+        egp('0'),
+      );
       expect(compareMoney(sum, egp('3150000'))).toBe(0);
       // Rows in date order, numbered from one.
       const dates = installments.map((row) => row.dueOn);
@@ -2163,7 +2177,11 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       const { contract } = await contractFor(MANAGER, reservation.reservationId);
       const refused = await as(MANAGER)
         .post(`/api/v1/sales/contracts/${contract.contractId}/amendments`)
-        .send({ plan: newPlan, reason: 'customer asked for quarterly', expectedVersion: contract.version })
+        .send({
+          plan: newPlan,
+          reason: 'customer asked for quarterly',
+          expectedVersion: contract.version,
+        })
         .expect(409);
       expect(refused.body.error.issues[0].code).toBe('AMENDMENT_NEEDS_POLICY');
       expect(
@@ -2180,7 +2198,11 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       const { contract, installments } = await contractFor(MANAGER, reservation.reservationId);
       const requested = await as(MANAGER)
         .post(`/api/v1/sales/contracts/${contract.contractId}/amendments`)
-        .send({ plan: newPlan, reason: 'customer asked for quarterly', expectedVersion: contract.version })
+        .send({
+          plan: newPlan,
+          reason: 'customer asked for quarterly',
+          expectedVersion: contract.version,
+        })
         .expect(200);
       const amendment = requested.body.amendments[0];
       // The part-paid down payment stays; the twelve unpaid instalments are replaced.
@@ -2200,11 +2222,17 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       const live = rows.filter((row) => row.state !== 'rescheduled' && row.state !== 'cancelled');
       expect(live).toHaveLength(7);
       const sum = live.reduce<Money>(
-        (running, row) => addMoney(running, { amount: row.amount.amount.toString() as Money['amount'], currency: 'EGP' }),
+        (running, row) =>
+          addMoney(running, {
+            amount: row.amount.amount.toString() as Money['amount'],
+            currency: 'EGP',
+          }),
         egp('0'),
       );
       expect(compareMoney(sum, egp('3000000'))).toBe(0);
-      const after = await as(MANAGER).get(`/api/v1/sales/contracts/${contract.contractId}`).expect(200);
+      const after = await as(MANAGER)
+        .get(`/api/v1/sales/contracts/${contract.contractId}`)
+        .expect(200);
       expect(after.body.amendments[0].state).toBe('applied');
       expect(after.body.outstandingAmount).toEqual(contract.outstandingAmount);
     });
@@ -2215,7 +2243,11 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       const { contract } = await contractFor(MANAGER, reservation.reservationId);
       const requested = await as(MANAGER)
         .post(`/api/v1/sales/contracts/${contract.contractId}/amendments`)
-        .send({ plan: newPlan, reason: 'customer asked for quarterly', expectedVersion: contract.version })
+        .send({
+          plan: newPlan,
+          reason: 'customer asked for quarterly',
+          expectedVersion: contract.version,
+        })
         .expect(200);
       const amendment = requested.body.amendments[0];
       // A receipt lands on one of the replaced rows meanwhile.
@@ -2230,7 +2262,9 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       );
       approvalStates.set(amendment.requestId as string, 'approved');
       await sales.syncApproval(MAINTENANCE_ACTOR, amendment.requestId as string, contractsContext);
-      const after = await as(MANAGER).get(`/api/v1/sales/contracts/${contract.contractId}`).expect(200);
+      const after = await as(MANAGER)
+        .get(`/api/v1/sales/contracts/${contract.contractId}`)
+        .expect(200);
       expect(after.body.amendments[0].state).toBe('stale');
       expect(
         await installmentModel(connection).countDocuments({
@@ -2348,7 +2382,9 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       await connection
         .collection(QUOTATIONS_COLLECTION)
         .updateOne({ quotationId: quotation.quotationId }, { $set: { validUntil: '2026-09-01' } });
-      const expired = await as(REP_ONE).get(`/api/v1/sales/quotations/${quotation.quotationId}`).expect(200);
+      const expired = await as(REP_ONE)
+        .get(`/api/v1/sales/quotations/${quotation.quotationId}`)
+        .expect(200);
       expect(expired.body.items[0].state).toBe('expired');
 
       const { quotation: other } = await quote();

@@ -14,8 +14,9 @@ const egp = (amount: string) => money(amount, 'EGP');
 
 describe('contract parties (SALE-CONTRACT-002)', () => {
   it('accepts one buyer at 100 %', () => {
-    expect(partyIssues([{ role: 'buyer', customerId: 'cus_a', sharePercent: '100' }], 'cus_a'))
-      .toBeUndefined();
+    expect(
+      partyIssues([{ role: 'buyer', customerId: 'cus_a', sharePercent: '100' }], 'cus_a'),
+    ).toBeUndefined();
   });
 
   it('accepts shares that total exactly 100 in decimals', () => {

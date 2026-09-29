@@ -725,8 +725,8 @@ one: it builds the configurable policy, stores *not configured* by default, and 
 | CRM-LOSS-001 | Lost, disqualified and on-hold reasons from reference data; a nurture flag | BMP-1 | — | implemented |
 | CRM-REPORT-001 | Pipeline, conversion, ageing and owner performance computed inside the actor's scope | BMP-1 | — | in-progress |
 | CRM-OPP-001 | Opportunity as its own aggregate — several per customer — with target project, unit type, budget, expected value, expected close date and owner; probability only when configured per stage | BMP-1 | `BD-27` | implemented |
-| CRM-OPP-002 | Opportunity won/lost outcome with reason, stage history, and conversion into a reservation | BMP-1 | — | in-progress |
-| SALE-QUOTE-001 | Quotation versions from the unit's effective price and a plan, with validity; a quotation never reserves inventory | BMP-1 | `BD-36` | approved |
+| CRM-OPP-002 | Opportunity won/lost outcome with reason, stage history, and conversion into a reservation | BMP-1 | — | implemented |
+| SALE-QUOTE-001 | Quotation versions from the unit's effective price and a plan, with validity; a quotation never reserves inventory | BMP-1 | `BD-36` | implemented |
 | SALE-DISCOUNT-001 | Discount by amount or percentage with exact arithmetic; a configured maximum; no discount takes effect before its required approval | BMP-1 | `BD-03`, `BD-04` | implemented |
 | SALE-DISCOUNT-002 | Price override below the effective price as an approval-controlled exception | BMP-1 | `BD-31` | implemented |
 | SALE-RESERVE-001 | Reservation lifecycle: draft, pending approval, approved, rejected, confirmed, cancelled, expired, converted | BMP-1 | — | implemented |
@@ -735,17 +735,17 @@ one: it builds the configurable policy, stores *not configured* by default, and 
 | SALE-RESERVE-004 | Deposit rule from configuration; booking evidence as documents; evidence never confirms a collection | BMP-1 | `BD-02` | implemented |
 | SALE-RESERVE-005 | Cancellation with reason, optional approval, unit release, and a refund hand-off state for BMP-2 | BMP-1 | `BD-05`, `BD-06` | implemented |
 | SALE-RESERVE-006 | Reservation and contract numbers issued through `CORE-DOC-001` when a format is active, continuing the existing series | BMP-1 | `BD-19` | in-progress |
-| SALE-CONTRACT-001 | Contract draft from a confirmed reservation carrying immutable customer, unit and pricing snapshots | BMP-1 | — | approved |
-| SALE-CONTRACT-002 | Contract parties (buyer, co-buyer, guarantor, representative) with shares that total exactly | BMP-1 | — | approved |
-| SALE-CONTRACT-003 | Activation — through approval when an exception applies — freezing the schedule and committing the unit; signing state recorded | BMP-1 | `BD-35` | approved |
-| SALE-CONTRACT-004 | Contract documents, approval history and audit trail on the contract record | BMP-1 | — | approved |
-| SALE-CHANGE-001 | Plan-change amendment before settlement: remaining unpaid rows replaced through approval, old rows kept as rescheduled, totals reconciled | BMP-1 | `BD-09` | approved |
+| SALE-CONTRACT-001 | Contract draft from a confirmed reservation carrying immutable customer, unit and pricing snapshots | BMP-1 | — | implemented |
+| SALE-CONTRACT-002 | Contract parties (buyer, co-buyer, guarantor, representative) with shares that total exactly | BMP-1 | — | implemented |
+| SALE-CONTRACT-003 | Activation — through approval when an exception applies — freezing the schedule and committing the unit; signing state recorded | BMP-1 | `BD-35` | implemented |
+| SALE-CONTRACT-004 | Contract documents, approval history and audit trail on the contract record | BMP-1 | — | implemented |
+| SALE-CHANGE-001 | Plan-change amendment before settlement: remaining unpaid rows replaced through approval, old rows kept as rescheduled, totals reconciled | BMP-1 | `BD-09` | implemented |
 | SALE-CHANGE-002 | Unit substitution with transfer of paid money | BMP-2 | `BD-07` | approved |
 | SALE-CHANGE-003 | Contract assignment or transfer to a new buyer | BMP-2 | `BD-08` | approved |
-| SALE-CANCEL-001 | Contract cancellation before any collection, with reason, optional approval, cancelled schedule and unit release | BMP-1 | `BD-05` | approved |
+| SALE-CANCEL-001 | Contract cancellation before any collection, with reason, optional approval, cancelled schedule and unit release | BMP-1 | `BD-05` | implemented |
 | SALE-CANCEL-002 | Cancellation after collection: penalties, refunds, commission reversal, paper return, clearance | BMP-2 | `BD-05`, `BD-06`, `BD-15` | approved |
-| COL-SCHEDULE-001 | Contractual schedule from a plan or template — down payment, periodic instalments, final payment, maintenance deposit, dated milestone rows — reconciling exactly, with a stated rounding rule and a preview that uses the same code | BMP-1 | `BD-32` | approved |
-| COL-SCHEDULE-002 | A confirmed schedule is immutable; it changes only by an approved amendment | BMP-1 | `BD-09` | approved |
+| COL-SCHEDULE-001 | Contractual schedule from a plan or template — down payment, periodic instalments, final payment, maintenance deposit, dated milestone rows — reconciling exactly, with a stated rounding rule and a preview that uses the same code | BMP-1 | `BD-32` | implemented |
+| COL-SCHEDULE-002 | A confirmed schedule is immutable; it changes only by an approved amendment | BMP-1 | `BD-09` | implemented |
 
 `CORE-DOC-003` and `CORE-DOC-005` (Phase 1 rows above) are delivered inside BMP-1 with this scope:
 reservation form, quotation, contract, payment schedule, amendment, cancellation form and approval
@@ -831,7 +831,26 @@ Tests: `sales.int-test.ts` (real MongoDB) §"validity from configuration", §"co
 | SALE-RESERVE-006 | in progress — reservation and contract numbers come from `CORE-DOC-001` when a format is active (`NO_ACTIVE_SEQUENCE` falls back to the legacy series, whose year is now the organization's calendar year); configuring the format to continue the existing series is package 8 |
 | SALE-DISCOUNT-001 | Discount derived exactly from list and agreed price (`comparePercent`, decimal); the `sales.reservation.discount` policy governs it; no confirmation while an approval is pending; `sales.maximumDiscountPercent` (`BD-03`) caps it |
 | SALE-DISCOUNT-002 | Above the maximum a `sales.reservation.priceOverride` approval is required; without a policy the request is refused before writing (`DISCOUNT_ABOVE_MAXIMUM`), asked through `ApprovalService.hasApplicablePolicy` |
-| CRM-OPP-002 | in progress — a reservation with `opportunityId` (same customer, else `OPPORTUNITY_CUSTOMER_MISMATCH`) advances it to `reservation`, and the contract to `won`; package 6 moves `won` to contract activation |
+| CRM-OPP-002 | A reservation with `opportunityId` (same customer, else `OPPORTUNITY_CUSTOMER_MISMATCH`) advances it to `reservation`; since package 6 **contract activation** (not the draft) advances it to `won`, proven in `sales.int-test.ts` |
+
+### Implementation evidence — BMP-1 package 6, contracts, schedules and quotations (2026-09-29)
+
+Tests: `sales.int-test.ts` (real MongoDB) §"contract drafts", §"activation and signing",
+§"milestones and the maintenance deposit", §"amendments", §"contract cancellation through approval",
+§"quotations"; `sales/contract-rules.test.ts`; `collections.int-test.ts` (contracts drafted, then
+activated). Screens are package 8.
+
+| ID | Evidence |
+|---|---|
+| SALE-QUOTE-001 | `salesQuotations`, one document per revision (`(quotationId, revision)` unique, one `active` per quotation); list price read from the unit through the actor's own price visibility (`PRICE_NOT_VISIBLE`); schedule from the shared builder; validity stated by the person (`BD-36` open), never in the past; `expired` computed on read; revise supersedes, a stale revision is `STALE_VERSION`; withdraw keeps the record; **no inventory call exists in the service** — the unit stays available and is reservable at once (tested) |
+| SALE-CONTRACT-001 | `POST /sales/contracts` now makes a **draft**: immutable `customerSnapshot`, `unitSnapshot`, `pricing`; no instalment, unit still reserved, reservation records the draft (`CONTRACT_IN_PROGRESS` for a second draft or a reservation cancellation; expiry skips it); drafts are excluded from the portfolio summary. The buyer identity is recorded through CRM's scoped, field-restricted read (only when the drafter may see it) and restricted on the contract (`contract.customerSnapshot.identity` → `crm.customer.viewIdentity`) |
+| SALE-CONTRACT-002 | `partyIssues` (pure): one buyer who is the reservation's customer, shares on buyer/co-buyers totalling exactly 100 as decimals, none on guarantor/representative, no repeats; every party must be in the actor's scope (`PARTY_NOT_FOUND`); `PUT /contracts/{id}/parties` on drafts only; names snapshotted |
+| SALE-CONTRACT-003 | `POST /contracts/{id}/activate` (`sales.contract.activate`): one transaction freezes the rows into instalments (reservation money credited earliest-first), converts the reservation, contracts the unit (`expectReservationId`), wins the lead and opportunity. A `planChanged` exception goes through `sales.contract.exception` where a policy governs it (`pendingApproval`; refused → back to `draft`; granted → activated by the owning module). `POST /contracts/{id}/signing` (`sales.contract.sign`): once, not in the future, signed copy must be a document the contract owns; not required for activation (`BD-35` open) — `notSigned` / `identityMissing` are warnings computed on read |
+| SALE-CONTRACT-004 | Documents through `CORE-DOC-002` (owner type `contract`, now also the signed-copy check); `approvals[]` on the contract; `GET /contracts/{id}/history` returns the audit trail as a summary (new `AuditService.targetHistory`, no change details) to anyone who can read the contract, 404 otherwise |
+| SALE-CHANGE-001 | `POST /contracts/{id}/amendments` (`sales.contract.amend`): replaces every row still owing its whole amount (partly paid rows and the maintenance deposit kept) with rows reconciling exactly to what they owed, numbered after the last row; refused without a governing policy (`AMENDMENT_NEEDS_POLICY`); on approval old rows → `rescheduled`, new rows inserted, totals recomputed, one transaction; a row paid meanwhile makes it `stale` and changes nothing (tested) |
+| SALE-CANCEL-001 | A draft is withdrawn (reservation can be drafted again); an active contract is refused once money beyond the reservation's own was collected (`contractHasCollections`, SALE-CANCEL-002 is BMP-2); `sales.contract.cancellation` approval where a policy governs it; unpaid rows cancelled never deleted, unit released, reservation money → `refundHandoff: pending` |
+| COL-SCHEDULE-001 | Plan gains `milestones` (dated, labelled, part of the price) and `maintenanceDeposit` (added to the price, its own row; no default amount, `BD-32`); rows in date order; `MILESTONES_EXCEED_REMAINDER`, `EMPTY_ROW`; contract total = price + maintenance deposit; the preview states `roundingRule: oddPiastresToEarliestRows` and is produced by the same builder as the stored schedule; templates from package 4 still feed the plan |
+| COL-SCHEDULE-002 | No route edits an instalment; the only change to a confirmed schedule is an approved amendment (above) |
 
 ---
 

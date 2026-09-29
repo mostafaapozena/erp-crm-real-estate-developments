@@ -432,6 +432,19 @@ entities — through `buildCatalogueScopeFilter`. An assignment naming no place 
 Owned records (leads, customers, opportunities, reservations) keep the ordinary filter, so a
 representative sees their own leads and their branch's units at the same time.
 
+**Package 6.** New collection `salesQuotations` (`_revision_unique` on quotation + revision,
+`_activePerQuotation_unique` partial on `active`, `_idempotency_unique` partial, keyset, customer,
+lead, opportunity, unit and scope indexes); revisions are superseded or withdrawn, never edited or
+deleted, and scoped like reservations. `salesContracts` gained `_reservation_v2_unique` (live states now
+include `pendingApproval`; the older index stays declared and is narrower), `_approvals` and
+`_amendments`. New permissions `sales.contract.sign`, `sales.contract.amend`, `sales.quotation.view`,
+`sales.quotation.manage` (none administrative). New field restriction
+`contract.customerSnapshot.identity` → `crm.customer.viewIdentity`; the snapshot itself is written
+only through CRM's scoped, restricted read, so a drafter who may not see an identity cannot record
+one. `GET /sales/contracts/{id}/history` reads the audit trail through
+`AuditService.targetHistory` — unscoped by design, called only after the contract itself was read
+in scope, and returning no change details or request context.
+
 `salesReservations` (package 5) gained `salesReservations_liveUnit_v2_unique` (partial over
 `draft`, `pendingApproval`, `approved`, `confirmed` — the `approved` state is new), because MongoDB
 cannot widen an existing index's filter in place; the older `_liveUnit_unique` stays declared and is
