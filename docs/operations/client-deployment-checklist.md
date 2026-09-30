@@ -35,6 +35,13 @@ Related: [client data-intake checklist](client-data-intake-checklist.md) ·
 - [ ] `ORG_TIMEZONE`, `DEFAULT_LOCALE`, `CORS_ALLOWED_ORIGINS` (the exact origin, no wildcard),
       `TRUST_PROXY_HOPS` matching the real proxy chain.
 - [ ] `AUTH_LOGIN_IP_MAX_ATTEMPTS` left at its default (120) or lower; the loader refuses higher.
+- [ ] `PUBLIC_APP_URL` set to the address customers will reach — it is printed in every issued PDF's
+      QR code, so **changing it later breaks every printed code** (ADR-0033). Record it in the
+      deployment record. `VERIFY_RATE_LIMIT_PER_MINUTE` left at 20 unless there is a reason.
+- [ ] The web server answers `/verify/<token>` with the application (single-page fallback), so a
+      scanned code opens the verification page rather than a 404.
+- [ ] **Issued PDFs need private object storage** (`PLAT-017`). Until that adapter exists, staging and
+      production refuse to store a file, so they cannot issue documents at all.
 - [ ] Backups configured and **one restore rehearsed** before any real data is entered
       ([backup, restore and retention](backup-restore-and-retention.md)).
 
@@ -60,6 +67,10 @@ Related: [client data-intake checklist](client-data-intake-checklist.md) ·
 - [ ] Settings: fiscal-year start, reservation validity, quiet hours, escalation delay — each left
       `null` until decided, never guessed.
 - [ ] Number sequences activated for every document type in use.
+- [ ] Approved legal wording (contract, reservation form, receipt) published in the template registry
+      if the client provides it; until then issued PDFs print data only and say so.
+- [ ] `document.generate`, `document.view` and `document.download` granted only to the roles that
+      issue or hand out documents; `document.revoke` (administrative) to as few people as possible.
 - [ ] Reference data imported (`/imports`) or entered; bound lists relabelled if the client's wording
       differs.
 - [ ] Feature flags reviewed. `feature.notifications.externalDelivery` stays **off** until a provider
@@ -73,6 +84,8 @@ Related: [client data-intake checklist](client-data-intake-checklist.md) ·
       `APP_ENV` is development or test).
 - [ ] Arabic and English both render; Arabic right-to-left; dates in `dd/MM/yyyy` with Western digits.
 - [ ] A test user in a branch scope cannot see another branch's records.
+- [ ] Issue one test document, scan its QR code from a phone that is not signed in, and see
+      "valid"; then revoke it and see "revoked".
 - [ ] The operations contact knows where the audit trail, backups and this checklist are.
 
 Record the date, the build version, the database version and who performed each section in the

@@ -568,9 +568,9 @@ adapter exists ([ADR-0023](decisions/adr-0023-password-hashing-and-session-token
 |---|---|---|---|
 | CORE-DOC-001 | Numbering sequences by entity, document type, project, and fiscal year; atomic generation; **no reuse** | ADR-0009 | **implemented** 2026-09-27 (F4). Engine only; official formats arrive with `SD-10` (Phase 4) |
 | CORE-DOC-002 | Template registry with bilingual templates | ADR-0003 | **implemented** 2026-09-27 (F5). Registry only; templates arrive with `SD-10` |
-| CORE-DOC-003 | PDF generation with **embedded Arabic-capable fonts**; glyph rendering asserted by test | ADR-0003 | A "file produced" assertion does not catch this |
+| CORE-DOC-003 | PDF generation with **embedded Arabic-capable fonts**; glyph rendering asserted by test | ADR-0003 | **implemented** 2026-09-29 (BMP-1 package 7). Rendered pages are text-extracted and rasterized in tests, not merely produced; see the package 7 evidence |
 | CORE-DOC-004 | Document version retention | ADR-0009 | **implemented** 2026-09-27 (F5) |
-| CORE-DOC-005 | QR verification | MM §8 | |
+| CORE-DOC-005 | QR verification | MM §8 | **implemented** 2026-09-29 (BMP-1 package 7, ADR-0033). Database-backed, not a cryptographic signature (`SEC-033`) |
 | CORE-DOC-006 | Audit of **who printed or downloaded** each document | **G-03** | **implemented** 2026-09-27 (F5). Arabic scope p17 |
 
 ## CORE-SEARCH / CORE-IMPORT
@@ -851,6 +851,26 @@ activated). Screens are package 8.
 | SALE-CANCEL-001 | A draft is withdrawn (reservation can be drafted again); an active contract is refused once money beyond the reservation's own was collected (`contractHasCollections`, SALE-CANCEL-002 is BMP-2); `sales.contract.cancellation` approval where a policy governs it; unpaid rows cancelled never deleted, unit released, reservation money → `refundHandoff: pending` |
 | COL-SCHEDULE-001 | Plan gains `milestones` (dated, labelled, part of the price) and `maintenanceDeposit` (added to the price, its own row; no default amount, `BD-32`); rows in date order; `MILESTONES_EXCEED_REMAINDER`, `EMPTY_ROW`; contract total = price + maintenance deposit; the preview states `roundingRule: oddPiastresToEarliestRows` and is produced by the same builder as the stored schedule; templates from package 4 still feed the plan |
 | COL-SCHEDULE-002 | No route edits an instalment; the only change to a confirmed schedule is an approved amendment (above) |
+
+### Implementation evidence — BMP-1 package 7, PDF documents and QR verification (2026-09-29)
+
+Tests: `apps/api/src/platform/pdf/pdf.test.ts` (engine: bidirectional order, isolates, wrapping,
+embedded fonts, text extraction including Arabic ligatures, multi-page flow, QR decode, logo fallback,
+rasterized pixels), `issuance/builders.test.ts` (document content per type),
+`issuance/issuance.int-test.ts` (real MongoDB and file store: every file downloaded through the
+audited link, its text extracted and its QR decoded), `apps/web/src/pages/VerifyPage.test.tsx`,
+`IssuedDocumentsPanel.test.tsx`, E2E `apps/web/e2e/documents.spec.ts` (built web and API, desktop
+and mobile). Decision record: [ADR-0033](decisions/adr-0033-issued-documents-and-public-verification.md).
+
+| ID | Evidence |
+|---|---|
+| CORE-DOC-003 | Server-side pdfkit with Alexandria and Inter **embedded** (asserted by the font names in the file); Arabic shaped by fontkit, lines ordered by the Unicode bidirectional algorithm (`bidi-js`) with values isolated so percentages, phone numbers, references and money never detach; A4 with header, footer and "page n of m" on every page; table headers repeat across pages and rows never split (a 60-row schedule loses no row); six types — quotation, reservation, contract summary, instalment schedule, receipt, customer statement — each stating what it is (draft watermark, "not the legal contract", pending approval, cancelled, reversed, withdrawn, expired); company identity from the profile (no name compiled in; monogram when the logo fails); rescheduled rows muted and excluded from totals; maintenance deposit labelled apart from the price; a contract drafted before snapshots names its buyer and unit from the current records and says so; no legal wording unless the client publishes it in the template registry. Each issue is an immutable version of a stored document with layout version, company version, language, file and content checksums; regeneration supersedes in the same transaction; a file that prints restricted fields (buyer identity) is invisible to anyone without `crm.customer.viewIdentity`. Generation, supersession, download and revocation are audited |
+| CORE-DOC-005 | Each issue carries a 256-bit random token printed as a QR code and a link; `GET /api/v1/public/verify/{token}` (no sign-in, its own per-address limit, `no-store`, `noindex`) answers `valid`, `superseded`, `revoked`, `expired`, or a bare `invalid` identical for malformed and unknown tokens, with only company, type, reference, issue date, version and fingerprint — no customer, amount or file; each verification is audited anonymously, without address or user agent; the web page `/verify/:token` renders outside the session in Arabic and English (E2E from a fresh browser context); revocation (`document.revoke`, administrative, with a reason) and supersession change the answer |
+
+**Scope not delivered as separate documents:** the scope note above names an amendment, a
+cancellation form and an approval record. They are not separate PDF types: the contract summary states
+applied amendments and a cancelled state, and approvals stay in the approval screens. Each would be a
+new builder (ADR-0033, Consequences) — package 8 or BMP-2, by decision.
 
 ---
 

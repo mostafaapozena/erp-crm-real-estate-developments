@@ -43,6 +43,7 @@ export {
   EyeOff,
   FilePen,
   FileSignature,
+  FileText,
   FileUp,
   FlaskConical,
   Globe,

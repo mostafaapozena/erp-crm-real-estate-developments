@@ -25,6 +25,11 @@ import {
   UNITS_COLLECTION,
   UNIT_EVENTS_COLLECTION,
 } from '../../apps/api/src/modules/inventory';
+import {
+  DOCUMENTS_COLLECTION,
+  DOCUMENT_VERSIONS_COLLECTION,
+} from '../../apps/api/src/modules/documents';
+import { ISSUED_DOCUMENTS_COLLECTION } from '../../apps/api/src/modules/issuance';
 import { CAMPAIGNS_COLLECTION } from '../../apps/api/src/modules/marketing';
 import {
   BRANCHES_COLLECTION,
@@ -82,6 +87,8 @@ export const C = {
   approvalPolicies: POLICIES_COLLECTION,
   approvalRequests: REQUESTS_COLLECTION,
   approvalDecisions: DECISIONS_COLLECTION,
+  documents: DOCUMENTS_COLLECTION,
+  issuedDocuments: ISSUED_DOCUMENTS_COLLECTION,
 } as const;
 
 /**
@@ -98,4 +105,6 @@ export const DEPENDENTS: { collection: string; field: string; parent: keyof type
   { collection: C.reminders, field: 'contractId', parent: 'contracts' },
   { collection: C.activities, field: 'leadId', parent: 'leads' },
   { collection: C.unitEvents, field: 'unitId', parent: 'units' },
+  // A sample issued PDF's stored versions (seed:demo:documents).
+  { collection: DOCUMENT_VERSIONS_COLLECTION, field: 'documentId', parent: 'documents' },
 ];

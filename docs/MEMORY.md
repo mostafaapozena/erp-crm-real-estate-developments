@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-29 (Business Master Prompt 1 — Commercial Operations — package 6 complete)
+Last updated: 2026-09-30 (Business Master Prompt 1 — Commercial Operations — package 7 complete, stopped for review)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -14,8 +14,10 @@ collections → `56857f3` marketing → `4806fef` web application → `98f1003` 
 `5cf39b8` end-to-end suite → `9cc3189` documentation → **Foundation completion** — `24fe608` F0 →
 `1270ac7` F1 → `748a8b6` F2 → `d64ec0c` F3 → `85cf2ca` F4 → `92d3110` F5 → `8ee6271` F6 → `505b1e5` F7 →
 `e79b456` F8 → `fe2127c` F9 → `17b6fef` F10 → `09dfb36` F11 → `ee3f7c4` F12 → `e8dacea` build-stable
-migration checksums → planning and foundation gate (the commit containing this file). Local only; the
-owner pushes.
+migration checksums → planning and foundation gate → UI redesign and polish → **BMP-1** `6faac98` P1 →
+`9a8eb7b` P2 → `d79330c` P3 → `f6dcdc4` P4 → `b09f1be` P5 → `472d83e` (owner) + `5288be0` P6 →
+`444a485` web test stability → `58bb19e` PDF engine → `740ab7b` issuance → `5cf495b` QR verification →
+P7 UI, tests and documentation (the commit containing this file). Local only; the owner pushes.
 
 ## Project identity
 
@@ -60,10 +62,11 @@ implemented or verified requirement.
   ([ADR-0020](decisions/adr-0020-local-docker-development-services.md)). Integration tier: **59 passed,
   0 failed, 0 skipped** (191 tests).
 - Gate status: **PHASE 1 NOT APPROVED — SCOPE INCOMPLETE.** Every mandatory verification check passes, but
-  **2 of 113** Phase 1 requirements are not started (`CORE-DOC-003`/`005`), 8 are in progress, and the gate also requires a
+  every Phase 1 requirement is now started: **106 of 113** implemented, 7 in progress (`PLAT-007`,
+  `PLAT-017`, `SEC-003`, `SEC-005`, `SEC-006`, `SEC-008`, `SEC-033`), and the gate also requires a
   stakeholder demonstration and written approval (phase-gates §1).
 - Requirements `verified`: **0** — no requirement is marked `verified` before the stakeholder gate
-- Requirements `implemented` (code + passing tests): **104 of 113** · `in-progress`: 7 · not started: 2 (THEME-009 implemented with the UI redesign, 2026-09-28)
+- Requirements `implemented` (code + passing tests): **106 of 113** · `in-progress`: 7 · not started: 0 (`CORE-DOC-003`, `CORE-DOC-005` implemented in BMP-1 package 7, 2026-09-29)
 
 ## Business Master Prompt 1 — Commercial Operations — IN PROGRESS (started 2026-09-29)
 
@@ -89,8 +92,8 @@ idempotent seed extensions.
 | 3 Opportunities and ownership | **complete** | `d79330c` |
 | 4 Inventory and pricing | **complete** | `f6dcdc4` |
 | 5 Reservations and approvals | **complete** | `b09f1be` |
-| 6 Contracts, schedules and quotations | **complete** | the commit containing this row |
-| 7 Arabic/English PDF documents and QR verification | not started | — |
+| 6 Contracts, schedules and quotations | **complete** | `472d83e` (code, by the owner) + `5288be0` |
+| 7 Arabic/English PDF documents and QR verification | **complete — stopped for review** | `444a485`, `58bb19e`, `740ab7b`, `5cf495b`, and the commit containing this row |
 | 8 UI journey, dashboards and reports | not started | — |
 | 9 Final verification and phase documentation | not started | — |
 
@@ -252,6 +255,83 @@ idempotent seed extensions.
 - Measured: typecheck, full lint (8 GB heap), format, i18n, OpenAPI **219 paths / 0 broken
   references**, **unit 648 passed** (two web tests timed out under load in the full run and pass
   standalone, 9/9), full integration gate **602 passed / 0 failed / 0 skipped**, 27 files.
+
+### Package 7 — Arabic/English PDF documents and QR verification (2026-09-29/30)
+
+**Stopped for review after this package. Package 8 is not started.**
+
+- **Timeout investigation first (`444a485`).** The two dashboard/chart web tests timed out because the
+  first test of a file paid for compiling and importing lazily loaded chunks (recharts alone ~1 s idle)
+  inside vitest's 5 s per-test limit. Fix: `routes.tsx` exposes `PAGE_MODULES`/`preloadPages`,
+  `charts` exposes `preloadCharts`, and `src/testing/warm-up.ts` warms them in `beforeAll` under
+  its own 60 s budget; `FIRST_RENDER` is 4 s, below the per-test limit, so a slow lookup names what it
+  was looking for. No global timeout raised, no concurrency reduced, no assertion weakened. Idle
+  first-test times: dashboard 2.3 → 0.97 s, tasks 2.6 → 1.3 s, branding 1.7 → 0.5 s. Full suite then
+  passed 3 consecutive times (648/648), and once with `tsc` running alongside. **Honest limit:** under
+  an artificial ~4× oversubscription (three suites plus `tsc` at once) 8–9 tests still fail — now with a
+  message naming the missing element rather than "timed out".
+- **PDF engine (`58bb19e`)** `apps/api/src/platform/pdf/`: pdfkit 0.20.2 with Alexandria and Inter
+  embedded from `@fontsource` WOFF files; fontkit shapes Arabic; our own layout orders words with
+  `bidi-js` 1.1.0 (UAX #9, isolates). Values inside sentences must go through `ltrIsolate()` —
+  without it rule W2 detaches `%` and digit groups. Spaces are advances (the Arabic subset has no
+  space glyph). Arabic ligature ToUnicode entries are reversed for extraction through pdfkit's private
+  `_fontFamilies` (pdfkit pinned; a test guards it). QR by `qrcode-generator` 2.0.4, vector, level M.
+  Dev-only: pdfjs-dist, @napi-rs/canvas, jsqr (extract, rasterize, decode in tests).
+- **Issuance (`740ab7b`)** `apps/api/src/modules/issuance/` (`issuedDocuments`): six types
+  (quotation, reservation, contract summary, instalment schedule, receipt, customer statement), versions
+  per (type, source, language), supersession in the same transaction, revocation
+  (`document.revoke`, administrative), `restrictionKey`, 256-bit token, fingerprint = first 16 hex of
+  the content SHA-256. Files stored as versions of ordinary documents; the documents module gained
+  `requiredPermissions` (restricted-content files invisible without them) and owner type
+  `quotation`. Permissions `document.generate`, `document.revoke`. Env `PUBLIC_APP_URL` (optional;
+  falls back to the first CORS origin) and `VERIFY_RATE_LIMIT_PER_MINUTE` (20). Statements numbered
+  through the legacy `STM` series. Public `GET /api/v1/public/verify/{token}`, own limiter
+  `rl-verify`, `no-store`, `noindex`, audited anonymously without address or user agent.
+- **Verification page (`5cf495b`)** `/verify/:token` rendered outside `SessionProvider` (plain
+  `fetch`, `credentials: 'omit'`), Arabic/English; ADR-0033 (trust model); enumerations
+  `issuedDocumentType`, `issuedState`, `issueWarning`, `verificationResult` registered. **Defect
+  found there:** `bidi-js` ships its own types; the local `bidi-js.d.ts` contradicted them, so the root
+  typecheck project failed at `740ab7b` (the workspace typecheck passed). Declaration removed.
+- **UI, tests, docs (this commit):** `IssuedDocumentsPanel` on contract (summary + schedule, and the
+  customer statement), reservation and receipt pages — list versions, issue with language choice and the
+  server's warnings shown first, download (audited link, same-page attachment), verification link,
+  revoke with reason; every control permission-aware. Icon `FileText` added.
+- **Defect found by visual QA and fixed:** a contract drafted before package 6 has no snapshots, so its
+  summary and schedule printed "—" for buyer, unit and project. The loader now supplies current display
+  names only when a snapshot is missing, and the file says so; contract layouts raised to version 2.
+- **Seed extension `npm run seed:demo:documents`** (`scripts/seed-demo/documents-cli.ts`), run on the
+  development database 2026-09-29: **adds** document permissions to the demo roles (executive and
+  accountant read; managers, representatives and the collection officer issue; the administrator reads
+  every source and may revoke), audited as `security.role.permissionsAdded`; then issues one sample per
+  type as the seeded account who would issue it, ledgered by type/source/language/layout (the two
+  contract samples were re-issued once as v2 after the layout fix, superseding v1). Second run: all
+  `unchanged`. Nothing reseeded, no password reset.
+- **Demo-data integrity** (`scratch/p7-demo-before.json` → `p7-demo-after.json`): changed only
+  `auditEvents`, sessions/refresh tokens, `accountTokens` (16 → 8, TTL purge), `securityAccounts`
+  (last sign-in), `roles` (permissions added), `demoSeedLedger` (+14), `salesCounters` (the `STM`
+  series), and new `documents` (5), `documentVersions` (7), `issuedDocuments` (7). No lead,
+  customer, unit, reservation, contract, instalment or receipt changed. The E2E suite stays read-only on
+  business data.
+- **Measured (`scratch/p7-verify.sh`, logs `scratch/p7-final/`):** format, lint (0/0), strict
+  typecheck, i18n, secrets, links, ignored-source, 0 vulnerabilities ✅ · **unit 679 passed / 54 files** ·
+  **integration gate 613 passed / 0 failed / 0 skipped**, 28 files · build ✅ · bundle ✅ (largest
+  `vendor-mui` 409.3 / 122.2 kB gzip; `VerifyPage` its own 4.7 kB chunk) · migration status and
+  source/built parity ✅ · client file ✅ · built-API smoke ✅ (ready 200, real tokens: `valid` with the
+  printed fingerprint, `superseded`, bare `invalid` for unknown and malformed, no extra fields,
+  `no-store`, `noindex`, **224 OpenAPI paths**) · **E2E 64 passed / 0 failed / 0 skipped** (desktop +
+  mobile; `documents.spec.ts` 12 of them).
+- **Package 8 dependencies:** contract activation step on the reservation/contract screens (a drafted
+  contract still has no schedule until activated); quotation screens (quotation PDFs exist in the API
+  only); the full demo-role seed extension for BMP-1 permissions (`crm.lead.convert`,
+  `sales.contract.activate`, …); official number-series continuation (`SALE-RESERVE-006` stays
+  in-progress; statements use the legacy `STM` series); `sales.reservationValidityDays` not configured
+  in the development database; the unit timeline shows price/attribute events as statuses; a customer
+  detail page (statements are issued from the contract page meanwhile); amendment, cancellation-form and
+  approval-record PDFs were not built as separate types.
+- **Debt recorded:** 30+ existing `findOneAndUpdate(..., { new: true })` calls trigger a Mongoose
+  deprecation warning (none in package 7 code); verification is database-backed, not a signature
+  (`SEC-033`); production cannot issue until `PLAT-017`; `PUBLIC_APP_URL` must be fixed per
+  deployment or printed codes break; sample QR codes point at `http://localhost:5173`.
 
 ## Foundation completion (post-demo master prompt) — COMPLETE, stopped at the foundation gate
 
@@ -703,8 +783,8 @@ These remain explicit production blockers, unchanged:
   can be stored outside development**; staging and production fail closed.
 - No object-storage adapter (`PLAT-017`), malware scanner (`SEC-005`) or secrets manager (`SEC-006`):
   staging and production refuse document uploads.
-- `CORE-DOC-003` (PDF with embedded Arabic fonts) and `CORE-DOC-005` (QR verification) are not
-  started; they are planned into BMP-2.
+- `CORE-DOC-003` (PDF with embedded Arabic fonts) and `CORE-DOC-005` (QR verification) — **since
+  implemented** in BMP-1 package 7 (2026-09-29); production issuance still waits on `PLAT-017`.
 - The business decision register (BD-01–BD-24) is written; every entry is `open` or `proposed` —
   none is approved.
 - **Phase 1 is not approved**: its gate still needs the stakeholder demonstration and written approval.
@@ -1011,7 +1091,7 @@ all); the visual QA is still a script, not a CI gate.
 - [ ] Phase 1 — *in progress: scaffolding, audit, authorization, identity/authentication, and the
       approval engine done; foundation packages F0–F7 done (organization, settings, numbering, documents,
       notifications, tasks) F8 (search), F9 (import/export) and F10 (integration foundation), F11 (migrations, client init) and F12 (operations) done; PDF/QR
-      (CORE-DOC-003, 005) not started*
+      (CORE-DOC-003, 005) done in BMP-1 package 7; 7 IDs in progress; gate needs stakeholder approval*
 - [ ] Phases 2–9 — not started. **Do not start Phase 2.**
 
 ## Recently completed — 2026-09-19
@@ -1451,11 +1531,11 @@ untouched.
 
 ### Phase 1 registry (113 IDs)
 
-**`implemented` (104):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
+**`implemented` (106):** PLAT-001, 002, 003, 006, 008, 010, 011, 012, 013, 014\*, 015\*, 016\*, 021 ·
 OPS-001, 002, 003 · TEST-001, 002†, 003 · SEC-001, 004, 007, 009 · I18N-001–009 (9) ·
 THEME-001–012 (12; THEME-009 added 2026-09-28, UI redesign) · **AUDIT-001–006 (6)** · **SEC-023–032 (10)** ·
 **SEC-002, 010, 011–022 (14)** · **APPROVAL-001–007 (7)** — `APPROVAL-005` added 2026-09-27 (F2) ·
-**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-NOTIFY-001–005** (F6) · **CORE-TASK-001–005** (F7) · **CORE-SEARCH-001** (F8) · **CORE-IMPORT-001–002** (F9) · **INTEGRATION-001–005** (F10) · **INTEGRATION-006** (F12)
+**CORE-DOC-001** (F4) · **CORE-DOC-002, 004, 006** (F5) · **CORE-DOC-003, 005** (BMP-1 package 7) · **CORE-NOTIFY-001–005** (F6) · **CORE-TASK-001–005** (F7) · **CORE-SEARCH-001** (F8) · **CORE-IMPORT-001–002** (F9) · **INTEGRATION-001–005** (F10) · **INTEGRATION-006** (F12)
 
 Per-ID evidence for the 16 added on 2026-09-21 is in `docs/REQUIREMENTS.md` → "Implementation evidence —
 audit and authorization core". `AUDIT-005` covers permission, role, and scope changes and authorization
@@ -1485,7 +1565,7 @@ nothing while both hold; it becomes necessary only if a cookie ever needs `SameS
 `APPROVAL-005` left `in-progress` on 2026-09-27: with the organization foundation (F2) an overdue
 approval escalates through the real reporting line, and an unresolvable one is still reported as such.
 
-**Not started (2):** CORE-DOC-003, 005
+**Not started (0).**
 
 ### Foundation additions (registered 2026-09-27, 17 IDs)
 
@@ -1729,7 +1809,7 @@ The items below are the Macro Phase 1 list, kept for traceability; item 4's scop
 
 | ID | Blocker | Blocks |
 |---|---|---|
-| Phase 1 scope | 2 of 113 requirements not started; 8 in progress (F12) | **Phase 1 approval** (phase-gates §1) |
+| Phase 1 scope | 0 of 113 requirements not started; 7 in progress | **Phase 1 approval** (phase-gates §1) |
 | Stakeholder gate | Written approval outstanding. The demonstration is now **buildable and runnable** — `npm run seed:demo` — but has not been given | **Phase 1 approval** |
 | `SD-01`, `SD-02` | The real organization, roles, approval thresholds and segregation-of-duty rules. The demonstration seeds illustrative ones and closes neither | **Macro Phase 2** |
 | `SEC-033` | No KMS adapter, so staging and production cannot store an MFA secret | Any environment beyond development |

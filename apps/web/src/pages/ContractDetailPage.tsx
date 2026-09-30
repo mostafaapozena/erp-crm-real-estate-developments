@@ -20,6 +20,7 @@ import { useApi, useIdempotencyKey, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { IssuedDocumentsPanel } from './IssuedDocumentsPanel';
 import { PersonName } from '../people';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
@@ -237,6 +238,19 @@ function ContractDetailScreen() {
             maxHeight={520}
           />
         </TableSection>
+
+        <IssuedDocumentsPanel
+          sourceType="contract"
+          sourceId={record.contractId}
+          types={['contractSummary', 'installmentSchedule']}
+        />
+        <IssuedDocumentsPanel
+          sourceType="customer"
+          sourceId={record.customerId}
+          types={['customerStatement']}
+          title={t('issued.statementTitle')}
+          description={t('issued.statementDescription')}
+        />
 
         <Alert severity="info" variant="outlined">
           <Typography sx={{ fontWeight: 600 }}>{t('sales.demoDocumentTitle')}</Typography>

@@ -14,7 +14,7 @@ import {
 } from '@alola/security';
 import { ContractHistorySchema, DOCUMENT_MAX_BYTES } from '@alola/contracts';
 import { resolve } from 'node:path';
-import { businessDateInZone, nowInstant } from '@alola/contracts';
+import { businessDateInZone, nowInstant, type LocalizedLabel } from '@alola/contracts';
 import type { Connection } from 'mongoose';
 import type { Redis } from 'ioredis';
 import { ApprovalService, NoApplicablePolicyError } from '../modules/approval';
@@ -1077,8 +1077,27 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
           // The identity is present only if this actor may see it — then the file must say so.
           const printsIdentity =
             type === 'contractSummary' && Boolean(contract.customerSnapshot?.identity);
+          // A contract drafted before snapshots existed names its buyer and unit from the current
+          // records — non-restricted display names, the same ones its own screen shows.
+          let current: { customerName?: string; unitCode?: string; projectName?: LocalizedLabel } =
+            {};
+          if (!contract.customerSnapshot || !contract.unitSnapshot) {
+            const unit = await getInventoryService().findUnitForUpdate(contract.unitId);
+            const project = await getInventoryService().findProjectUnscoped(contract.projectId);
+            const name = await customerName(contract.customerId);
+            current = {
+              ...(name ? { customerName: name } : {}),
+              ...(unit ? { unitCode: unit.code } : {}),
+              ...(project ? { projectName: project.name } : {}),
+            };
+          }
           return {
-            data: { type, contract, installments },
+            data: {
+              type,
+              contract,
+              installments,
+              ...(Object.keys(current).length > 0 ? { current } : {}),
+            },
             owner: { type: 'contract', id: contract.contractId },
             businessReference: contract.contractNumber,
             placement: { ...contract, ownerAccountId: contract.salesOwnerAccountId },

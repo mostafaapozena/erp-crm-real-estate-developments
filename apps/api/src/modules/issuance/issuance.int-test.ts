@@ -4,6 +4,7 @@ import {
   BusinessDateSchema,
   ClientInitFileSchema,
   DecimalStringSchema,
+  ISSUED_TEMPLATE_VERSIONS,
   PERMISSIONS,
   ScopeAssignmentSchema,
   money,
@@ -464,7 +465,10 @@ describe.skipIf(!gate.available)(`issued documents — ${gate.reason}`, () => {
         locale: 'ar',
         version: 1,
         state: 'issued',
-        template: { key: 'builtin:contractSummary', version: 1 },
+        template: {
+          key: 'builtin:contractSummary',
+          version: ISSUED_TEMPLATE_VERSIONS.contractSummary,
+        },
         restricted: ['crm.customer.viewIdentity'],
       });
       const bytes = await download(MANAGER, issued);

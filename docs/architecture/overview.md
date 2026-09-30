@@ -159,6 +159,7 @@ leaks through counts, aggregates, pagination totals, and exports even when the r
 | Providers | Adapters in integration modules | [ADR-0010](../decisions/adr-0010-integration-adapter-boundary.md) |
 | Configuration | `packages/config/`, validated at startup | [ADR-0012](../decisions/adr-0012-local-development-infrastructure.md) |
 | Observability | Pino with redaction, correlation IDs, Sentry, CloudWatch | [environments.md](environments.md) |
+| Generated documents | PDF engine `apps/api/src/platform/pdf/`; issuance and public verification `apps/api/src/modules/issuance/` (builders per type, immutable versions stored through the documents module) | [ADR-0033](../decisions/adr-0033-issued-documents-and-public-verification.md) |
 
 ## 7. Known architectural risks
 

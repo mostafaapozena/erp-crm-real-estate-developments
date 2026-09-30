@@ -68,8 +68,18 @@ export type SourceData =
       unitCode?: string;
       projectName?: LocalizedLabel;
     }
-  | { type: 'contractSummary'; contract: Contract; installments: Installment[] }
-  | { type: 'installmentSchedule'; contract: Contract; installments: Installment[] }
+  | {
+      type: 'contractSummary';
+      contract: Contract;
+      installments: Installment[];
+      current?: CurrentNames;
+    }
+  | {
+      type: 'installmentSchedule';
+      contract: Contract;
+      installments: Installment[];
+      current?: CurrentNames;
+    }
   | {
       type: 'receipt';
       receipt: Receipt;
@@ -85,6 +95,17 @@ export type SourceData =
       openInstallments: Installment[];
       statementNumber: string;
     };
+
+/**
+ * Display names read from the current records, supplied **only** for a contract drafted before
+ * contracts carried snapshots (BMP-1 package 6). A snapshot always wins; when these are printed the
+ * file says the names come from the current records, not from the contract.
+ */
+export interface CurrentNames {
+  customerName?: string;
+  unitCode?: string;
+  projectName?: LocalizedLabel;
+}
 
 export interface BuildContext {
   locale: Locale;
@@ -499,7 +520,10 @@ function contractSummary(
       rows: c.parties.map((party) => ({
         cells: [
           t(`contractPartyRole.${party.role}`),
-          party.name ?? (party.role === 'buyer' ? (c.customerSnapshot?.name ?? '—') : '—'),
+          party.name ??
+            (party.role === 'buyer'
+              ? (c.customerSnapshot?.name ?? data.current?.customerName ?? '—')
+              : '—'),
           party.sharePercent ? percentOf(context, party.sharePercent) : '',
         ],
       })),
@@ -533,13 +557,20 @@ function contractSummary(
   }
   const unit = c.unitSnapshot;
   blocks.push(
-    { kind: 'heading', text: t('pdf.heading.unit') },
+    { kind: 'heading', text: t(unit ? 'pdf.heading.unit' : 'pdf.heading.unitCurrent') },
     {
       kind: 'fields',
       columns: 3,
       items: [
-        { label: t('pdf.field.unit'), value: unit?.code ?? '—', ltr: true },
-        { label: t('pdf.field.project'), value: unit?.projectName?.[locale] ?? '—' },
+        {
+          label: t('pdf.field.unit'),
+          value: unit?.code ?? data.current?.unitCode ?? '—',
+          ltr: true,
+        },
+        {
+          label: t('pdf.field.project'),
+          value: unit?.projectName?.[locale] ?? data.current?.projectName?.[locale] ?? '—',
+        },
         ...(unit?.floor !== undefined
           ? [{ label: t('pdf.field.floor'), value: String(unit.floor) }]
           : []),
@@ -611,6 +642,9 @@ function contractSummary(
   if (pricing?.maintenanceDeposit) {
     blocks.push({ kind: 'paragraph', text: t('pdf.note.maintenanceDeposit'), muted: true });
   }
+  if (data.current && (!c.customerSnapshot || !unit)) {
+    blocks.push({ kind: 'paragraph', text: t('pdf.note.currentNames'), muted: true });
+  }
   blocks.push({ kind: 'heading', text: t('pdf.heading.schedule') });
   if (c.state === 'draft' || c.state === 'pendingApproval') {
     blocks.push(scheduleTable(context, c.draftSchedule ?? [], c.totalPrice), {
@@ -666,8 +700,15 @@ function installmentSchedule(
       kind: 'fields',
       columns: 3,
       items: [
-        { label: t('pdf.field.customer'), value: c.customerSnapshot?.name ?? '—' },
-        { label: t('pdf.field.unit'), value: c.unitSnapshot?.code ?? '—', ltr: true },
+        {
+          label: t('pdf.field.customer'),
+          value: c.customerSnapshot?.name ?? data.current?.customerName ?? '—',
+        },
+        {
+          label: t('pdf.field.unit'),
+          value: c.unitSnapshot?.code ?? data.current?.unitCode ?? '—',
+          ltr: true,
+        },
         { label: t('pdf.field.contractedOn'), value: dateOf(context, c.contractedOn) },
         { label: t('pdf.field.contractTotal'), value: moneyOf(context, c.totalPrice) },
         { label: t('pdf.field.paid'), value: moneyOf(context, c.paidAmount) },

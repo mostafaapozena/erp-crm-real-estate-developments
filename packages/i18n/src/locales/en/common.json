@@ -1162,7 +1162,8 @@
       "contracts": "Contracts",
       "openInstallments": "Instalments due and unpaid",
       "receipts": "Receipts",
-      "terms": "Approved terms"
+      "terms": "Approved terms",
+      "unitCurrent": "Unit"
     },
     "field": {
       "total": "Total",
@@ -1231,7 +1232,8 @@
       "maintenanceDeposit": "The maintenance deposit is a separate amount added to the unit price, not part of it.",
       "proposedPlan": "A proposed plan, not yet confirmed; the binding schedule is the one fixed when the contract is activated.",
       "amendments": "The payment schedule was amended with approval ({{count}}). Replaced instalments are kept as rescheduled.",
-      "statement": "The statement reflects the records on its issue date. Later payments are not included."
+      "statement": "The statement reflects the records on its issue date. Later payments are not included.",
+      "currentNames": "This contract was drafted before buyer and unit details were recorded in it, so their names are shown from the current records."
     },
     "notice": {
       "quotationNoReservation": "A quotation does not reserve the unit. The unit remains available to others until a reservation is recorded.",
@@ -1315,5 +1317,45 @@
     "privacy": "The verification page shows no personal data, amounts or addresses. No sign-in is needed.",
     "throttled": "Too many verification requests from this device. Wait a minute and try again.",
     "failed": "The document could not be verified right now. Try again shortly."
+  },
+  "issued": {
+    "title": "Issued documents",
+    "description": "PDF files issued from this record in Arabic or English. Every file is fixed and never changes; a new version supersedes the previous one.",
+    "empty": "No document has been issued from this record yet.",
+    "issue": "Issue document",
+    "issueTitle": "Issue a PDF document",
+    "type": "Document type",
+    "language": "Document language",
+    "languageName": {
+      "ar": "Arabic",
+      "en": "English"
+    },
+    "nextVersion": "Version {{version}} of {{reference}} will be issued.",
+    "supersedes": "The previous version in this language will be marked superseded and kept.",
+    "warnings": "Check before issuing",
+    "restricted": "The file will include restricted identity details; only people allowed to see them can open it.",
+    "confirmIssue": "Issue",
+    "issuedNotice": "{{type}} issued — version {{version}}.",
+    "column": {
+      "document": "Document",
+      "language": "Language",
+      "version": "Version",
+      "state": "Status",
+      "issuedAt": "Issued",
+      "fingerprint": "Fingerprint",
+      "actions": "Actions"
+    },
+    "download": "Download",
+    "downloadLabel": "Download {{type}} version {{version}}",
+    "verifyLink": "Verification page",
+    "verifyLabel": "Open the verification page of {{type}} version {{version}}",
+    "revoke": "Revoke",
+    "revokeLabel": "Revoke {{type}} version {{version}}",
+    "revokeTitle": "Revoke an issued document",
+    "revokeDescription": "The file is not deleted. After revocation its verification page says it is revoked, and the revocation and its reason are recorded in the audit trail.",
+    "revokeReason": "Reason for revocation",
+    "confirmRevoke": "Revoke document",
+    "statementTitle": "Customer statement",
+    "statementDescription": "The customer's contracts, instalments and receipts within your access, as at the issue date."
   }
 }

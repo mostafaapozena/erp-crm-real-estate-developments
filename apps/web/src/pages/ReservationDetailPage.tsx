@@ -23,6 +23,7 @@ import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
 import { PersonName } from '../people';
+import { IssuedDocumentsPanel } from './IssuedDocumentsPanel';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
   BackLink,
@@ -245,6 +246,12 @@ function ReservationDetailScreen() {
             </Field>
           </FieldGroup>
         </Panel>
+
+        <IssuedDocumentsPanel
+          sourceType="reservation"
+          sourceId={record.reservationId}
+          types={['reservation']}
+        />
 
         {/* A printed summary is a demonstration document and says so (ADR-0026). */}
         <Alert severity="info" variant="outlined">

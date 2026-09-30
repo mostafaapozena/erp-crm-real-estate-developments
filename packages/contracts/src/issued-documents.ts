@@ -63,8 +63,9 @@ export const ISSUED_DOCUMENT_PERMISSIONS: Readonly<Record<IssuedDocumentType, Pe
 export const ISSUED_TEMPLATE_VERSIONS: Readonly<Record<IssuedDocumentType, number>> = {
   quotation: 1,
   reservation: 1,
-  contractSummary: 1,
-  installmentSchedule: 1,
+  // 2: a contract drafted before snapshots names its buyer and unit from the current records.
+  contractSummary: 2,
+  installmentSchedule: 2,
   receipt: 1,
   customerStatement: 1,
 };

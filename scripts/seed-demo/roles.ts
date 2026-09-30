@@ -36,11 +36,26 @@ const INVENTORY_PRICING: Permission[] = [...INVENTORY_READ, 'inventory.unit.view
 
 const SALES_READ: Permission[] = ['sales.reservation.view', 'sales.contract.view'];
 
+/**
+ * Issued PDFs (CORE-DOC-003, CORE-DOC-005), added for package 7's user-acceptance testing. Reading
+ * one also needs the permission that reads its source record, which each role already has or lacks.
+ * `npm run seed:demo:documents` adds these to an already-seeded database without re-seeding.
+ */
+export const DOCUMENT_READ: Permission[] = ['document.view', 'document.download'];
+export const DOCUMENT_ISSUE: Permission[] = [...DOCUMENT_READ, 'document.generate'];
+
 const COLLECTION_READ: Permission[] = [
   'collection.installment.view',
   'collection.receipt.view',
   'collection.instrument.view',
   'collection.reminder.view',
+];
+
+/** What the administrator reads so it can revoke an issued PDF: the sources of every type. */
+export const ADMIN_DOCUMENT_SOURCES: Permission[] = [
+  ...SALES_READ,
+  ...COLLECTION_READ,
+  'crm.customer.view',
 ];
 
 export const DEMO_ROLES: DemoRole[] = [
@@ -59,6 +74,7 @@ export const DEMO_ROLES: DemoRole[] = [
       'org.placement.view',
       'approval.request.view',
       'approval.request.viewAmounts',
+      ...DOCUMENT_READ,
     ],
   },
   {
@@ -95,6 +111,11 @@ export const DEMO_ROLES: DemoRole[] = [
       'approval.policy.create',
       'approval.policy.publish',
       'approval.request.view',
+      // Revoking an issued PDF is administrative (a second factor), and revoking one needs to read it:
+      // hence the read permissions of every document source, and nothing that changes a record.
+      ...ADMIN_DOCUMENT_SOURCES,
+      ...DOCUMENT_READ,
+      'document.revoke',
     ],
   },
   {
@@ -124,6 +145,7 @@ export const DEMO_ROLES: DemoRole[] = [
       'approval.request.reject',
       'org.view',
       'org.placement.view',
+      ...DOCUMENT_ISSUE,
     ],
   },
   {
@@ -142,6 +164,7 @@ export const DEMO_ROLES: DemoRole[] = [
       'sales.reservation.create',
       'sales.contract.view',
       'collection.installment.view',
+      ...DOCUMENT_ISSUE,
     ],
   },
   {
@@ -156,6 +179,7 @@ export const DEMO_ROLES: DemoRole[] = [
       'collection.receipt.create',
       'collection.instrument.manage',
       'collection.reminder.manage',
+      ...DOCUMENT_ISSUE,
     ],
   },
   {
@@ -171,6 +195,7 @@ export const DEMO_ROLES: DemoRole[] = [
       'inventory.unit.viewPricing',
       // An accountant may reverse a receipt; a collection officer may not. Maker and checker.
       'collection.receipt.cancel',
+      ...DOCUMENT_READ,
     ],
   },
   {

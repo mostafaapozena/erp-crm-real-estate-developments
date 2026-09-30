@@ -203,6 +203,62 @@ describe('contract summary', () => {
     expect(text(model)).toContain('not counted in the totals');
   });
 
+  it('names a pre-snapshot contract from the current records, and says so', () => {
+    const legacy = contract({
+      state: 'active',
+      customerSnapshot: undefined,
+      unitSnapshot: undefined,
+    });
+    const current = {
+      customerName: 'Mona Abdel Rahman',
+      unitCode: 'OASIS-A-0101',
+      projectName: { ar: 'كمبوند الواحة', en: 'Oasis Compound' },
+    };
+    const summary = text(
+      buildDocument(context(), {
+        type: 'contractSummary',
+        contract: legacy,
+        installments: [],
+        current,
+      }),
+    );
+    expect(summary).toContain('OASIS-A-0101');
+    expect(summary).toContain('Oasis Compound');
+    expect(summary).toContain('shown from the current records');
+    const schedule = text(
+      buildDocument(context(), {
+        type: 'installmentSchedule',
+        contract: legacy,
+        installments: [],
+        current,
+      }),
+    );
+    expect(schedule).toContain('Mona Abdel Rahman');
+    expect(schedule).toContain('OASIS-A-0101');
+
+    // A snapshot always wins over the current records, and then no note is printed.
+    const snapshotted = text(
+      buildDocument(context(), {
+        type: 'contractSummary',
+        contract: contract({
+          state: 'active',
+          unitSnapshot: {
+            unitId: base.unitId,
+            code: 'NILE-B-0707',
+            projectId: base.projectId,
+            projectName: { ar: 'مشروع النيل', en: 'Nile Project' },
+          },
+        }),
+        installments: [],
+        current,
+      }),
+    );
+    expect(snapshotted).toContain('NILE-B-0707');
+    expect(snapshotted).not.toContain('OASIS-A-0101');
+    expect(snapshotted).not.toContain('Mona Abdel Rahman');
+    expect(snapshotted).not.toContain('shown from the current records');
+  });
+
   it('labels a cancelled contract as cancelled', () => {
     const model = buildDocument(context('ar'), {
       type: 'contractSummary',

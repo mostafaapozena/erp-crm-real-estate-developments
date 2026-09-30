@@ -72,6 +72,19 @@ It is **idempotent**: run it again and it changes nothing except the passwords.
 > terminal or written to a log. Open it to sign in. Do not paste it into a chat, a ticket, or a
 > screen share.
 
+Then, once, give the demonstration roles the issued-document permissions and issue one sample PDF
+of each type (contract summary, instalment schedule, reservation, receipt, customer statement):
+
+```bash
+npm run seed:demo:documents
+```
+
+It only **adds** permissions and issues each sample once; a second run reports `unchanged` for
+everything. The samples carry real QR codes: open a contract or receipt, then the shield icon in
+"Issued documents", in a private window, and the verification page answers without signing in. The
+QR codes point at the first `CORS_ALLOWED_ORIGINS` entry (usually <http://localhost:5173>) unless
+`PUBLIC_APP_URL` is set.
+
 ### 4. Start the application
 
 Two terminals:

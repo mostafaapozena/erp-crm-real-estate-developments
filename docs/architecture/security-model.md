@@ -478,6 +478,30 @@ Three independent layers, none of which relies on the others:
 Audit context stores the correlation ID, method, route, IP, and user agent. The IP and user agent are
 themselves restricted fields, requiring `audit.viewContext`.
 
+### Issued documents and public verification (BMP-1 package 7, 2026-09-29)
+
+[ADR-0033](../decisions/adr-0033-issued-documents-and-public-verification.md) has the full trust
+model. The controls, in the order a request meets them:
+
+- **Issuing** needs `document.generate` **and** the permission that reads the source record
+  (`ISSUED_DOCUMENT_PERMISSIONS`); the source is read through its module's scoped, field-restricted
+  getter as the issuing actor, so an out-of-scope record is `404` and a restricted field the actor
+  cannot see never reaches the file.
+- **Reading, listing and downloading** apply the source's permissions and the actor's data scope
+  inside the query. A file that prints a restricted field carries `requiredPermissions` in the
+  documents module, which filters it out of every list, read, search and download for anyone who does
+  not hold them — the PDF is never a way around `SEC-029`.
+- **Revoking** is `document.revoke`, administrative (a second factor), with a reason; it never deletes.
+- **The public endpoint** `GET /api/v1/public/verify/{token}` is the only unauthenticated business
+  read in the product. The token is 256 random bits; a malformed and an unknown token get the same bare
+  `invalid`; the answer carries no customer, amount, address, identity, internal identifier or file
+  link; responses are `no-store` and `noindex`; a per-address limit (`rl-verify`,
+  `VERIFY_RATE_LIMIT_PER_MINUTE`, default 20) sits on top of the global one. Each check is audited as
+  an anonymous actor **without** the address or the user agent.
+- **Not a signature.** Verification proves that this deployment's database holds a matching issue; a
+  person with database write access could forge one (ADR-0021 §2). Signed PDFs wait on `SEC-033`.
+- **Production** refuses to store an issued file until the object-storage adapter exists (`PLAT-017`).
+
 ### Deliberately not implemented yet
 
 - **Escalation to a direct manager** — done (F2, 2026-09-27): `CORE-ORG` is now a foundation

@@ -21,6 +21,7 @@ import { useApi, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { IssuedDocumentsPanel } from './IssuedDocumentsPanel';
 import { PersonName } from '../people';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import {
@@ -210,6 +211,11 @@ function ReceiptDetailScreen() {
             <Alert severity="info" variant="outlined">
               {t('collections.reverseHint')}
             </Alert>
+            <IssuedDocumentsPanel
+              sourceType="receipt"
+              sourceId={record.receiptId}
+              types={['receipt']}
+            />
           </>
         }
       />
