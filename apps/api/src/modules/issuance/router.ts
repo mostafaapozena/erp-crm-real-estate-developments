@@ -11,6 +11,7 @@ import type { RateLimiterAbstract } from 'rate-limiter-flexible';
 import { z } from 'zod';
 import { AppError } from '../../errors';
 import { currentActor, requirePermission, type GuardOptions } from '../../http/actor';
+import { markAuditExempt } from '../../http/audit-context';
 import { correlationIdOf } from '../../http/correlation';
 import { rateLimit } from '../../http/rate-limit';
 import { validate, validated } from '../../http/validate';
@@ -78,9 +79,12 @@ export function issuanceRouter(options: IssuanceRouterOptions): Router {
     validate({ body: IssueDocumentSchema }),
     async (req, res) => {
       const body = validated<typeof IssueDocumentSchema._output>(res, 'body');
-      res
-        .status(201)
-        .json(await options.getService().issue(actorOf(res), body, requestContext(req, res, base)));
+      const { issued, replayed } = await options
+        .getService()
+        .issueOnce(actorOf(res), body, requestContext(req, res, base));
+      // A replay stored nothing, so it recorded nothing either.
+      if (replayed) markAuditExempt(res);
+      res.status(replayed ? 200 : 201).json(issued);
     },
   );
 

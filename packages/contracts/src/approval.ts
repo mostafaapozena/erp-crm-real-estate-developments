@@ -68,6 +68,15 @@ export const ApprovalConditionSchema = z.strictObject({
 export type ApprovalCondition = z.infer<typeof ApprovalConditionSchema>;
 
 /** Who may act on a stage. */
+/**
+ * How many accounts a permission-based stage may resolve to — the security module lists at most this
+ * many holders of a permission, and logs when it had to stop. A request's pending approvers are that
+ * list plus, at most, the manager an overdue stage escalates to; the contract must carry every one of
+ * them, because the list is what authorizes a decision.
+ */
+export const APPROVER_CANDIDATE_LIMIT = 200;
+export const MAX_PENDING_APPROVERS = APPROVER_CANDIDATE_LIMIT + 1;
+
 export const APPROVER_RULE_KINDS = ['accounts', 'permission', 'manager'] as const;
 export const ApproverRuleKindSchema = z.enum(APPROVER_RULE_KINDS);
 
@@ -337,8 +346,13 @@ export const ApprovalRequestSchema = z.strictObject({
   policyVersion: z.number().int().min(1),
   currentStageOrder: z.number().int().min(0),
   stages: z.array(StageStateSchema).min(1),
-  /** Accounts that may act on the current stage; the approver work queue is indexed on it. */
-  pendingApproverAccountIds: z.array(z.string().min(1)).max(50),
+  /**
+   * Accounts that may act on the current stage; the approver work queue is indexed on it. Bounded by
+   * what a stage can resolve to (`MAX_PENDING_APPROVERS`). It was once 50 while a permission-based
+   * stage could resolve to 200, so a permission held by more than 50 eligible accounts made the
+   * request impossible to return — a 500 on submission and on every queue that listed it.
+   */
+  pendingApproverAccountIds: z.array(z.string().min(1)).max(MAX_PENDING_APPROVERS),
   decisions: z.array(ApprovalDecisionSchema).optional(),
   submittedAt: InstantSchema,
   expiresAt: InstantSchema.optional(),

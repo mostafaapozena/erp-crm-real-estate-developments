@@ -93,6 +93,17 @@ export const SETTING_DEFINITIONS = {
     decision: 'BD-01',
   },
   /**
+   * Days a quotation's price holds by default (`BD-36`). Not configured, nothing is assumed: the person
+   * entering a quotation states its validity, as before. When configured, the quotation form proposes
+   * today plus this many days — the person may still change it, and the server stores what was stated.
+   */
+  'sales.quotationValidityDays': {
+    category: 'sales',
+    schema: z.number().int().min(1).max(365),
+    defaultValue: null,
+    decision: 'BD-36',
+  },
+  /**
    * The least deposit a reservation takes (`BD-02`): a fixed amount in a currency, or a percentage of
    * the agreed price. Not configured, no minimum is enforced. Below it needs an exception approval.
    */

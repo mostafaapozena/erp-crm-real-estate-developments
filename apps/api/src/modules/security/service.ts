@@ -1,5 +1,6 @@
 import {
   ADMINISTRATIVE_PERMISSIONS,
+  APPROVER_CANDIDATE_LIMIT,
   AUDIT_ACTIONS,
   AccountGrantSchema,
   ActorContextSchema,
@@ -345,7 +346,7 @@ export class SecurityService {
    */
   async accountsWithPermission(
     permission: Permission,
-    limit = 200,
+    limit = APPROVER_CANDIDATE_LIMIT,
   ): Promise<{ accountIds: string[]; truncated: boolean }> {
     const roles = await this.roles
       .find({ permissions: permission })

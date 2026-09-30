@@ -189,6 +189,17 @@ export const CustomerQuerySchema = z.strictObject({
   kind: CustomerKindSchema.optional(),
   branchId: RecordIdSchema.optional(),
   ownerAccountId: z.string().min(1).max(200).optional(),
+  /**
+   * Comma-separated customer identifiers, at most one hundred: how a list of quotations or contracts
+   * names its customers in one request. Still scoped — an identifier outside the actor's scope is
+   * simply absent from the answer.
+   */
+  ids: z
+    .string()
+    .regex(/^[a-z][a-z0-9]{0,11}_[A-Za-z0-9]{6,64}(,[a-z][a-z0-9]{0,11}_[A-Za-z0-9]{6,64}){0,99}$/, {
+      message: 'RECORD_IDS_EXPECTED',
+    })
+    .optional(),
 });
 export type CustomerQuery = z.infer<typeof CustomerQuerySchema>;
 

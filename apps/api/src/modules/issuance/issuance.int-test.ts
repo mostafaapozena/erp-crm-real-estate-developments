@@ -35,8 +35,21 @@ import { decodeQr, extractPages, renderPage } from '../../platform/pdf/test-supp
 import { AUDIT_COLLECTION } from '../audit';
 import { COMPANY_PROFILES_COLLECTION, COMPANY_PROFILE_REVISIONS_COLLECTION } from '../company';
 import { documentRouter, fileRouter } from '../documents';
+import { INSTRUMENTS_COLLECTION, RECEIPTS_COLLECTION, REMINDERS_COLLECTION } from '../collections';
 import { BRANCHES_COLLECTION, LEGAL_ENTITIES_COLLECTION } from '../organization';
-import { bootstrapGrant, bootstrapRole } from '../security';
+import {
+  CONTRACTS_COLLECTION,
+  COUNTERS_COLLECTION,
+  INSTALLMENTS_COLLECTION,
+  QUOTATIONS_COLLECTION,
+  RESERVATIONS_COLLECTION,
+} from '../sales';
+import {
+  ACCOUNT_GRANTS_COLLECTION,
+  ROLES_COLLECTION,
+  bootstrapGrant,
+  bootstrapRole,
+} from '../security';
 import { ISSUED_DOCUMENTS_COLLECTION } from './model';
 import { issuanceRouter, verificationRouter } from './router';
 
@@ -144,9 +157,26 @@ describe.skipIf(!gate.available)(`issued documents — ${gate.reason}`, () => {
       COMPANY_PROFILES_COLLECTION,
       COMPANY_PROFILE_REVISIONS_COLLECTION,
       ISSUED_DOCUMENTS_COLLECTION,
+      // The numbered records this file creates, and the legacy series that numbers them. Cleared here
+      // as the sales and collections files clear them, so this file never depends on running after
+      // one of them: a receipt left by an earlier run would otherwise collide with a restarted series.
+      REMINDERS_COLLECTION,
+      INSTRUMENTS_COLLECTION,
+      RECEIPTS_COLLECTION,
+      INSTALLMENTS_COLLECTION,
+      CONTRACTS_COLLECTION,
+      RESERVATIONS_COLLECTION,
+      QUOTATIONS_COLLECTION,
+      COUNTERS_COLLECTION,
     ]) {
       await connection.collection(name).deleteMany({});
     }
+    // This file's accounts and roles, from this run and any earlier one: they used to be left behind,
+    // and every run added four more holders of the approval permission to the shared database.
+    await connection
+      .collection(ACCOUNT_GRANTS_COLLECTION)
+      .deleteMany({ accountId: { $regex: '^acc_itiss' } });
+    await connection.collection(ROLES_COLLECTION).deleteMany({ key: { $regex: '^it-iss-' } });
     await connection.collection(BRANCHES_COLLECTION).deleteMany({ code: { $regex: `^IB${RUN}` } });
     await connection
       .collection(LEGAL_ENTITIES_COLLECTION)
@@ -592,6 +622,56 @@ describe.skipIf(!gate.available)(`issued documents — ${gate.reason}`, () => {
     });
   });
 
+  describe('idempotency', () => {
+    it('answers a double-submitted statement with the first issue and draws one number', async () => {
+      const body = {
+        type: 'customerStatement',
+        sourceId: customerId,
+        locale: 'en',
+        idempotencyKey: 'issue-statement-double-submit-0001',
+      };
+      const before = await connection
+        .collection(ISSUED_DOCUMENTS_COLLECTION)
+        .countDocuments({ type: 'customerStatement' });
+      const first = await as(MANAGER).post('/api/v1/issued-documents').send(body).expect(201);
+      // The retry, the double click: the first issue again, with nothing drawn or stored.
+      const second = await as(MANAGER).post('/api/v1/issued-documents').send(body).expect(200);
+      expect(second.body.issueId).toBe(first.body.issueId);
+      expect(second.body.businessReference).toBe(first.body.businessReference);
+      expect(
+        await connection
+          .collection(ISSUED_DOCUMENTS_COLLECTION)
+          .countDocuments({ type: 'customerStatement' }),
+      ).toBe(before + 1);
+
+      // Two at once: whatever each answers, exactly one issue is stored for the key.
+      const racingKey = { ...body, idempotencyKey: 'issue-statement-racing-submit-0002' };
+      const raced = await Promise.all([
+        as(MANAGER).post('/api/v1/issued-documents').send(racingKey),
+        as(MANAGER).post('/api/v1/issued-documents').send(racingKey),
+      ]);
+      expect(raced.filter((response) => response.status === 201)).toHaveLength(1);
+      for (const response of raced) expect([200, 201, 409]).toContain(response.status);
+      expect(
+        await connection
+          .collection(ISSUED_DOCUMENTS_COLLECTION)
+          .countDocuments({ idempotencyKey: racingKey.idempotencyKey }),
+      ).toBe(1);
+
+      // The same key for something else is a conflict, and issues nothing.
+      const reused = await as(MANAGER)
+        .post('/api/v1/issued-documents')
+        .send({ ...body, locale: 'ar' })
+        .expect(409);
+      expect(reused.body.error.issues[0].code).toBe('IDEMPOTENCY_KEY_REUSED');
+      expect(
+        await connection
+          .collection(ISSUED_DOCUMENTS_COLLECTION)
+          .countDocuments({ type: 'customerStatement' }),
+      ).toBe(before + 2);
+    });
+  });
+
   describe('authorization, scope and restricted fields', () => {
     it('never lets a PDF reveal an identity the reader may not see', async () => {
       const withIdentity = await issue(
@@ -678,10 +758,13 @@ describe.skipIf(!gate.available)(`issued documents — ${gate.reason}`, () => {
         issuedOn: today,
       });
       const raw = JSON.stringify(body);
+      // The receipt's amount in the forms it could take. Not a bare '250': the fingerprint is random hex
+      // and contains those three characters about once in three hundred issues.
       for (const secret of [
         'أحمد عبد الله',
         '29001011234567',
-        '250',
+        '250000',
+        '250,000',
         'TRX-778812',
         issued.issueId,
         issued.documentId,

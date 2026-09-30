@@ -1,3 +1,4 @@
+import { businessDateInZone, nowInstant } from '@alola/contracts';
 import type { BusinessDate, Instant, Money } from '@alola/contracts';
 import { createFormatters } from '@alola/i18n';
 import { useMemo } from 'react';
@@ -40,4 +41,14 @@ export function useFormatters(): Formatters {
       dateTime: (value) => (value ? base.instant(value as Instant) : ABSENT),
     };
   }, [locale, timeZone]);
+}
+
+/**
+ * Today in the organization's calendar, as a business date. A form that defaults a date — a contract
+ * date, a validity — uses this rather than the browser's UTC clock, which names the wrong day for the
+ * last hours of every evening east of Greenwich (ADR-0008).
+ */
+export function useToday(): BusinessDate {
+  const { timeZone } = useBranding();
+  return useMemo(() => businessDateInZone(nowInstant(), timeZone), [timeZone]);
 }

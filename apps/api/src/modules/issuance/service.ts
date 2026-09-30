@@ -299,7 +299,63 @@ export class IssuanceService {
     input: IssueDocument,
     context: RequestContext,
   ): Promise<IssuedDocument> {
+    return (await this.issueOnce(actor, input, context)).issued;
+  }
+
+  /**
+   * What a stored idempotency key already produced. Checked **before** anything is drawn — a
+   * statement number, a file version — so a double submission costs nothing. The row is read back
+   * through the actor's own visibility, never handed over because a key matched.
+   */
+  private async replayIssue(
+    actor: ActorContext,
+    idempotencyKey: string,
+    print: string,
+  ): Promise<IssuedDocument | undefined> {
+    assertSafeFilter({ idempotencyKey });
+    const existing = await this.issued.findOne({ idempotencyKey }).lean<IssuedDocumentDocument>();
+    if (!existing) return undefined;
+    if (existing.idempotencyFingerprint !== print) {
+      throw conflict('IDEMPOTENCY_KEY_REUSED', ['idempotencyKey']);
+    }
+    return this.get(actor, existing.issueId);
+  }
+
+  /** `issue`, telling the caller whether the request was a replay that issued nothing. */
+  async issueOnce(
+    actor: ActorContext,
+    input: IssueDocument,
+    context: RequestContext,
+  ): Promise<{ issued: IssuedDocument; replayed: boolean }> {
     this.assertTypeAccess(actor, input.type);
+    const print = input.idempotencyKey
+      ? sha256(JSON.stringify([input.type, input.sourceId, input.locale, actor.accountId]))
+      : undefined;
+    if (input.idempotencyKey && print) {
+      const replay = await this.replayIssue(actor, input.idempotencyKey, print);
+      if (replay) return { issued: replay, replayed: true };
+    }
+    try {
+      return await this.issueFresh(actor, input, context, print);
+    } catch (error) {
+      // A concurrent submission of the same key may have committed while this one failed on the way
+      // (a stale file version, the ledger's unique index): its issue is the answer.
+      if (input.idempotencyKey && print) {
+        const settled = await this.replayIssue(actor, input.idempotencyKey, print).catch(
+          () => undefined,
+        );
+        if (settled) return { issued: settled, replayed: true };
+      }
+      throw error;
+    }
+  }
+
+  private async issueFresh(
+    actor: ActorContext,
+    input: IssueDocument,
+    context: RequestContext,
+    print: string | undefined,
+  ): Promise<{ issued: IssuedDocument; replayed: boolean }> {
     const company = await this.options.company();
     if (!company) throw conflict('COMPANY_PROFILE_REQUIRED', ['type']);
     const source = await this.options.sources.load(actor, input.type, input.sourceId);
@@ -469,6 +525,9 @@ export class IssuanceService {
               issuedAt,
               issuedOn: today,
               issuedBy: actor.accountId,
+              ...(input.idempotencyKey && print
+                ? { idempotencyKey: input.idempotencyKey, idempotencyFingerprint: print }
+                : {}),
             },
           ],
           { session },
@@ -526,7 +585,7 @@ export class IssuanceService {
         return created.toObject();
       });
       if (template) await this.options.templates().markUsed(template.templateKey, template.version);
-      return this.toIssued(row);
+      return { issued: this.toIssued(row), replayed: false };
     } catch (error) {
       if (isDuplicateKeyError(error)) throw conflict('STALE_VERSION', ['sourceId']);
       throw error;

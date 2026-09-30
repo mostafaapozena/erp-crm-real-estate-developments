@@ -14,7 +14,12 @@ import {
 } from '@alola/security';
 import { ContractHistorySchema, DOCUMENT_MAX_BYTES } from '@alola/contracts';
 import { resolve } from 'node:path';
-import { businessDateInZone, nowInstant, type LocalizedLabel } from '@alola/contracts';
+import {
+  businessDateInZone,
+  nowInstant,
+  type LocalizedLabel,
+  type SalesDefaults,
+} from '@alola/contracts';
 import type { Connection } from 'mongoose';
 import type { Redis } from 'ioredis';
 import { ApprovalService, NoApplicablePolicyError } from '../modules/approval';
@@ -99,6 +104,8 @@ export interface DomainServices {
   opportunities: () => OpportunityService;
   sales: () => SalesService;
   quotations: () => QuotationService;
+  /** The validity periods a salesperson sees (`BD-01`, `BD-36`); `null` is not configured. */
+  salesDefaults: () => Promise<SalesDefaults>;
   issuance: () => IssuanceService;
   collections: () => CollectionService;
   marketing: () => MarketingService;
@@ -1422,6 +1429,13 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
     opportunities: getOpportunityService,
     sales: getSalesService,
     quotations: getQuotationService,
+    salesDefaults: async () => ({
+      reservationValidityDays: await getSettingsService().valueOf<number>(
+        'sales.reservationValidityDays',
+      ),
+      quotationValidityDays: await getSettingsService().valueOf<number>('sales.quotationValidityDays'),
+      decisions: { reservationValidityDays: 'BD-01', quotationValidityDays: 'BD-36' },
+    }),
     issuance: getIssuanceService,
     collections: getCollectionService,
     marketing: getMarketingService,

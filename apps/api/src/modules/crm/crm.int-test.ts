@@ -810,6 +810,26 @@ ull is not configured. */
       }
     });
 
+    it('names several customers in one request, and never one outside the scope', async () => {
+      const mine = await createCustomer(MANAGER, { ownerAccountId: REP_ONE });
+      const theirs = await createCustomer(MANAGER, { ownerAccountId: REP_TWO });
+      const ids = [mine.customerId, theirs.customerId].join(',');
+      const asManager = await as(MANAGER)
+        .get(`/api/v1/crm/customers?limit=100&ids=${ids}`)
+        .expect(200);
+      expect(
+        (asManager.body.items as { customerId: string }[]).map((item) => item.customerId).sort(),
+      ).toEqual([mine.customerId, theirs.customerId].sort());
+      const asRep = await as(REP_ONE).get(`/api/v1/crm/customers?limit=100&ids=${ids}`).expect(200);
+      expect((asRep.body.items as { customerId: string }[]).map((item) => item.customerId)).toEqual(
+        [mine.customerId],
+      );
+      expect(asRep.body.total).toBe(1);
+      // Anything but a list of identifiers is refused before it reaches the query.
+      await as(MANAGER).get('/api/v1/crm/customers?ids=%24ne').expect(400);
+      await as(MANAGER).get(`/api/v1/crm/customers?ids=${mine.customerId},`).expect(400);
+    });
+
     it('refuses to let someone write an identity they may not read', async () => {
       await bootstrapRole(connection, {
         key: `${RUN}-r-clerk`,

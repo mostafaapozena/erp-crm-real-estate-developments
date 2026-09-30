@@ -103,6 +103,12 @@ export function crmPaths(h: OpenApiHelpers): PathMap {
           queryParameter('kind', { type: 'string', enum: [...CUSTOMER_KINDS] }),
           queryParameter('branchId', { type: 'string' }),
           queryParameter('ownerAccountId', { type: 'string' }),
+          queryParameter(
+            'ids',
+            { type: 'string' },
+            'Comma-separated customer identifiers (at most 100). Scoped like every other filter: an ' +
+              "identifier outside the actor's scope is absent from the answer, never an error.",
+          ),
         ],
         responses: {
           '200': h.json('CustomerList', 'A page of customers ordered by name'),

@@ -9,6 +9,7 @@ import {
   QuotationSchema,
   RecordSigningSchema,
   ReviseQuotationSchema,
+  SalesDefaultsSchema,
   SetContractPartiesSchema,
   WithdrawQuotationSchema,
   CancelContractSchema,
@@ -78,10 +79,25 @@ export const salesComponents = {
   CreateQuotationRequest: CreateQuotationSchema,
   ReviseQuotationRequest: ReviseQuotationSchema,
   WithdrawQuotationRequest: WithdrawQuotationSchema,
+  SalesDefaults: SalesDefaultsSchema,
 } as const;
 
 export function salesPaths(h: OpenApiHelpers): PathMap {
   return {
+    '/api/v1/sales/defaults': {
+      get: {
+        operationId: 'getSalesDefaults',
+        summary: 'The configured validity periods a salesperson works with',
+        description:
+          'Authentication only. reservationValidityDays (BD-01) and quotationValidityDays (BD-36) as ' +
+          'configured in settings, or null when not configured — nothing is assumed. The settings ' +
+          'catalog itself stays administrative (settings.view / settings.manage).',
+        responses: {
+          '200': h.json('SalesDefaults', 'The configured defaults'),
+          ...h.authorizedErrors,
+        },
+      },
+    },
     '/api/v1/sales/schedule/preview': {
       post: {
         operationId: 'previewSchedule',
@@ -350,7 +366,10 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
         summary: 'List quotations (latest revision of each)',
         description:
           'Requires sales.quotation.view (SALE-QUOTE-001). Scoped like reservations; expired is ' +
-          'computed from validUntil and never stored.',
+          'computed from validUntil and never stored. state=active is active and within its validity, ' +
+          'state=expired is active past it (evaluated on the organization calendar today), ' +
+          'state=withdrawn is withdrawn. search is an escaped, anchored, case-insensitive prefix of ' +
+          'the quotation number or the unit code.',
         parameters: [
           queryParameter('limit', { type: 'integer', minimum: 1, maximum: 100, default: 25 }),
           queryParameter('cursor', { type: 'string' }),
@@ -358,6 +377,8 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
           queryParameter('leadId', { type: 'string' }),
           queryParameter('opportunityId', { type: 'string' }),
           queryParameter('unitId', { type: 'string' }),
+          queryParameter('state', { type: 'string', enum: ['active', 'withdrawn', 'expired'] }),
+          queryParameter('search', { type: 'string', maxLength: 40 }),
         ],
         responses: {
           '200': h.json('QuotationPage', 'A page of quotations'),

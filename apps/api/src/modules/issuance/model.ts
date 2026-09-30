@@ -62,6 +62,9 @@ export interface IssuedDocumentDocument {
   revokedAt?: Date;
   revokedBy?: string;
   revocationReason?: string;
+  /** Set when the request carried one; a replay returns this row (absent on earlier issues). */
+  idempotencyKey?: string;
+  idempotencyFingerprint?: string;
 }
 
 const DELETE_OPS = ['deleteOne', 'deleteMany', 'findOneAndDelete'] as const;
@@ -137,6 +140,8 @@ function issuedSchema(): Schema<IssuedDocumentDocument> {
       revokedAt: { type: Date },
       revokedBy: { type: String },
       revocationReason: { type: String },
+      idempotencyKey: { type: String, immutable: true },
+      idempotencyFingerprint: { type: String, immutable: true },
     },
     {
       collection: ISSUED_DOCUMENTS_COLLECTION,
@@ -164,6 +169,15 @@ function issuedSchema(): Schema<IssuedDocumentDocument> {
   schema.index({ legalEntityId: 1, branchId: 1 }, { name: 'issuedDocuments_scope' });
   schema.index({ teamId: 1 }, { name: 'issuedDocuments_scope_team' });
   schema.index({ ownerAccountId: 1 }, { name: 'issuedDocuments_owner' });
+  /** One issue per idempotency key; issues made without one (all earlier ones) are not indexed. */
+  schema.index(
+    { idempotencyKey: 1 },
+    {
+      unique: true,
+      name: 'issuedDocuments_idempotency_unique',
+      partialFilterExpression: { idempotencyKey: { $type: 'string' } },
+    },
+  );
   return schema;
 }
 

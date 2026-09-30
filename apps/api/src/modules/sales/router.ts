@@ -19,11 +19,17 @@ import {
   SetContractPartiesSchema,
   WithdrawQuotationSchema,
   type ActorContext,
+  type SalesDefaults,
 } from '@alola/contracts';
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { AppError } from '../../errors';
-import { currentActor, requirePermission, type GuardOptions } from '../../http/actor';
+import {
+  currentActor,
+  requireAuthenticated,
+  requirePermission,
+  type GuardOptions,
+} from '../../http/actor';
 import { markAuditExempt } from '../../http/audit-context';
 import { correlationIdOf } from '../../http/correlation';
 import { validate, validated } from '../../http/validate';
@@ -41,6 +47,8 @@ export interface SalesRouterOptions {
   getService: () => SalesService;
   /** Quotations (SALE-QUOTE-001); absent answers 404. */
   getQuotations?: () => QuotationService;
+  /** The configured commercial defaults (`BD-01`, `BD-36`); absent answers every one not configured. */
+  getDefaults?: () => Promise<SalesDefaults>;
   guard?: GuardOptions;
 }
 
@@ -81,6 +89,21 @@ export function salesRouter(options: SalesRouterOptions): Router {
       res.json(options.getService().previewSchedule(body.total, body.paymentPlan));
     },
   );
+
+  /**
+   * The validity periods a salesperson works with. Any signed-in person may read them: they are the
+   * company's commercial terms, not configuration secrets, and the full settings catalog stays
+   * administrative. Changing them is `settings.manage` only.
+   */
+  router.get('/defaults', requireAuthenticated(options.guard), async (_req, res) => {
+    res.json(
+      (await options.getDefaults?.()) ?? {
+        reservationValidityDays: null,
+        quotationValidityDays: null,
+        decisions: { reservationValidityDays: 'BD-01', quotationValidityDays: 'BD-36' },
+      },
+    );
+  });
 
   /* -------------------------------------------------------- reservations */
 

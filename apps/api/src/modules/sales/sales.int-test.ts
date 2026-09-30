@@ -2395,6 +2395,33 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       expect(withdrawn.body).toMatchObject({ state: 'withdrawn' });
     });
 
+    it('filters the list by the state as it reads, with expiry computed from the validity', async () => {
+      const { quotation: live } = await quote();
+      const { quotation: lapsed } = await quote();
+      const { quotation: pulled } = await quote();
+      await connection
+        .collection(QUOTATIONS_COLLECTION)
+        .updateOne({ quotationId: lapsed.quotationId }, { $set: { validUntil: '2026-09-01' } });
+      await as(REP_ONE)
+        .post(`/api/v1/sales/quotations/${pulled.quotationId}/withdraw`)
+        .send({ reason: 'customer chose another unit', expectedRevision: 1 })
+        .expect(200);
+      const ids = async (state?: string) => {
+        const response = await as(REP_ONE)
+          .get(`/api/v1/sales/quotations${state ? `?state=${state}` : ''}`)
+          .expect(200);
+        return (response.body.items as { quotationId: string; state: string }[]).map((item) => [
+          item.quotationId,
+          item.state,
+        ]);
+      };
+      expect(await ids('active')).toEqual([[live.quotationId, 'active']]);
+      expect(await ids('expired')).toEqual([[lapsed.quotationId, 'expired']]);
+      expect(await ids('withdrawn')).toEqual([[pulled.quotationId, 'withdrawn']]);
+      expect(await ids()).toHaveLength(3);
+      await as(REP_ONE).get('/api/v1/sales/quotations?state=superseded').expect(400);
+    });
+
     it("keeps one representative's quotations from another, and refuses a validity in the past", async () => {
       const { quotation, unit, customer } = await quote(REP_ONE);
       await as(REP_TWO).get(`/api/v1/sales/quotations/${quotation.quotationId}`).expect(404);

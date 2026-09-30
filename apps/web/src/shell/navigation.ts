@@ -2,6 +2,7 @@ import type { Permission } from '@alola/contracts';
 import {
   BadgeCheck,
   Building2,
+  Calculator,
   CalendarCheck,
   CalendarClock,
   FileSignature,
@@ -85,6 +86,12 @@ export const NAVIGATION: NavGroup[] = [
     id: 'deals',
     labelKey: 'nav.groupDeals',
     items: [
+      {
+        path: '/quotations',
+        labelKey: 'nav.quotations',
+        icon: Calculator,
+        permissions: ['sales.quotation.view'],
+      },
       {
         path: '/reservations',
         labelKey: 'nav.reservations',

@@ -56,6 +56,8 @@ export const LEAD_TONES: Record<string, StatusTone> = {
 export const RESERVATION_TONES: Record<string, StatusTone> = {
   draft: 'neutral',
   pendingApproval: 'warning',
+  approved: 'info',
+  rejected: 'danger',
   confirmed: 'success',
   cancelled: 'danger',
   expired: 'danger',
@@ -64,9 +66,27 @@ export const RESERVATION_TONES: Record<string, StatusTone> = {
 
 export const CONTRACT_TONES: Record<string, StatusTone> = {
   draft: 'neutral',
+  pendingApproval: 'warning',
   active: 'success',
   cancelled: 'danger',
   completed: 'info',
+};
+
+export const QUOTATION_TONES: Record<string, StatusTone> = {
+  active: 'success',
+  expired: 'warning',
+  withdrawn: 'neutral',
+  superseded: 'neutral',
+};
+
+export const OPPORTUNITY_TONES: Record<string, StatusTone> = {
+  discovery: 'info',
+  unitSelection: 'info',
+  proposal: 'info',
+  negotiation: 'warning',
+  reservation: 'success',
+  won: 'success',
+  lost: 'danger',
 };
 
 export const INSTALLMENT_TONES: Record<string, StatusTone> = {

@@ -326,6 +326,7 @@ const modules: ApiModule[] = [
     router: salesRouter({
       getService: getSalesService,
       getQuotations: services.quotations,
+      getDefaults: services.salesDefaults,
       guard,
     }),
   },

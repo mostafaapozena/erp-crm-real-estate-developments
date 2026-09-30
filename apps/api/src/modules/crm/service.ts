@@ -553,6 +553,8 @@ export class CrmService {
     // safety check, from validated enumeration values only.
     if (query.kind === 'company') requested['kind'] = 'company';
     if (query.kind === 'individual') requested['kind'] = { $ne: 'company' };
+    // Identifiers the contract validated one by one; the operator is added here, never taken as input.
+    if (query.ids) requested['customerId'] = { $in: [...new Set(query.ids.split(','))] };
     const clauses: Record<string, unknown>[] = [
       withScope(buildScopeFilter(actor, CUSTOMER_SCOPE_FIELDS), requested),
     ];

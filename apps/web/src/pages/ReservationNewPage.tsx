@@ -1,8 +1,10 @@
 import type {
   Customer,
-  INSTALLMENT_FREQUENCIES,
   Lead,
+  Opportunity,
+  Quotation,
   Reservation,
+  SalesDefaults,
   SchedulePreview,
   Unit,
   UnitPage,
@@ -20,11 +22,22 @@ import Typography from '@mui/material/Typography';
 import { DataTable, PageHeader, type DataColumn } from '@alola/ui';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { apiRequest } from '../api/client';
+import { apiRequest, query } from '../api/client';
 import { useApi, useIdempotencyKey, useMutation } from '../api/useApi';
+import { useBranding } from '../branding';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import {
+  EMPTY_PLAN,
+  PaymentPlanEditor,
+  SchedulePreviewTable,
+  planDraftFrom,
+  planIsComplete,
+  planRequest,
+  useSchedulePreview,
+  type PlanDraft,
+} from './plan';
 import {
   CardGrid,
   EnumChip,
@@ -36,21 +49,16 @@ import {
   tableStatus,
 } from './shared';
 
-type Frequency = (typeof INSTALLMENT_FREQUENCIES)[number];
-const FREQUENCIES: Frequency[] = ['monthly', 'quarterly', 'semiAnnual', 'annual'];
-
 /**
  * The guided reservation: customer → unit → payment plan → review.
  *
- * Two decisions worth stating.
+ * It opens from a lead, a customer, an opportunity or an active quotation, and takes what that record
+ * already fixes: a quotation brings its customer, unit, price and plan; an opportunity its customer.
+ * Nothing it brings is trusted — the server applies every reservation rule again (validity, deposit,
+ * discount, approvals) exactly as for a reservation typed from nothing.
  *
- * **The schedule preview comes from the server.** It would be easy to compute it here and quicker to
- * render, and then the numbers a customer approves on screen would be produced by different code from
- * the numbers stored on the contract. One implementation, one answer.
- *
- * **The idempotency key is generated once, when the wizard opens** — not when Reserve is pressed. A
- * double-click, a slow network and a retry all send the same key, so the unit is held once. Generating
- * it at submit time would defeat the whole mechanism.
+ * **The schedule preview comes from the server**, from the code that stores schedules, and the
+ * idempotency key is generated once, when the wizard opens — so a double-click holds the unit once.
  */
 export default function ReservationNewPage() {
   return (
@@ -61,7 +69,7 @@ export default function ReservationNewPage() {
 }
 
 function ReservationWizard() {
-  const { t, locale, td } = useLocale();
+  const { t, td } = useLocale();
   const format = useFormatters();
   const navigate = useNavigate();
   const errorMessage = useErrorMessage();
@@ -69,60 +77,77 @@ function ReservationWizard() {
 
   const leadIdParam = params.get('leadId') ?? '';
   const unitIdParam = params.get('unitId') ?? '';
+  const customerIdParam = params.get('customerId') ?? '';
+  const opportunityIdParam = params.get('opportunityId') ?? '';
+  const quotationIdParam = params.get('quotationId') ?? '';
 
-  const [step, setStep] = useState(unitIdParam ? 1 : 0);
-  const [customerId, setCustomerId] = useState('');
-  const [unitId, setUnitId] = useState(unitIdParam);
-  const [reservationAmount, setReservationAmount] = useState('100000');
-  const [agreedPrice, setAgreedPrice] = useState('');
-  const [downPayment, setDownPayment] = useState('600000');
-  const [installmentCount, setInstallmentCount] = useState('12');
-  const [frequency, setFrequency] = useState<Frequency>('monthly');
-  const [firstDueOn, setFirstDueOn] = useState('');
+  const quotation = useApi<{ items: Quotation[] }>(
+    quotationIdParam ? `/api/v1/sales/quotations/${quotationIdParam}` : undefined,
+  );
+  const quoted =
+    quotation.state.kind === 'ready' && quotation.state.data.items[0]?.state === 'active'
+      ? quotation.state.data.items[0]
+      : undefined;
+  const opportunityId = opportunityIdParam || quoted?.opportunityId || '';
+  const opportunity = useApi<Opportunity>(
+    opportunityId ? `/api/v1/crm/opportunities/${opportunityId}` : undefined,
+  );
+  const leadId = leadIdParam || quoted?.leadId || '';
+  const lead = useApi<Lead>(leadId ? `/api/v1/crm/leads/${leadId}` : undefined);
+
+  const fixedCustomerId =
+    customerIdParam ||
+    quoted?.customerId ||
+    (opportunity.state.kind === 'ready' ? opportunity.state.data.customerId : '');
+  const fixedUnitId = unitIdParam || quoted?.unitId || '';
+
+  const [step, setStep] = useState(0);
+  const [chosenCustomerId, setChosenCustomerId] = useState('');
+  const [chosenUnitId, setChosenUnitId] = useState('');
+  const customerId = fixedCustomerId || chosenCustomerId;
+  const unitId = chosenUnitId || fixedUnitId;
+  const [reservationAmount, setReservationAmount] = useState('');
+  const [agreedPrice, setAgreedPrice] = useState<string | undefined>();
+  const [plan, setPlan] = useState<PlanDraft | undefined>();
   const [preview, setPreview] = useState<SchedulePreview | undefined>();
 
   /** Generated once per wizard, so every retry of this reservation carries the same key. */
   const idempotencyKey = useIdempotencyKey('reservation');
 
-  const customers = useApi<{ items: Customer[] }>('/api/v1/crm/customers');
-  const lead = useApi<Lead>(leadIdParam ? `/api/v1/crm/leads/${leadIdParam}` : undefined);
-  const availableUnits = useApi<UnitPage>('/api/v1/inventory/units?status=available&limit=50');
+  const customers = useApi<{ items: Customer[] }>(
+    fixedCustomerId ? undefined : `/api/v1/crm/customers${query({ limit: 100 })}`,
+  );
+  const fixedCustomer = useApi<Customer>(
+    fixedCustomerId ? `/api/v1/crm/customers/${fixedCustomerId}` : undefined,
+  );
+  const availableUnits = useApi<UnitPage>(
+    `/api/v1/inventory/units${query({ status: 'available', limit: 50 })}`,
+  );
   const selectedUnit = useApi<Unit>(unitId ? `/api/v1/inventory/units/${unitId}` : undefined);
+  const defaults = useApi<SalesDefaults>('/api/v1/sales/defaults');
+  const validityDays =
+    defaults.state.kind === 'ready' ? defaults.state.data.reservationValidityDays : null;
 
   const unit = selectedUnit.state.kind === 'ready' ? selectedUnit.state.data : undefined;
-  const currency = unit?.currentPrice?.currency ?? 'EGP';
-  const effectivePrice = agreedPrice || unit?.currentPrice?.amount || '';
+  const { baseCurrency } = useBranding();
+  const currency = unit?.currentPrice?.currency ?? quoted?.agreedPrice.currency ?? baseCurrency ?? '';
+  const quotedPrice = quoted && quoted.unitId === unitId ? quoted.agreedPrice.amount : undefined;
+  const effectivePrice = agreedPrice ?? quotedPrice ?? unit?.currentPrice?.amount ?? '';
+  const effectivePlan: PlanDraft =
+    plan ?? (quoted && quoted.unitId === unitId ? planDraftFrom(quoted.paymentPlan) : EMPTY_PLAN);
 
-  const previewMutation = useMutation<void, SchedulePreview>(() =>
-    apiRequest<SchedulePreview>('/api/v1/sales/schedule/preview', {
-      method: 'POST',
-      body: {
-        total: { amount: effectivePrice, currency },
-        paymentPlan: {
-          downPayment: { amount: downPayment || '0', currency },
-          installmentCount: Number(installmentCount || '0'),
-          frequency,
-          firstDueOn,
-        },
-      },
-    }),
-  );
-
-  const reserve = useMutation<void, Reservation>(() =>
+  const previewMutation = useSchedulePreview();
+  const reserve = useMutation(() =>
     apiRequest<Reservation>('/api/v1/sales/reservations', {
       method: 'POST',
       body: {
         customerId,
-        ...(leadIdParam ? { leadId: leadIdParam } : {}),
+        ...(leadId ? { leadId } : {}),
+        ...(opportunityId ? { opportunityId } : {}),
         unitId,
-        reservationAmount: { amount: reservationAmount || '0', currency },
-        agreedPrice: { amount: effectivePrice, currency },
-        paymentPlan: {
-          downPayment: { amount: downPayment || '0', currency },
-          installmentCount: Number(installmentCount || '0'),
-          frequency,
-          firstDueOn,
-        },
+        reservationAmount: { amount: reservationAmount.trim() || '0', currency },
+        agreedPrice: { amount: effectivePrice.trim(), currency },
+        paymentPlan: planRequest(effectivePlan, currency),
         idempotencyKey: idempotencyKey(),
       },
     }),
@@ -165,7 +190,12 @@ function ReservationWizard() {
 
   async function generatePreview() {
     try {
-      setPreview(await previewMutation.run());
+      setPreview(
+        await previewMutation.run({
+          price: { amount: effectivePrice.trim(), currency },
+          plan: planRequest(effectivePlan, currency),
+        }),
+      );
       setStep(3);
     } catch {
       /* rendered from previewMutation.error */
@@ -174,12 +204,15 @@ function ReservationWizard() {
 
   async function submit() {
     try {
-      const created = await reserve.run();
+      const created = await reserve.run(undefined);
       void navigate(`/reservations/${created.reservationId}`);
     } catch {
       /* rendered from reserve.error */
     }
   }
+
+  const customerLabel =
+    fixedCustomer.state.kind === 'ready' ? fixedCustomer.state.data.name : undefined;
 
   return (
     <Box>
@@ -194,32 +227,55 @@ function ReservationWizard() {
       </Stepper>
 
       <Stack spacing={3}>
+        {quoted ? (
+          <Alert severity="info" variant="outlined">
+            {t('reservationNew.fromQuotation', { number: quoted.quotationNumber })}
+          </Alert>
+        ) : null}
+        {quotationIdParam && quotation.state.kind === 'ready' && !quoted ? (
+          <Alert severity="warning">{t('reservationNew.quotationNotActive')}</Alert>
+        ) : null}
         {lead.state.kind === 'ready' ? (
           <Alert severity="info" variant="outlined">
             {`${t('crm.leadDetails')}: ${lead.state.data.name}`}
+          </Alert>
+        ) : null}
+        {validityDays === null && defaults.state.kind === 'ready' ? (
+          <Alert severity="warning">{t('reservationNew.validityNotConfigured')}</Alert>
+        ) : validityDays ? (
+          <Alert severity="info" variant="outlined">
+            {t('reservationNew.validity', { days: format.number(validityDays) })}
           </Alert>
         ) : null}
 
         {step === 0 ? (
           <Panel title={t('sales.selectCustomer')}>
             <Stack spacing={2}>
-              <TextField
-                select
-                label={t('fields.customer')}
-                value={customerId}
-                onChange={(event) => setCustomerId(event.target.value)}
-                required
-              >
-                {(customers.state.kind === 'ready' ? customers.state.data.items : []).map(
-                  (customer) => (
-                    <MenuItem key={customer.customerId} value={customer.customerId}>
-                      {`${customer.name} — ${customer.primaryPhone}`}
-                    </MenuItem>
-                  ),
-                )}
-              </TextField>
+              {fixedCustomerId ? (
+                <Field label={t('fields.customer')}>{customerLabel ?? '—'}</Field>
+              ) : (
+                <TextField
+                  select
+                  label={t('fields.customer')}
+                  value={chosenCustomerId}
+                  onChange={(event) => setChosenCustomerId(event.target.value)}
+                  required
+                >
+                  {(customers.state.kind === 'ready' ? customers.state.data.items : []).map(
+                    (customer) => (
+                      <MenuItem key={customer.customerId} value={customer.customerId}>
+                        {`${customer.name} — ${customer.primaryPhone}`}
+                      </MenuItem>
+                    ),
+                  )}
+                </TextField>
+              )}
               <Box>
-                <Button variant="contained" disabled={!customerId} onClick={() => setStep(1)}>
+                <Button
+                  variant="contained"
+                  disabled={!customerId}
+                  onClick={() => setStep(fixedUnitId ? 2 : 1)}
+                >
                   {t('actions.next')}
                 </Button>
               </Box>
@@ -238,8 +294,10 @@ function ReservationWizard() {
                 caption={t('inventory.unitsTitle')}
                 rowLabel={(row) => `${t('actions.selectUnit')}: ${row.code}`}
                 onRowClick={(row) => {
-                  setUnitId(row.unitId);
-                  setAgreedPrice(row.currentPrice?.amount ?? '');
+                  setChosenUnitId(row.unitId);
+                  setAgreedPrice(undefined);
+                  setPlan(undefined);
+                  setPreview(undefined);
                 }}
                 labels={{
                   loadingTitle: t('states.loadingTitle'),
@@ -268,16 +326,21 @@ function ReservationWizard() {
 
         {step === 2 ? (
           <Panel title={t('sales.paymentPlan')}>
-            <Stack spacing={2}>
+            <Stack spacing={3}>
               {previewMutation.error ? (
                 <Alert severity="error" role="alert">
                   {errorMessage(previewMutation.error)}
                 </Alert>
               ) : null}
-              <CardGrid min={200}>
+              {unit ? (
+                <Alert severity="success" variant="outlined">
+                  {`${t('sales.selectedUnit')}: ${unit.code}`}
+                </Alert>
+              ) : null}
+              <CardGrid min={220}>
                 <TextField
                   label={t('sales.agreedPrice')}
-                  value={agreedPrice}
+                  value={effectivePrice}
                   onChange={(event) => setAgreedPrice(event.target.value)}
                   required
                   slotProps={{ htmlInput: { dir: 'ltr', inputMode: 'decimal' } }}
@@ -287,46 +350,27 @@ function ReservationWizard() {
                   value={reservationAmount}
                   onChange={(event) => setReservationAmount(event.target.value)}
                   required
+                  helperText={t('reservationNew.depositHint')}
                   slotProps={{ htmlInput: { dir: 'ltr', inputMode: 'decimal' } }}
-                />
-                <TextField
-                  label={t('sales.downPayment')}
-                  value={downPayment}
-                  onChange={(event) => setDownPayment(event.target.value)}
-                  slotProps={{ htmlInput: { dir: 'ltr', inputMode: 'decimal' } }}
-                />
-                <TextField
-                  label={t('sales.installmentCount')}
-                  value={installmentCount}
-                  onChange={(event) => setInstallmentCount(event.target.value)}
-                  slotProps={{ htmlInput: { dir: 'ltr', inputMode: 'numeric' } }}
-                />
-                <TextField
-                  select
-                  label={t('sales.frequency')}
-                  value={frequency}
-                  onChange={(event) => setFrequency(event.target.value as Frequency)}
-                >
-                  {FREQUENCIES.map((value) => (
-                    <MenuItem key={value} value={value}>
-                      {td(`frequency.${value}`)}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  label={t('sales.firstDueOn')}
-                  type="date"
-                  value={firstDueOn}
-                  onChange={(event) => setFirstDueOn(event.target.value)}
-                  required
-                  slotProps={{ inputLabel: { shrink: true } }}
                 />
               </CardGrid>
+              <PaymentPlanEditor
+                value={effectivePlan}
+                onChange={(next) => {
+                  setPlan(next);
+                  setPreview(undefined);
+                }}
+              />
               <Stack direction="row" spacing={1}>
-                <Button onClick={() => setStep(1)}>{t('actions.previous')}</Button>
+                <Button onClick={() => setStep(fixedUnitId ? 0 : 1)}>{t('actions.previous')}</Button>
                 <Button
                   variant="contained"
-                  disabled={!firstDueOn || !effectivePrice || previewMutation.pending}
+                  disabled={
+                    !planIsComplete(effectivePlan) ||
+                    !effectivePrice ||
+                    !reservationAmount.trim() ||
+                    previewMutation.pending
+                  }
                   onClick={() => void generatePreview()}
                 >
                   {t('sales.previewSchedule')}
@@ -340,84 +384,38 @@ function ReservationWizard() {
           <Stack spacing={3}>
             <Panel title={t('sales.steps.review')}>
               <CardGrid min={200}>
+                <Field label={t('fields.customer')}>
+                  {customerLabel ??
+                    (customers.state.kind === 'ready'
+                      ? customers.state.data.items.find((row) => row.customerId === customerId)?.name
+                      : undefined) ??
+                    '—'}
+                </Field>
                 <Field label={t('fields.unit')}>
                   <Verbatim>{unit?.code ?? ''}</Verbatim>
                 </Field>
                 <Field label={t('sales.agreedPrice')}>
-                  <Verbatim>{format.money({ amount: effectivePrice as never, currency })}</Verbatim>
+                  <Verbatim>{format.money(preview.price)}</Verbatim>
                 </Field>
                 <Field label={t('sales.reservationAmount')}>
                   <Verbatim>
-                    {format.money({ amount: reservationAmount as never, currency })}
+                    {format.money({ amount: reservationAmount.trim() as never, currency })}
                   </Verbatim>
                 </Field>
-                <Field label={t('sales.scheduleTotal')}>
-                  <Verbatim>{format.money(preview.rowsTotal)}</Verbatim>
-                </Field>
               </CardGrid>
-              {/* The reconciliation is shown, not assumed: the server returns both totals. */}
               <Alert severity="success" variant="outlined" sx={{ marginBlockStart: 2 }}>
                 {t('sales.scheduleReconciles')}
               </Alert>
             </Panel>
 
             <Panel title={t('sales.schedule')}>
-              <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
-                <Box component="thead">
-                  <Box component="tr">
-                    {[
-                      t('fields.sequence'),
-                      t('fields.dueDate'),
-                      t('installmentKind.installment'),
-                      t('fields.amount'),
-                    ].map((header) => (
-                      <Box
-                        key={header}
-                        component="th"
-                        sx={{
-                          textAlign: 'start',
-                          padding: 1,
-                          borderBlockEnd: 1,
-                          borderColor: 'divider',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {header}
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-                <Box component="tbody">
-                  {preview.rows.map((row) => (
-                    <Box component="tr" key={row.sequence}>
-                      <Box
-                        component="td"
-                        sx={{ padding: 1, borderBlockEnd: 1, borderColor: 'divider' }}
-                      >
-                        <Verbatim>{format.number(row.sequence)}</Verbatim>
-                      </Box>
-                      <Box
-                        component="td"
-                        sx={{ padding: 1, borderBlockEnd: 1, borderColor: 'divider' }}
-                      >
-                        <Verbatim>{format.date(row.dueOn)}</Verbatim>
-                      </Box>
-                      <Box
-                        component="td"
-                        sx={{ padding: 1, borderBlockEnd: 1, borderColor: 'divider' }}
-                      >
-                        {td(`installmentKind.${row.kind}`)}
-                      </Box>
-                      <Box
-                        component="td"
-                        sx={{ padding: 1, borderBlockEnd: 1, borderColor: 'divider' }}
-                      >
-                        <Verbatim>{format.money(row.amount)}</Verbatim>
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
+              <SchedulePreviewTable
+                rows={preview.rows}
+                price={preview.price}
+                maintenanceDeposit={preview.maintenanceDeposit}
+                total={preview.total}
+                caption={t('sales.schedule')}
+              />
             </Panel>
 
             {reserve.error ? (
@@ -428,12 +426,16 @@ function ReservationWizard() {
 
             <Stack direction="row" spacing={1}>
               <Button onClick={() => setStep(2)}>{t('actions.previous')}</Button>
-              <Button variant="contained" disabled={reserve.pending} onClick={() => void submit()}>
+              <Button
+                variant="contained"
+                disabled={reserve.pending}
+                onClick={() => void submit()}
+              >
                 {t('actions.reserve')}
               </Button>
             </Stack>
             <Typography variant="caption" color="text.secondary">
-              {locale === 'ar' ? t('demo.dataNotice') : t('demo.dataNotice')}
+              {t('demo.dataNotice')}
             </Typography>
           </Stack>
         ) : null}

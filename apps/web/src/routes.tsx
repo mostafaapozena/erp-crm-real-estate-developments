@@ -25,12 +25,16 @@ export const PAGE_MODULES = {
   Leads: () => import('./pages/LeadsPage'),
   LeadDetail: () => import('./pages/LeadDetailPage'),
   Customers: () => import('./pages/CustomersPage'),
+  CustomerDetail: () => import('./pages/CustomerDetailPage'),
   Projects: () => import('./pages/ProjectsPage'),
   Units: () => import('./pages/UnitsPage'),
   UnitDetail: () => import('./pages/UnitDetailPage'),
   Reservations: () => import('./pages/ReservationsPage'),
   ReservationNew: () => import('./pages/ReservationNewPage'),
   ReservationDetail: () => import('./pages/ReservationDetailPage'),
+  Quotations: () => import('./pages/QuotationsPage'),
+  QuotationNew: () => import('./pages/QuotationNewPage'),
+  QuotationDetail: () => import('./pages/QuotationDetailPage'),
   Contracts: () => import('./pages/ContractsPage'),
   ContractDetail: () => import('./pages/ContractDetailPage'),
   Installments: () => import('./pages/InstallmentsPage'),
@@ -56,12 +60,16 @@ const Dashboard = lazy(PAGE_MODULES.Dashboard);
 const Leads = lazy(PAGE_MODULES.Leads);
 const LeadDetail = lazy(PAGE_MODULES.LeadDetail);
 const Customers = lazy(PAGE_MODULES.Customers);
+const CustomerDetail = lazy(PAGE_MODULES.CustomerDetail);
 const Projects = lazy(PAGE_MODULES.Projects);
 const Units = lazy(PAGE_MODULES.Units);
 const UnitDetail = lazy(PAGE_MODULES.UnitDetail);
 const Reservations = lazy(PAGE_MODULES.Reservations);
 const ReservationNew = lazy(PAGE_MODULES.ReservationNew);
 const ReservationDetail = lazy(PAGE_MODULES.ReservationDetail);
+const Quotations = lazy(PAGE_MODULES.Quotations);
+const QuotationNew = lazy(PAGE_MODULES.QuotationNew);
+const QuotationDetail = lazy(PAGE_MODULES.QuotationDetail);
 const Contracts = lazy(PAGE_MODULES.Contracts);
 const ContractDetail = lazy(PAGE_MODULES.ContractDetail);
 const Installments = lazy(PAGE_MODULES.Installments);
@@ -111,12 +119,16 @@ export function AppRoutes() {
           <Route path="/leads" element={<Leads />} />
           <Route path="/leads/:leadId" element={<LeadDetail />} />
           <Route path="/customers" element={<Customers />} />
+          <Route path="/customers/:customerId" element={<CustomerDetail />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/units" element={<Units />} />
           <Route path="/units/:unitId" element={<UnitDetail />} />
           <Route path="/reservations" element={<Reservations />} />
           <Route path="/reservations/new" element={<ReservationNew />} />
           <Route path="/reservations/:reservationId" element={<ReservationDetail />} />
+          <Route path="/quotations" element={<Quotations />} />
+          <Route path="/quotations/new" element={<QuotationNew />} />
+          <Route path="/quotations/:quotationId" element={<QuotationDetail />} />
           <Route path="/contracts" element={<Contracts />} />
           <Route path="/contracts/:contractId" element={<ContractDetail />} />
           <Route path="/installments" element={<Installments />} />

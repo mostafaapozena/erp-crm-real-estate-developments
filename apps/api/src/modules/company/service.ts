@@ -249,6 +249,7 @@ export class CompanyService {
       defaultLocale: profile.defaultLocale,
       supportedLocales: profile.supportedLocales,
       timeZone: profile.timeZone,
+      baseCurrency: profile.baseCurrency,
       ...(profile.primaryColor ? { primaryColor: profile.primaryColor } : {}),
       assets,
       version: profile.version,

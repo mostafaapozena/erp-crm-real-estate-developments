@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import { DataTable, PageHeader, TableToolbar, type DataColumn } from '@alola/ui';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { query } from '../api/client';
 import { useApi } from '../api/useApi';
 import { useFormatters } from '../format';
@@ -24,6 +25,7 @@ export default function CustomersPage() {
 function CustomersScreen() {
   const { t } = useLocale();
   const format = useFormatters();
+  const navigate = useNavigate();
   const labels = useTableLabels();
   const [search, setSearch] = useState('');
   const customers = useApi<{ items: Customer[] }>(`/api/v1/crm/customers${query({ search })}`);
@@ -68,6 +70,8 @@ function CustomersScreen() {
         columns={columns}
         rows={rows}
         rowKey={(row) => row.customerId}
+        rowLabel={(row) => t('list.open', { label: row.name })}
+        onRowClick={(row) => void navigate(`/customers/${row.customerId}`)}
         status={tableStatus(customers.state)}
         caption={t('crm.customersTitle')}
         filtered={search !== ''}

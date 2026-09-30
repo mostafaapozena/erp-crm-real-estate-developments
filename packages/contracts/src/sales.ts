@@ -856,8 +856,29 @@ export const QuotationQuerySchema = z.strictObject({
   leadId: RecordIdSchema.optional(),
   opportunityId: RecordIdSchema.optional(),
   unitId: RecordIdSchema.optional(),
+  /**
+   * The state as it reads: `active` is still within its validity, `expired` is active past it — the
+   * same rule a single read applies, evaluated by the database against the organization's today.
+   */
+  state: z.enum(['active', 'withdrawn', 'expired']).optional(),
+  /** Anchored prefix of the quotation number or the unit code. Never a regular expression. */
+  search: z.string().trim().min(1).max(40).optional(),
 });
 export type QuotationQuery = z.infer<typeof QuotationQuerySchema>;
+
+/**
+ * The commercial defaults a salesperson needs to see while working — never the whole settings
+ * catalog, which is administrative. `null` is **not configured** and names the decision it waits on.
+ */
+export const SalesDefaultsSchema = z.strictObject({
+  reservationValidityDays: z.number().int().positive().nullable(),
+  quotationValidityDays: z.number().int().positive().nullable(),
+  decisions: z.strictObject({
+    reservationValidityDays: z.string(),
+    quotationValidityDays: z.string(),
+  }),
+});
+export type SalesDefaults = z.infer<typeof SalesDefaultsSchema>;
 
 export const QuotationPageSchema = z.strictObject({
   items: z.array(QuotationSchema),

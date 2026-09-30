@@ -584,8 +584,32 @@ export class QuotationService {
       if (query[key] !== undefined) requested[key] = query[key];
     }
     assertSafeFilter(requested);
-    // The latest revision is the one not superseded: active, withdrawn, or expired on read.
-    requested['state'] = { $ne: 'superseded' };
+    // The latest revision is the one not superseded: active, withdrawn, or expired on read. Expiry is
+    // never stored, so the state asked for becomes the stored state plus a bound on the validity date.
+    const today = this.options.today();
+    switch (query.state) {
+      case 'active':
+        requested['state'] = 'active';
+        requested['validUntil'] = { $gte: today };
+        break;
+      case 'expired':
+        requested['state'] = 'active';
+        requested['validUntil'] = { $lt: today };
+        break;
+      case 'withdrawn':
+        requested['state'] = 'withdrawn';
+        break;
+      default:
+        requested['state'] = { $ne: 'superseded' };
+    }
+    if (query.search) {
+      // Escaped and anchored: the text is matched literally at the start, never run as a pattern.
+      const prefix = `^${query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
+      requested['$or'] = [
+        { quotationNumber: { $regex: prefix, $options: 'i' } },
+        { unitCode: { $regex: prefix, $options: 'i' } },
+      ];
+    }
     const filter = withScope(buildScopeFilter(actor, QUOTATION_SCOPE_FIELDS), requested);
     const cursor = query.cursor ? decodeCursor(query.cursor) : undefined;
     const paged = cursor

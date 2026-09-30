@@ -127,6 +127,12 @@ export const IssueDocumentSchema = z.strictObject({
   type: IssuedDocumentTypeSchema,
   sourceId: RecordIdSchema,
   locale: LocaleSchema,
+  /**
+   * Optional idempotency key. A retried or double-submitted request carrying the same key returns the
+   * document the first one issued — no second version, and no second statement number. The same key
+   * with a different type, source or language is a conflict, never a silent no-op.
+   */
+  idempotencyKey: z.string().min(8).max(200).optional(),
 });
 export type IssueDocument = z.infer<typeof IssueDocumentSchema>;
 

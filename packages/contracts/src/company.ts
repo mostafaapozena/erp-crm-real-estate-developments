@@ -178,6 +178,11 @@ export const PublicBrandingSchema = z.strictObject({
    * configured organization timezone before a profile exists. Never assumed by the client.
    */
   timeZone: z.string().min(1).max(64),
+  /**
+   * The currency amounts are entered in by default — the one every document prints. Absent before a
+   * profile exists; a form then takes the currency of the record it prices, never a guessed one.
+   */
+  baseCurrency: CurrencyCodeSchema.optional(),
   primaryColor: BrandColorSchema.optional(),
   assets: z.strictObject({
     logo: PublicBrandAssetSchema.optional(),

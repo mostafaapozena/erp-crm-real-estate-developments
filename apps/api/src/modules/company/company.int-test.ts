@@ -215,6 +215,7 @@ describe.skipIf(!gate.available)(`company profile — ${gate.reason}`, () => {
       expect(Object.keys(res.body).sort()).toEqual(
         [
           'assets',
+          'baseCurrency',
           'configured',
           'defaultLocale',
           'demonstration',

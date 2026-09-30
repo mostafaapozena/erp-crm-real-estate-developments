@@ -985,6 +985,47 @@ describe.skipIf(!gate.available)(`approval engine — ${gate.reason}`, () => {
       expect(submitted.body.pendingApproverAccountIds).toContain(APPROVER_1);
       expect(submitted.body.pendingApproverAccountIds).not.toContain(OUTSIDER);
     });
+
+    it('carries every eligible approver when more than fifty hold the permission', async () => {
+      // Regression: the contract once capped the pending list at 50 while a permission-based stage
+      // could resolve to 200, so a large approver population made submission and the queue a 500.
+      const crowd = Array.from({ length: 55 }, (_, index) => `${RUN}-crowd-${index}`);
+      for (const accountId of crowd) {
+        await bootstrapGrant(connection, {
+          accountId,
+          roleKeys: [R_APPROVER],
+          scope: scope('all'),
+          updatedBy: `${RUN}-bootstrap`,
+        });
+      }
+      const { operationType } = await publishedPolicy({
+        stages: [
+          {
+            order: 1,
+            name: label('anyone who may approve'),
+            approvers: { kind: 'permission', permission: 'approval.request.approve', scope: 'any' },
+            rule: 'any',
+          },
+        ],
+      });
+      const submitted = await submit(REQUESTER, operationType, {
+        scope: { branchId: `${RUN}-branch-1` },
+      });
+      expect(submitted.status).toBe(201);
+      const pending = submitted.body.pendingApproverAccountIds as string[];
+      expect(pending.length).toBeGreaterThan(55);
+      for (const accountId of crowd) expect(pending).toContain(accountId);
+      const queue = await as(crowd[0]).get('/api/v1/approvals/requests?awaitingMe=true');
+      expect(queue.status).toBe(200);
+      expect((queue.body.items as { requestId: string }[]).map((item) => item.requestId)).toContain(
+        submitted.body.requestId,
+      );
+      const decided = await as(crowd[54] as string)
+        .post(`/api/v1/approvals/requests/${submitted.body.requestId}/approve`)
+        .send({});
+      expect(decided.status).toBe(200);
+      expect(decided.body.state).toBe('approved');
+    });
   });
 
   /* ============================= APPROVAL-003: maker-checker over HTTP */

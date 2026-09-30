@@ -5,28 +5,17 @@ import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import { PageHeader, StateView, ValueRange } from '@alola/ui';
-import {
-  BadgeCheck,
-  CalendarClock,
-  CircleDot,
-  FilePen,
-  History,
-  MapPin,
-  MessageCircle,
-  Phone,
-  TrendingUp,
-  UserPlus,
-  Users,
-  type LucideIcon,
-} from '@alola/ui/icons';
+import { Icon, PageHeader, StateView, ValueRange } from '@alola/ui';
+import { UserPlus, UserRound } from '@alola/ui/icons';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
 import { apiRequest, type ApiError } from '../api/client';
 import { useSession } from '../api/session';
-import { useApi, useMutation, type AsyncState } from '../api/useApi';
+import { useApi, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
+import { ActivityTimeline } from './activity';
+import { ConvertLeadPanel } from './convert';
 import { useLocale } from '../locale';
 import { PersonName } from '../people';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
@@ -40,9 +29,6 @@ import {
   LEAD_TONES,
   Panel,
   RequirePermission,
-  SystemNote,
-  Timeline,
-  Transition,
   Verbatim,
 } from './shared';
 
@@ -58,19 +44,6 @@ const STAGES: LeadStage[] = [
   'won',
   'lost',
 ];
-
-/** One glyph per kind of activity, so the timeline can be scanned by shape as well as by word. */
-const ACTIVITY_ICONS: Partial<Record<Activity['kind'], LucideIcon>> = {
-  note: FilePen,
-  call: Phone,
-  whatsapp: MessageCircle,
-  meeting: Users,
-  siteVisit: MapPin,
-  followUpScheduled: CalendarClock,
-  stageChanged: TrendingUp,
-  assignmentChanged: UserPlus,
-  converted: BadgeCheck,
-};
 
 const ACTIVITY_KINDS = [
   'note',
@@ -197,12 +170,38 @@ function LeadDetailScreen() {
                 ) : null}
               </Stack>
             </Panel>
-            <LeadTimeline activities={activities.state} />
+            <ActivityTimeline activities={activities.state} title={t('crm.timeline')} />
           </>
         }
         aside={
-          can('sales.reservation.create') || can('crm.lead.edit') || can('crm.activity.create') ? (
+          can('sales.reservation.create') ||
+          can('crm.lead.edit') ||
+          can('crm.activity.create') ||
+          can('crm.lead.convert') ||
+          data.customerId ? (
             <>
+              {data.customerId ? (
+                <Alert
+                  severity="success"
+                  variant="outlined"
+                  icon={<Icon icon={UserRound} size={20} />}
+                  sx={{ '& .MuiAlert-message': { inlineSize: '100%' } }}
+                >
+                  <Box sx={{ marginBlockEnd: 1.25 }}>{t('convert.converted')}</Box>
+                  {can('crm.customer.view') ? (
+                    <Button
+                      component={Link}
+                      to={`/customers/${data.customerId}`}
+                      variant="outlined"
+                      size="small"
+                    >
+                      {t('convert.openCustomer')}
+                    </Button>
+                  ) : null}
+                </Alert>
+              ) : can('crm.lead.convert') && data.stage !== 'lost' ? (
+                <ConvertLeadPanel lead={data} onConverted={reload} />
+              ) : null}
               {can('sales.reservation.create') && data.stage !== 'lost' && data.stage !== 'won' ? (
                 <Alert
                   severity="info"
@@ -231,52 +230,6 @@ function LeadDetailScreen() {
         }
       />
     </Box>
-  );
-}
-
-/** The lead's activity history, newest first. System-written references are translated on display. */
-function LeadTimeline({ activities }: { activities: AsyncState<{ items: Activity[] }> }) {
-  const { t, td } = useLocale();
-  const format = useFormatters();
-  return (
-    <Panel title={t('crm.timeline')} icon={History}>
-      {activities.kind === 'loading' ? (
-        <StateView variant="inline" kind="loading" title={t('states.loadingTitle')} />
-      ) : (
-        <Timeline
-          emptyLabel={t('states.emptyDescription')}
-          entries={(activities.kind === 'ready' ? activities.data.items : []).map((activity) => ({
-            key: activity.activityId,
-            icon: ACTIVITY_ICONS[activity.kind] ?? CircleDot,
-            title: td(`activityKind.${activity.kind}`),
-            when: format.dateTime(activity.occurredAt),
-            body: (
-              <>
-                {activity.fromStage && activity.toStage ? (
-                  <Box>
-                    <Transition
-                      from={td(`leadStage.${activity.fromStage}`)}
-                      to={td(`leadStage.${activity.toStage}`)}
-                    />
-                  </Box>
-                ) : null}
-                {activity.body ? (
-                  <Box sx={{ color: 'text.primary' }}>
-                    <SystemNote text={activity.body} />
-                  </Box>
-                ) : null}
-                {activity.dueOn ? (
-                  <Box>
-                    {`${t('crm.activityDueOn')}: `}
-                    <Verbatim>{format.date(activity.dueOn)}</Verbatim>
-                  </Box>
-                ) : null}
-              </>
-            ),
-          }))}
-        />
-      )}
-    </Panel>
   );
 }
 
