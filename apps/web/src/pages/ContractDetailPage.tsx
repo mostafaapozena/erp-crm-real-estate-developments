@@ -58,7 +58,7 @@ import { useLocale } from '../locale';
 import { IssuedDocumentsPanel } from './IssuedDocumentsPanel';
 import { PersonName } from '../people';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
-import { RecordLink, useProjectNames } from './lookups';
+import { RecordLink, useCustomerNames, useProjectNames } from './lookups';
 import {
   PaymentPlanEditor,
   SchedulePreviewTable,
@@ -725,6 +725,8 @@ function PartiesPanel({
 }) {
   const { t, td } = useLocale();
   const format = useFormatters();
+  // A contract drafted before snapshots stored no party names: read them through the scoped lookup.
+  const partyName = useCustomerNames(contract.parties.map((party) => party.customerId));
   return (
     <Panel
       title={t('contract.parties')}
@@ -756,13 +758,13 @@ function PartiesPanel({
           >
             <Icon icon={UserRound} size={16} />
             <Typography component="span" sx={{ fontWeight: 600 }}>
-              {party.name ?? t('contract.partyHidden')}
+              {party.name ?? partyName(party.customerId) ?? t('contract.partyHidden')}
             </Typography>
             <Typography component="span" variant="body2" color="text.secondary">
               {td(`contractPartyRole.${party.role}`)}
             </Typography>
             {party.sharePercent ? (
-              <Verbatim>{`${format.number(party.sharePercent, 4)}%`}</Verbatim>
+              <Verbatim>{`${format.number(party.sharePercent)}%`}</Verbatim>
             ) : null}
           </Box>
         ))}
@@ -830,6 +832,7 @@ function ActivationDialog({
   const { t, td } = useLocale();
   const format = useFormatters();
   const errorMessage = useErrorMessage();
+  const partyName = useCustomerNames(contract.parties.map((party) => party.customerId));
   const review = useApi<ActivationReview>(
     `/api/v1/sales/contracts/${contract.contractId}/activation-review`,
   );
@@ -899,7 +902,10 @@ function ActivationDialog({
               </Field>
               <Field label={t('contract.parties')}>
                 {contract.parties
-                  .map((party) => party.name ?? t('contract.partyHidden'))
+                  .map(
+                    (party) =>
+                      party.name ?? partyName(party.customerId) ?? t('contract.partyHidden'),
+                  )
                   .join(' · ')}
               </Field>
               <Field label={t('sales.agreedPrice')}>

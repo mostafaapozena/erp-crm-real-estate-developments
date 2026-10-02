@@ -101,7 +101,7 @@ describe('contract workspace', () => {
   it('says a draft commits nothing and shows the proposed schedule', async () => {
     stubApi(['sales.contract.view'], routes());
     open();
-    await screen.findByRole('heading', { level: 1, name: 'CTR-2026-00009' }, FIRST);
+    await screen.findByText('CTR-2026-00009', { selector: 'h1' }, FIRST);
     expect(screen.getByText('هذا العقد مسودة')).toBeTruthy();
     expect(screen.getAllByText('الجدول المقترح').length).toBeGreaterThan(0);
     expect(
@@ -123,10 +123,10 @@ describe('contract workspace', () => {
       },
     );
     open();
-    fireEvent.click(await screen.findByRole('button', { name: 'تفعيل العقد' }, FIRST));
+    fireEvent.click(await screen.findByText('تفعيل العقد', { selector: 'button' }, FIRST));
     const dialog = await screen.findByRole('dialog', { name: 'مراجعة تفعيل العقد' });
     await within(dialog).findByText('لا يتطلب هذا التفعيل موافقة؛ يكفي إذنك.');
-    const confirm = within(dialog).getByRole('button', { name: 'تفعيل العقد' });
+    const confirm = within(dialog).getByText('تفعيل العقد', { selector: 'button' });
     expect(confirm).toHaveProperty('disabled', true);
     fireEvent.click(within(dialog).getByRole('checkbox'));
     expect(confirm).toHaveProperty('disabled', false);
@@ -152,11 +152,11 @@ describe('contract workspace', () => {
       }),
     );
     open();
-    fireEvent.click(await screen.findByRole('button', { name: 'تفعيل العقد' }, FIRST));
+    fireEvent.click(await screen.findByText('تفعيل العقد', { selector: 'button' }, FIRST));
     const dialog = await screen.findByRole('dialog');
     await within(dialog).findByText('الحجز المرتبط غير مؤكد.');
     fireEvent.click(within(dialog).getByRole('checkbox'));
-    expect(within(dialog).getByRole('button', { name: 'تفعيل العقد' })).toHaveProperty(
+    expect(within(dialog).getByText('تفعيل العقد', { selector: 'button' })).toHaveProperty(
       'disabled',
       true,
     );
@@ -170,9 +170,9 @@ describe('contract workspace', () => {
       }),
     );
     open();
-    fireEvent.click(await screen.findByRole('button', { name: 'تفعيل العقد' }, FIRST));
+    fireEvent.click(await screen.findByText('تفعيل العقد', { selector: 'button' }, FIRST));
     const dialog = await screen.findByRole('dialog');
-    await within(dialog).findByRole('button', { name: 'إرسال للموافقة' });
+    await within(dialog).findByText('إرسال للموافقة', { selector: 'button' });
   });
 
   it('explains a refused cancellation after collection', async () => {
@@ -207,12 +207,12 @@ describe('contract workspace', () => {
       },
     );
     open();
-    fireEvent.click(await screen.findByRole('button', { name: 'إلغاء العقد' }, FIRST));
+    fireEvent.click(await screen.findByText('إلغاء العقد', { selector: 'button' }, FIRST));
     const dialog = await screen.findByRole('dialog');
-    fireEvent.change(within(dialog).getByRole('textbox', { name: /السبب/ }), {
+    fireEvent.change(within(dialog).getByLabelText(/السبب/), {
       target: { value: 'customer withdrew' },
     });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'تأكيد' }));
+    fireEvent.click(within(dialog).getByText('تأكيد', { selector: 'button' }));
     await waitFor(() =>
       expect(within(dialog).getByRole('alert').textContent).toContain(
         'حُصّل عليه مبلغ يزيد على مبلغ الحجز',

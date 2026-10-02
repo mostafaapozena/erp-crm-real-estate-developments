@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react';
-import { StrictMode, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { vi } from 'vitest';
 import { SessionProvider } from '../api/session';
@@ -89,24 +89,26 @@ export function stubApi(
   return requests;
 }
 
-/** Render one page at an address, under the route pattern it expects. */
+/**
+ * Render one page at an address, under the route pattern it expects. Without `StrictMode`: its double
+ * render is a development check the shell tests keep (they assert on it); here it would only double the
+ * cost of rendering a large page on a busy machine, and no assertion depends on it.
+ */
 export function renderAt(element: ReactElement, address: string, pattern: string) {
   return render(
-    <StrictMode>
-      <BrandingProvider>
-        <LocaleProvider i18n={createI18n(() => undefined)}>
-          <SessionProvider>
-            <PeopleProvider>
-              <MemoryRouter initialEntries={[address]}>
-                <Routes>
-                  <Route path={pattern} element={element} />
-                  <Route path="*" element={<div data-testid="navigated" />} />
-                </Routes>
-              </MemoryRouter>
-            </PeopleProvider>
-          </SessionProvider>
-        </LocaleProvider>
-      </BrandingProvider>
-    </StrictMode>,
+    <BrandingProvider>
+      <LocaleProvider i18n={createI18n(() => undefined)}>
+        <SessionProvider>
+          <PeopleProvider>
+            <MemoryRouter initialEntries={[address]}>
+              <Routes>
+                <Route path={pattern} element={element} />
+                <Route path="*" element={<div data-testid="navigated" />} />
+              </Routes>
+            </MemoryRouter>
+          </PeopleProvider>
+        </SessionProvider>
+      </LocaleProvider>
+    </BrandingProvider>,
   );
 }

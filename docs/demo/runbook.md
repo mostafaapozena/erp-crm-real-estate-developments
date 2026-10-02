@@ -85,6 +85,21 @@ everything. The samples carry real QR codes: open a contract or receipt, then th
 QR codes point at the first `CORS_ALLOWED_ORIGINS` entry (usually <http://localhost:5173>) unless
 `PUBLIC_APP_URL` is set.
 
+Then, once, give the demonstration roles the BMP-1 commercial permissions (quotations, opportunities,
+lead conversion, contract activation for the manager, settings and number formats for the
+administrator) and configure the demonstration reservation validity if none is configured:
+
+```bash
+npm run seed:demo:bmp1
+```
+
+It only **adds** permissions and sets `sales.reservationValidityDays` to 14 **only when not
+configured**, as the system actor, with a reason saying `BD-01` is still open; a second run reports
+`unchanged` for everything. The role matrix is in
+[architecture/commercial-workflow.md](../architecture/commercial-workflow.md). No number format is
+activated — the official formats are the client's decision (`BD-19`); see
+[operations/numbering-runbook.md](../operations/numbering-runbook.md).
+
 ### 4. Start the application
 
 Two terminals:

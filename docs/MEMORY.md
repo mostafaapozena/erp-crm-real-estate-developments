@@ -1,6 +1,6 @@
 # ALOLA ERP — Project Memory
 
-Last updated: 2026-09-30 (Business Master Prompt 1 — Commercial Operations — package 7 complete, stopped for review)
+Last updated: 2026-10-02 (Business Master Prompt 1 — Commercial Operations — package 8 complete, BMP-1 closed, stopped for review)
 Blueprint documents: `MASTER-MAPPING.md` v2.0, `PHASE-PROMPTS.md` v2.0
 Repository: Git · Branch: `main` · Remote `origin` (GitHub) added by the repository owner, who pushed
 `9cc3189` on 2026-09-24. **This workstream never pushes, never adds a remote, and nothing is deployed.**
@@ -17,7 +17,10 @@ collections → `56857f3` marketing → `4806fef` web application → `98f1003` 
 migration checksums → planning and foundation gate → UI redesign and polish → **BMP-1** `6faac98` P1 →
 `9a8eb7b` P2 → `d79330c` P3 → `f6dcdc4` P4 → `b09f1be` P5 → `472d83e` (owner) + `5288be0` P6 →
 `444a485` web test stability → `58bb19e` PDF engine → `740ab7b` issuance → `5cf495b` QR verification →
-P7 UI, tests and documentation (the commit containing this file). Local only; the owner pushes.
+`0baf10f` P7 UI, tests and docs → `b608ac9` (owner commit of P8 group 1: quotations, customer
+workspace, conversion, opportunities) → `740cc5f` contract activation workflow → `3aed2d0` numbering
+and sales settings → `4582537` unit timeline, demo permissions, Mongoose → P8 tests and documentation
+(the commit containing this file). Local only; the owner pushes.
 
 ## Project identity
 
@@ -54,7 +57,9 @@ implemented or verified requirement.
 
 - Phase: **1 — Discovery, architecture, core, security, localization, Light Mode** (gate open)
 - Active delivery: **Business Master Prompt 1 — Commercial Operations** (engineering Phases 2–4 scope,
-  plus `CORE-DOC-003`/`005`), started 2026-09-29 on explicit instruction — see the BMP-1 section below
+  plus `CORE-DOC-003`/`005`), started 2026-09-29 on explicit instruction, **packages 1–8 complete on
+  2026-10-02 and stopped for review**. BMP-2 is **not started** and must not start without explicit
+  authorization — see the BMP-1 section below
 - Sub-stage: Build half — foundation, audit, authorization, identity, and approvals complete; green
 - Macro Phase 1 (Client Demo MVP) is **built and green**, and is a demonstration slice: it raises no
   requirement status and closes no gate. See "Macro Phase 1 — the demonstration slice" below.
@@ -93,9 +98,9 @@ idempotent seed extensions.
 | 4 Inventory and pricing | **complete** | `f6dcdc4` |
 | 5 Reservations and approvals | **complete** | `b09f1be` |
 | 6 Contracts, schedules and quotations | **complete** | `472d83e` (code, by the owner) + `5288be0` |
-| 7 Arabic/English PDF documents and QR verification | **complete — stopped for review** | `444a485`, `58bb19e`, `740ab7b`, `5cf495b`, and the commit containing this row |
-| 8 UI journey, dashboards and reports | not started | — |
-| 9 Final verification and phase documentation | not started | — |
+| 7 Arabic/English PDF documents and QR verification | **complete** | `444a485`, `58bb19e`, `740ab7b`, `5cf495b`, `0baf10f` |
+| 8 Sales completion, activation, quotations, customer workspace, numbering, closure | **complete — stopped for review** | `b608ac9` (owner), `740cc5f`, `3aed2d0`, `4582537`, and the commit containing this row |
+| 9 Final verification and phase documentation | **folded into package 8** (its final verification and documentation) | — |
 
 ### Package 1 — what changed
 
@@ -258,7 +263,7 @@ idempotent seed extensions.
 
 ### Package 7 — Arabic/English PDF documents and QR verification (2026-09-29/30)
 
-**Stopped for review after this package. Package 8 is not started.**
+**Superseded status line:** package 8 has since been completed — see "Package 8" below.
 
 - **Timeout investigation first (`444a485`).** The two dashboard/chart web tests timed out because the
   first test of a file paid for compiling and importing lazily loaded chunks (recharts alone ~1 s idle)
@@ -329,9 +334,103 @@ idempotent seed extensions.
   detail page (statements are issued from the contract page meanwhile); amendment, cancellation-form and
   approval-record PDFs were not built as separate types.
 - **Debt recorded:** 30+ existing `findOneAndUpdate(..., { new: true })` calls trigger a Mongoose
-  deprecation warning (none in package 7 code); verification is database-backed, not a signature
+  deprecation warning (none in package 7 code) — **resolved in package 8**; verification is database-backed, not a signature
   (`SEC-033`); production cannot issue until `PLAT-017`; `PUBLIC_APP_URL` must be fixed per
   deployment or printed codes break; sample QR codes point at `http://localhost:5173`.
+
+### Package 8 — sales completion, activation, quotations, customer workspace, numbering, closure (2026-09-30 – 2026-10-02)
+
+**BMP-1 is closed and stopped for review. Business Master Prompt 2 is not started.**
+
+Starting HEAD `0baf10f`, tree clean, services healthy, migrations current (`0001` only), demo database
+byte-identical to the package 7 closing snapshot (`scratch/p8-demo-before.json`). The owner committed and
+pushed the group-1 work in progress as `b608ac9` mid-package; it was built on, never rewritten.
+
+- **Contract workflow (`740cc5f`).** `PUT /sales/contracts/{id}/payment-plan` (drafts only; audited
+  `sales.contract.planChanged`; `planChanged` set/cleared against the reservation's plan; the total
+  follows the maintenance deposit — `totalPrice` is `immutable` in the model, so the one draft-only update
+  passes `overwriteImmutable`, otherwise Mongoose silently drops the path). `GET …/activation-review`
+  (exceptions, `approvalRequired`, blockers, rows to freeze; writes nothing). Activation takes an optional
+  `idempotencyKey` (`activationKey` on the contract): a retry with the key answers 200 and records
+  nothing; concurrent activations: one 200, one 409. `CONTRACT_HAS_COLLECTIONS` is now a named issue.
+  Web: contract page is a draft workspace (snapshots, parties editor, plan editor with server preview,
+  proposed schedule, warnings, approvals, history, signing, amendment, cancellation) with a reviewed
+  activation dialog; the reservation page drafts after a confirmation and links an existing draft.
+- **Quotations, customers, conversion (`b608ac9`).** Quotation register (server-computed state filter,
+  anchored search), create (from customer/lead/opportunity/unit; preview before create), detail
+  (revisions, revise, withdraw, PDF, "reserve on these terms"). Customer workspace `/customers/{id}`
+  (each section its own scoped request, not requested without its permission; identity only when
+  returned). Lead conversion panel; opportunities panel. `GET /sales/defaults` (authenticated; validity
+  periods only). `CustomerQuery.ids` (≤100, scoped). Issue requests take an idempotency key (statement
+  double-submit draws one number). `PublicBranding.baseCurrency` (forms no longer fall back to `'EGP'`).
+  Shared web modules: `pages/plan.tsx`, `lookups.tsx`, `activity.tsx`, `convert.tsx`,
+  `opportunities.tsx`; `useToday()` in `format.ts` (organization calendar, computed with `Intl` so the
+  entry bundle does not import the contracts' runtime).
+- **Numbering and settings (`3aed2d0`).** Sequence type `customerStatement`; statements and receipts take
+  CORE-DOC-001 numbers when a format is active, legacy `STM`/`RCT` otherwise. **Legacy continuation:**
+  activating a format of the legacy shape (`PREFIX-yyyy-00001`, yearly, 5 digits, no codes) seeds each
+  year's counter after the last legacy number inside the activating transaction (audited); other shapes
+  start their own series. Setting `sales.quotationValidityDays` (`BD-36`, not configured). Settings →
+  Sales (`/settings/sales`). **No format is activated** (`BD-19` open). Runbook:
+  [operations/numbering-runbook.md](operations/numbering-runbook.md).
+- **Timeline, roles, Mongoose (`4582537`).** Unit timeline renders by kind (status transitions with cause;
+  price and details changes by name; creation) — stored events untouched. `BMP1_ADDITIONS` in
+  `scripts/seed-demo/roles.ts` (manager commits contracts and sees identities; representative raises
+  only; settings and numbering administrative; executive read-only), pinned by `roles.test.ts`;
+  **`npm run seed:demo:bmp1` applied to the development database on 2026-10-02** (roles added, audited;
+  `sales.reservationValidityDays = 14` as the system actor, "BD-01 open"); second run all `unchanged`.
+  All 31 `new: true` → `returnDocument: 'after'` (Mongoose's own conversion; behaviour identical);
+  `tests/mongoose-options.test.ts` guards it; the integration log has no deprecation warning.
+- **Defects found and fixed outside the brief:** (1) approval requests capped pending approvers at 50
+  while a permission stage resolves 200 → submission and queues 500 once more than 50 eligible accounts
+  hold the permission (`MAX_PENDING_APPROVERS`, regression test); (2) the issuance fixture leaked four
+  grants per run (75 approvers had accumulated) and depended on running after the collections file —
+  both fixed; (3) a flaky assertion (`'250'` matched inside a random fingerprint); (4) pre-package-6
+  contracts showed their buyer as "outside your access" (parties carry no stored name) — names now come
+  from the scoped lookup; shares printed `100.0000%`.
+- **A JavaScript `String.replace` splice happened once more in this package** (a `$'` in a replacement
+  string) and was caught by the diff size before anything ran; the file was restored from `HEAD`. Edit
+  scripts now pass a **function** as the replacement.
+- **Requirements:** `CRM-PERSON-004` and `SALE-RESERVE-006` → implemented (evidence in `REQUIREMENTS.md`
+  §"package 8"). BMP-1: **47 implemented, 7 in progress, 2 blocked** (`CRM-ASSIGN-002`,
+  `CRM-OWNER-002`, `SD-04`). In progress, screens only (APIs tested): `INV-PROJECT-003`,
+  `INV-SEARCH-002`, `INV-SEARCH-003`, `CRM-MATCH-001`, `CRM-LEAD-006`, `CRM-ACTIVITY-001`,
+  `CRM-REPORT-001`. Phase 1 unchanged: 106 of 113 implemented, 7 in progress, gate open.
+- **Not built, by decision:** separate amendment, cancellation-form and approval-record PDFs (no approved
+  wording; cancellation settlement is BMP-2; approvals live in the approval screens). Customers have no
+  business code (needs `BD-19` and a backfill).
+- **Measured (`scratch/p8/p8-verify.sh`, logs `scratch/p8/final/`):** format, lint (0/0), strict
+  typecheck, i18n, secrets (552 files), links (439 in 66 files), ignored-source, 0 vulnerabilities ✅ ·
+  **unit 707 passed / 61 files**, three consecutive full runs after the last change · **integration gate
+  627 passed / 0 failed / 0 skipped, 29 files** · build ✅ · bundle ✅ (largest `vendor-mui` 409.3 / 122.2
+  kB gzip; entry 189.9 / 59.2 kB — it carries both languages' translations, which grew ~42 kB in BMP-1) ·
+  migration status and source/built parity ✅ · client file ✅ · built-API smoke ✅ (ready 200, **227
+  OpenAPI paths**, new endpoints 401 without a token, verification answers unchanged) · **E2E 76 passed /
+  0 failed / 0 skipped** (desktop + mobile; `commercial.spec.ts` 12, read-only) · **visual QA 46 screens,
+  0 issues, 0 failed API calls** (`scratch/p8/visual-qa/`, Arabic 1920/1440/1024/390, English 1440/390).
+- **Unit-tier stability, honestly:** at the starting HEAD the full unit run failed 3 web tests (5 s
+  timeouts) on this machine (8 GB RAM, ~0.9 GB free; Docker's VM holds ~3 GB). Package 8's new screen tests
+  use a light harness (`apps/web/src/testing/harness.tsx`: providers + one route, no shell, no
+  `StrictMode` double render, text instead of role queries on large forms). No timeout was raised and no
+  concurrency reduced. Under heavy outside load a timeout can still occur; nine full runs were made, the
+  last three consecutive all green.
+- **Demo-data integrity** (`scratch/p8-demo-before.json` → `scratch/p8/demo-after.json`): changed only
+  `auditEvents`, `authSessions`, `authRefreshTokens`, `securityAccounts` (last sign-in), `roles`
+  (permissions added) and `settingValues`/`settingRevisions` (+1 each, validity 14). Every lead, customer,
+  unit, reservation, contract, instalment, receipt, document, document version and issued document —
+  and therefore every QR token — is byte-identical. Nothing was reset or reseeded.
+- **Debt:** translations are loaded for both languages at start-up (lazy-load the inactive one); the
+  activation race window for legacy continuation is documented (unique index refuses a duplicate);
+  receipts still dated by `today` for the period, not `receivedOn` (as before); the "customer service" and
+  "contract operations" demo roles do not exist — their duties sit with the sales manager.
+
+#### Resume point (BMP-1)
+
+**Stop.** Nothing pushed by this workstream, nothing deployed. Next actions belong to the owner: review
+package 8 (start: `npm run dev:services:up`, `npm run build`, `node apps/api/dist/main.js`,
+`npm run preview -w @alola/web` → <http://localhost:4173>; the BMP-1 walk is in
+[demo/walkthrough-ar.md](demo/walkthrough-ar.md)), decide `BD-19` (number formats), `BD-34`/`BD-35`
+(identity and signing), `BD-36` (quotation validity), `BD-01`–`BD-03`, and authorize BMP-2 explicitly.
 
 ## Foundation completion (post-demo master prompt) — COMPLETE, stopped at the foundation gate
 
@@ -1576,8 +1675,11 @@ CORE-IMPORT-003 (F9) · OPS-004, OPS-005 (F11) · OPS-006, OPS-007 (F12)
 
 ## Next exact task
 
-**Current (2026-09-28):** the foundation is complete and stopped at the foundation gate — see
-"Foundation gate" and "Resume point" above. Do not start Business Master Prompt 1 until instructed.
+**Current (2026-10-02):** Business Master Prompt 1 is complete (packages 1–8) and stopped for review —
+see "Package 8" and its resume point above. Do not start Business Master Prompt 2 until instructed.
+
+**Superseded (2026-09-28):** the foundation is complete and stopped at the foundation gate — see
+"Foundation gate" and "Resume point" above.
 The items below are the Macro Phase 1 list, kept for traceability; item 4's scope is now built.
 
 1. **Macro Phase 1 is complete and the session stopped for review.** Do not begin Macro Phase 2, and do

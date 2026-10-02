@@ -14,10 +14,10 @@ current gate is verified and explicitly approved** (`docs/PHASE-PROMPTS.md`).
 | | |
 |---|---|
 | Active phase | **1 — Discovery, architecture, core, security, localization, Light Mode** |
-| Sub-stage | Foundation completion (F0–F12) done on 2026-09-28; Business Master Prompt 1 in progress since 2026-09-29 (`../MEMORY.md`) |
+| Sub-stage | Foundation completion (F0–F12) done on 2026-09-28; Business Master Prompt 1 packages 1–8 done (2026-09-29 – 2026-10-02), stopped for review before BMP-2 (`../MEMORY.md`) |
 | Status | **PHASE 1 NOT APPROVED.** Current verified status in `../MEMORY.md` |
 | Requirements `verified` | 0 — nothing is gate-verified before the Phase 1 review |
-| Blocking the phase gate | 2 of 113 requirements not started (`CORE-DOC-003` PDF with embedded Arabic fonts, `CORE-DOC-005` QR verification), 8 in progress, and the gate needs a stakeholder demonstration and written approval |
+| Blocking the phase gate | 0 of 113 requirements not started, 7 in progress (`PLAT-007`, `PLAT-017`, `SEC-003`, `SEC-005`, `SEC-006`, `SEC-008`, `SEC-033`), and the gate needs a stakeholder demonstration and written approval |
 
 ## Delivery grouping: four macro phases
 

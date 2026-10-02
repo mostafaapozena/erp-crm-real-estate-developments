@@ -74,7 +74,15 @@ describe('sales settings', () => {
     expect(screen.getByText(/تُرقَّم المستندات التالية بالسلسلة الحالية/)).toBeTruthy();
   });
 
-  it('changes a rule with a reason, and says an activated format continues the series', async () => {
+  it('says an activated legacy-shaped format continues the series', async () => {
+    stubApi(['settings.view', 'numbering.view', 'numbering.manage'], routes);
+    renderAt(<SalesSettingsPage />, '/settings/sales', '/settings/sales');
+    fireEvent.click(await screen.findByText('تفعيل', { selector: 'button' }, FIRST));
+    const activate = await screen.findByRole('dialog', { name: 'تفعيل صيغة الترقيم' });
+    expect(within(activate).getByText(/تستكمل هذه الصيغة السلسلة الحالية/)).toBeTruthy();
+  });
+
+  it('changes a rule only with a reason', async () => {
     const requests = stubApi(
       ['settings.view', 'settings.manage', 'numbering.view', 'numbering.manage'],
       routes,
@@ -90,9 +98,9 @@ describe('sales settings', () => {
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'القيمة' }), {
       target: { value: '14' },
     });
-    const save = within(dialog).getByRole('button', { name: 'حفظ' });
+    const save = within(dialog).getByText('حفظ', { selector: 'button' });
     expect(save).toHaveProperty('disabled', true);
-    fireEvent.change(within(dialog).getByRole('textbox', { name: /السبب/ }), {
+    fireEvent.change(within(dialog).getByLabelText(/السبب/), {
       target: { value: 'client decision recorded' },
     });
     fireEvent.click(save);
@@ -103,9 +111,5 @@ describe('sales settings', () => {
         reason: 'client decision recorded',
       }),
     );
-
-    fireEvent.click(await screen.findByRole('button', { name: 'تفعيل' }));
-    const activate = await screen.findByRole('dialog', { name: 'تفعيل صيغة الترقيم' });
-    expect(within(activate).getByText(/تستكمل هذه الصيغة السلسلة الحالية/)).toBeTruthy();
   });
 });

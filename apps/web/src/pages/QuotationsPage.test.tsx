@@ -72,23 +72,31 @@ describe('quotation list', () => {
     expect(lookups[0]?.query).toContain('ids=cus_000000000001');
     // Without manage permission there is no "new quotation".
     expect(screen.queryByRole('link', { name: 'عرض سعر جديد' })).toBeNull();
+  });
 
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'الحالة' }));
-    fireEvent.click(await screen.findByRole('option', { name: 'منتهي الصلاحية' }));
+  it('asks the server for the state as it reads, kept in the address', async () => {
+    const requests = stubApi(['sales.quotation.view'], {
+      '/api/v1/sales/quotations': { items: [], total: 0, limit: 50 },
+    });
+    renderAt(<QuotationsPage />, '/quotations?state=expired&q=QUO-2026', '/quotations');
+    await screen.findByRole('heading', { level: 1, name: 'عروض الأسعار' }, FIRST);
     await waitFor(() =>
       expect(
         requests.some(
           (request) =>
-            request.path === '/api/v1/sales/quotations' && request.query.includes('state=expired'),
+            request.path === '/api/v1/sales/quotations' &&
+            request.query.includes('state=expired') &&
+            request.query.includes('search=QUO-2026'),
         ),
       ).toBe(true),
     );
+    expect(screen.getByText('الحالة: منتهي الصلاحية')).toBeTruthy();
   });
 });
 
 describe('new quotation', () => {
-  it('says it reserves nothing and allows creation only after a server preview', async () => {
-    const requests = stubApi(
+  const stubNew = () =>
+    stubApi(
       ['sales.quotation.manage', 'crm.customer.view', 'inventory.unit.view'],
       {
         '/api/v1/sales/defaults': {
@@ -118,26 +126,38 @@ describe('new quotation', () => {
           }),
       },
     );
+  const openNew = () =>
     renderAt(
       <QuotationNewPage />,
       '/quotations/new?customerId=cus_000000000001&unitId=unit_000000000001',
       '/quotations/new',
     );
+
+  it('says it reserves nothing and proposes no validity when none is configured', async () => {
+    stubNew();
+    openNew();
     await screen.findByText(
       'عرض السعر لا يحجز الوحدة: تبقى الوحدة متاحة للبيع، ولا يُنشأ عقد ولا أقساط.',
       undefined,
       FIRST,
     );
-    // No validity is configured, so none is proposed.
     await screen.findByText('لم تُحدَّد مدة صلاحية افتراضية (BD-36)؛ أدخل تاريخ انتهاء العرض.');
-    const create = screen.getByRole('button', { name: 'إنشاء عرض السعر' });
+  });
+
+  it('allows creation only after a server preview', async () => {
+    const requests = stubNew();
+    openNew();
+    await screen.findByText('B-204', undefined, FIRST);
+    // Text lookups, not role queries: a role query computes the accessible name of every control in
+    // this large form, which is most of the test's cost on a busy machine.
+    const create = screen.getByText('إنشاء عرض السعر').closest('button') as HTMLButtonElement;
     expect(create).toHaveProperty('disabled', true);
     fireEvent.change(screen.getByLabelText(/صالح حتى/), { target: { value: '2026-10-20' } });
     fireEvent.change(screen.getByLabelText(/تاريخ أول قسط/), {
       target: { value: '2026-11-01' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'معاينة الجدول' }));
-    await screen.findByText('قاعدة التقريب', { exact: false });
+    fireEvent.click(screen.getByText('معاينة الجدول').closest('button') as HTMLButtonElement);
+    await screen.findByText(/^قاعدة التقريب/u);
     await waitFor(() => expect(create).toHaveProperty('disabled', false));
     expect(requests.some((request) => request.path === '/api/v1/sales/schedule/preview')).toBe(
       true,

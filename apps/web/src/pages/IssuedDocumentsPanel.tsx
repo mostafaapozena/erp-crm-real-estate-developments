@@ -25,7 +25,7 @@ import { CircleX, Download, FileText, Plus, ShieldCheck } from '@alola/ui/icons'
 import { useMemo, useState } from 'react';
 import { apiRequest, query } from '../api/client';
 import { useSession } from '../api/session';
-import { useApi, useMutation } from '../api/useApi';
+import { useApi, useIdempotencyKey, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
@@ -319,10 +319,15 @@ function IssueDialog({
   const preview = useApi<IssuePreview>(
     `/api/v1/issued-documents/preview${query({ type, sourceId })}`,
   );
+  /**
+   * One key per dialog, qualified by what is being issued: a double click or a retry issues one
+   * version and draws one statement number; choosing another type or language is another issue.
+   */
+  const dialogKey = useIdempotencyKey(`issue-${sourceId}`);
   const issue = useMutation(() =>
     apiRequest<IssuedDocument>('/api/v1/issued-documents', {
       method: 'POST',
-      body: { type, sourceId, locale },
+      body: { type, sourceId, locale, idempotencyKey: `${dialogKey()}-${type}-${locale}` },
     }),
   );
 

@@ -1,4 +1,3 @@
-import { businessDateInZone, nowInstant } from '@alola/contracts';
 import type { BusinessDate, Instant, Money } from '@alola/contracts';
 import { createFormatters } from '@alola/i18n';
 import { useMemo } from 'react';
@@ -50,5 +49,16 @@ export function useFormatters(): Formatters {
  */
 export function useToday(): BusinessDate {
   const { timeZone } = useBranding();
-  return useMemo(() => businessDateInZone(nowInstant(), timeZone), [timeZone]);
+  // The same calculation as the contracts' businessDateInZone, done here so the start-up bundle does
+  // not import the contracts' runtime (and Zod with it) for one date.
+  return useMemo(() => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? '';
+    return `${part('year')}-${part('month')}-${part('day')}` as BusinessDate;
+  }, [timeZone]);
 }

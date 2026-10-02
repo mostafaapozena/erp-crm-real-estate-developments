@@ -706,7 +706,7 @@ one: it builds the configurable policy, stores *not configured* by default, and 
 | CRM-PERSON-001 | Customer as individual or company; entered name with optional name in the other script; normalized phones and e-mail | BMP-1 | — | implemented |
 | CRM-PERSON-002 | Identity (national ID, passport, commercial registration, tax number) held as a field restriction: absent from every payload without the permission, never logged, redacted in audit | BMP-1 | `BD-34` | implemented |
 | CRM-PERSON-003 | Address, preferred language and channel, and per-channel consent with its source and date | BMP-1 | `SD-09` | implemented |
-| CRM-PERSON-004 | Customer detail: leads, opportunities, reservations, contracts, instalment and receipt summaries, documents, activities, owner, history — each part under its own permission and scope | BMP-1 | — | in-progress |
+| CRM-PERSON-004 | Customer detail: leads, opportunities, reservations, contracts, instalment and receipt summaries, documents, activities, owner, history — each part under its own permission and scope | BMP-1 | — | implemented |
 | CRM-PERSON-005 | Correction workflow: an edit states a reason and the version it read, and is audited with a redacted change summary | BMP-1 | — | implemented |
 | CRM-PERSON-006 | Duplicate candidates by normalized phone, e-mail and identifier, described inside the actor's scope and only counted outside it; merge is **not executed** until its rule is decided | BMP-1 | `BD-26` | implemented |
 | CRM-LEAD-001 | Manual lead entry: lead, first activity and audit record in one transaction | BMP-1 | — | implemented |
@@ -734,7 +734,7 @@ one: it builds the configurable policy, stores *not configured* by default, and 
 | SALE-RESERVE-003 | Validity and expiry from configuration; extension through approval where a policy applies | BMP-1 | `BD-01` | implemented |
 | SALE-RESERVE-004 | Deposit rule from configuration; booking evidence as documents; evidence never confirms a collection | BMP-1 | `BD-02` | implemented |
 | SALE-RESERVE-005 | Cancellation with reason, optional approval, unit release, and a refund hand-off state for BMP-2 | BMP-1 | `BD-05`, `BD-06` | implemented |
-| SALE-RESERVE-006 | Reservation and contract numbers issued through `CORE-DOC-001` when a format is active, continuing the existing series | BMP-1 | `BD-19` | in-progress |
+| SALE-RESERVE-006 | Reservation and contract numbers issued through `CORE-DOC-001` when a format is active, continuing the existing series | BMP-1 | `BD-19` | implemented |
 | SALE-CONTRACT-001 | Contract draft from a confirmed reservation carrying immutable customer, unit and pricing snapshots | BMP-1 | — | implemented |
 | SALE-CONTRACT-002 | Contract parties (buyer, co-buyer, guarantor, representative) with shares that total exactly | BMP-1 | — | implemented |
 | SALE-CONTRACT-003 | Activation — through approval when an exception applies — freezing the schedule and committing the unit; signing state recorded | BMP-1 | `BD-35` | implemented |
@@ -762,7 +762,7 @@ and waits for its screen (package 8) or for opportunities (package 3).
 | CRM-PERSON-001 | Customer `kind`, `alternateName`, normalized phone and e-mail; records without a kind read as individuals |
 | CRM-PERSON-002 | `customer.identity` field restriction (`crm.customer.viewIdentity`): absent on read and list; writing it without the permission is 403 and stores nothing; identity numbers redacted from logs and audit summaries |
 | CRM-PERSON-003 | `crmConsents` append-only; latest per channel in force; wired to `CORE-NOTIFY`'s `hasConsent` |
-| CRM-PERSON-004 | in progress — related reads exist (leads by customer, reservations/contracts by customer, customer financial summary, documents by owner, customer timeline, ownership history); the detail screen is package 8 |
+| CRM-PERSON-004 | Package 8: customer workspace `/customers/{id}` — profile, identity only when the read returned it (otherwise stated as restricted, no other endpoint asked), owner, branch, opportunities, quotations, reservations, contracts, financial summary, overdue and upcoming instalments, receipts, cheques/notes, reminders, statement issuance, timeline and ownership history; every section its own scoped request under its own permission and **not requested** without it (web test asserts the requests); bounded summaries with the server total; customer names in lists through one scoped `ids` lookup (integration test: an out-of-scope id is absent) |
 | CRM-PERSON-005 | Correction needs a reason and the version read; stale → `STALE_VERSION`; audit records that phone/identity changed, never the values; a legacy record (no version, legacy national ID) is corrected at version 1 |
 | CRM-PERSON-006 | Candidates in scope listed, out of scope counted; e-mail matched case-insensitively |
 | CRM-LEAD-001 | Lead, first activity and audit in one transaction: a failing audit store leaves no lead and no activity |
@@ -828,7 +828,7 @@ Tests: `sales.int-test.ts` (real MongoDB) §"validity from configuration", §"co
 | SALE-RESERVE-003 | Validity only from `sales.reservationValidityDays` (`BD-01`): refused while not configured (`RESERVATION_VALIDITY_NOT_CONFIGURED`), a hand-entered `holdDays` that differs is refused (`VALIDITY_SET_BY_POLICY`) — **the invented 14-day default is gone**; `POST /sales/reservations/{id}/extend` (`sales.reservation.extend`) extends at once or through `sales.reservation.extension` approval, never shortens |
 | SALE-RESERVE-004 | Minimum deposit from `sales.reservationMinimumDeposit` (`BD-02`, amount or percentage rounded up to the piastre); below it the reservation needs a `reservationException` approval or is refused before anything is written; reservation documents through `CORE-DOC-002`, which records evidence and never a collection |
 | SALE-RESERVE-005 | Cancellation with a reason, through `sales.reservation.cancellation` approval where a policy applies (`CANCELLATION_PENDING` for a second), releases the unit once, and records `refundHandoff: pending` when money was taken — the hand-off state BMP-2 finance consumes |
-| SALE-RESERVE-006 | in progress — reservation and contract numbers come from `CORE-DOC-001` when a format is active (`NO_ACTIVE_SEQUENCE` falls back to the legacy series, whose year is now the organization's calendar year); configuring the format to continue the existing series is package 8 |
+| SALE-RESERVE-006 | Package 8: reservations, contracts, quotations, receipts and customer statements take official numbers from `CORE-DOC-001` when a format is active and continue their legacy series otherwise; activating a format of the legacy shape seeds each year's counter after the last legacy number inside the activating transaction (audited), any other shape starts its own series (`continuation.int-test.ts`: continuation, non-legacy format, 6 concurrent issues distinct and consecutive, an aborted document leaves no number); Settings → Sales configures drafts, preview and reasoned activation. **No format is activated**: the final formats are `BD-19`, open |
 | SALE-DISCOUNT-001 | Discount derived exactly from list and agreed price (`comparePercent`, decimal); the `sales.reservation.discount` policy governs it; no confirmation while an approval is pending; `sales.maximumDiscountPercent` (`BD-03`) caps it |
 | SALE-DISCOUNT-002 | Above the maximum a `sales.reservation.priceOverride` approval is required; without a policy the request is refused before writing (`DISCOUNT_ABOVE_MAXIMUM`), asked through `ApprovalService.hasApplicablePolicy` |
 | CRM-OPP-002 | A reservation with `opportunityId` (same customer, else `OPPORTUNITY_CUSTOMER_MISMATCH`) advances it to `reservation`; since package 6 **contract activation** (not the draft) advances it to `won`, proven in `sales.int-test.ts` |
@@ -871,6 +871,36 @@ and mobile). Decision record: [ADR-0033](decisions/adr-0033-issued-documents-and
 cancellation form and an approval record. They are not separate PDF types: the contract summary states
 applied amendments and a cancelled state, and approvals stay in the approval screens. Each would be a
 new builder (ADR-0033, Consequences) — package 8 or BMP-2, by decision.
+
+### Implementation evidence — BMP-1 package 8, commercial journey and closure (2026-10-02)
+
+Tests: `sales/sales.int-test.ts` (draft plan, activation review, replay, concurrency, named
+collections refusal; quotation state filter), `numbering/continuation.int-test.ts` (real composition
+root), `crm/crm.int-test.ts` (`ids` lookup in scope), `issuance/issuance.int-test.ts` (idempotent
+issue), `settings/settings.int-test.ts` (`sales.quotationValidityDays`), `approval/approval.int-test.ts`
+(more than fifty eligible approvers); web screen tests for the contract, quotation, customer and
+settings pages and `unit-timeline.test.ts`; `scripts/seed-demo/roles.test.ts` (demo matrix);
+`tests/mongoose-options.test.ts`; E2E `apps/web/e2e/commercial.spec.ts` (read-only, desktop and
+mobile). Workflow and matrices: [architecture/commercial-workflow.md](architecture/commercial-workflow.md);
+numbering: [operations/numbering-runbook.md](operations/numbering-runbook.md).
+
+| ID | Evidence |
+|---|---|
+| SALE-CONTRACT-001 … 003 | Screens for what the API already did: draft workspace (snapshots, parties editor, plan editor with server preview, proposed schedule, warnings, approvals, history), a reviewed activation dialog (`GET /contracts/{id}/activation-review`: exceptions, `approvalRequired`, blockers, rows to freeze — writes nothing), activation with an idempotency key (retry with the key that moved the draft on answers 200 and records nothing; concurrent activations: one 200, one 409; 13 instalments exactly once); `PUT /contracts/{id}/payment-plan` for drafts (audited `sales.contract.planChanged`, `planChanged` set/cleared against the reservation's plan, the total follows the maintenance deposit through one draft-only update). Signing stays optional (`BD-35`) |
+| SALE-CANCEL-001 | Refusal after collection beyond the deposit is now the named issue `CONTRACT_HAS_COLLECTIONS`, shown in the cancel dialog; the settlement stays BMP-2 (`SALE-CANCEL-002`) |
+| SALE-QUOTE-001 | Screens: register (state filter computed on the server — `active`/`expired` by validity on the organization's today, `withdrawn`; anchored prefix search on number or unit code; customer names through one scoped lookup), create (from customer, lead, opportunity or unit; preview before create; validity proposed only when `sales.quotationValidityDays` is configured, `BD-36`), detail (revisions kept, revise, withdraw with reason, PDF panel, "reserve on these terms" opening the reservation form pre-filled — every reservation rule applied again). No inventory call exists in the quotation service |
+| CRM-LEAD-005 / CRM-OPP-001 | Lead page converts (optionally opening an opportunity); customer workspace lists opportunities with stage changes (system stages not offered), quote and reserve actions |
+| INV-STATUS-002 | Unit timeline renders each kind as what it is — status transitions with their cause, price and details changes by name with reason and actor, creation with its first status — instead of reading every event as a status; stored events untouched |
+| CORE-DOC-003 | Issue requests accept an idempotency key: a double-submitted statement returns the first issue and draws one number; a key reused for other input is `IDEMPOTENCY_KEY_REUSED` |
+| APPROVAL-001 | Defect fixed: the request contract capped pending approvers at 50 while a permission-based stage resolves up to 200, so a populous approval permission made submission and the queue a 500 (found because a fixture leaked grants between runs; the leak is fixed too) |
+
+**Still in progress and why:** `INV-PROJECT-003` (attachment upload screens), `INV-SEARCH-002`
+(availability matrix screen), `INV-SEARCH-003` (comparison screen), `CRM-MATCH-001` (matching panel),
+`CRM-LEAD-006` (lead import screen), `CRM-ACTIVITY-001` (task-linking screen), `CRM-REPORT-001`
+(pipeline and ageing report screens) — their APIs exist and are tested; the screens were not in
+package 8's scope. **Separate amendment, cancellation-form and approval-record PDFs were not built**:
+no approved wording exists, a cancellation form presupposes the BMP-2 settlement, and an approval record
+duplicates the approval screens; they stay a recorded gap.
 
 ---
 

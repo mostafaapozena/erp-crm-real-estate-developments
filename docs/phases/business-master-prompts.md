@@ -12,7 +12,7 @@ keep their meaning, and each phase still passes [phase-gates.md](phase-gates.md)
 
 | Prompt | Name | Engineering scope | Macro phase | State |
 |---|---|---|---|---|
-| **BMP-1** | Commercial Operations — CRM, Sales, Inventory, Reservations, Contracts and Documents | Phase 2 in full; Phase 3 CRM modules without providers; Phase 4 in full up to collected money; `COL-SCHEDULE`; `CORE-DOC-003`, `CORE-DOC-005` | Macro Phase 2 | **in progress** (started 2026-09-29) |
+| **BMP-1** | Commercial Operations — CRM, Sales, Inventory, Reservations, Contracts and Documents | Phase 2 in full; Phase 3 CRM modules without providers; Phase 4 in full up to collected money; `COL-SCHEDULE`; `CORE-DOC-003`, `CORE-DOC-005` | Macro Phase 2 | **packages 1–8 complete — stopped for review** (2026-09-29 – 2026-10-02); 47 of its requirements implemented, 7 in progress (screens), 2 blocked (`SD-04`) |
 | **BMP-2** | Collections, Finance, Operations and People | Phase 5 after the schedule; `SALE-CANCEL` and `SALE-CHANGE` where money has moved; Phase 6; Phase 7; Phase 8 | Macro Phases 2 and 3 | not started |
 | **BMP-3** | Marketing, Official Integrations, Production Hardening and Launch | Phase 3 provider work; Phase 9; `SEC-033`, `PLAT-017`, `SEC-005`, `SEC-006` | Macro Phase 4 | not started |
 

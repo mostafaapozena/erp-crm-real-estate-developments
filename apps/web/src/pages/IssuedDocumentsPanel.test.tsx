@@ -173,7 +173,13 @@ describe('issued documents panel', () => {
     expect(posts).toEqual([
       {
         path: '/api/v1/issued-documents',
-        body: { type: 'contractSummary', sourceId: 'ctr_000001', locale: 'en' },
+        body: {
+          type: 'contractSummary',
+          sourceId: 'ctr_000001',
+          locale: 'en',
+          // Stable for the dialog and qualified by type and language, so a retry issues once.
+          idempotencyKey: expect.stringMatching(/^issue-ctr_000001-.+-contractSummary-en$/u),
+        },
       },
     ]);
   });
