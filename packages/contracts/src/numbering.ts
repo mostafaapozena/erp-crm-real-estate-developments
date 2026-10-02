@@ -39,6 +39,7 @@ export const SEQUENCE_TYPES = [
   'employee',
   'asset',
   'quotation',
+  'customerStatement',
 ] as const;
 export const SequenceTypeSchema = z.enum(SEQUENCE_TYPES);
 export type SequenceType = z.infer<typeof SequenceTypeSchema>;
@@ -111,6 +112,8 @@ export const SequenceSchema = z.strictObject({
   state: z.enum(SEQUENCE_STATES),
   /** What a number in this format looks like, from sample data: `RCT-CAI-2026-00001`. */
   example: z.string(),
+  /** True when activating it continues the legacy series rather than starting a new one. */
+  continuesLegacySeries: z.boolean(),
   createdAt: InstantSchema,
   activatedAt: InstantSchema.optional(),
   retiredAt: InstantSchema.optional(),
@@ -118,6 +121,50 @@ export const SequenceSchema = z.strictObject({
 export type Sequence = z.infer<typeof SequenceSchema>;
 
 export const SequenceListSchema = z.strictObject({ items: z.array(SequenceSchema) });
+
+/**
+ * The series the demonstration slice numbered with before any format was active (SALE-RESERVE-006):
+ * `PREFIX-yyyy-00001`, reset yearly, kept in the sales counters. A format that reproduces exactly that
+ * shape **continues** the series when it is activated — its counters start after the last legacy
+ * number of each year — so no number is ever issued twice. A format of any other shape cannot render
+ * a legacy number, and starts its own series.
+ */
+export const LEGACY_SERIES_PREFIXES: Partial<Record<SequenceType, string>> = {
+  reservation: 'RSV',
+  contract: 'CTR',
+  quotation: 'QUO',
+  receipt: 'RCT',
+  customerStatement: 'STM',
+};
+
+export function continuesLegacySeries(
+  type: SequenceType,
+  format: {
+    prefix: string;
+    suffix?: string | undefined;
+    separator: string;
+    dateComponent: string;
+    entityComponent?: boolean | undefined;
+    branchComponent: boolean;
+    projectComponent: boolean;
+    padding: number;
+    resetPolicy: string;
+  },
+): boolean {
+  const prefix = LEGACY_SERIES_PREFIXES[type];
+  return (
+    prefix !== undefined &&
+    format.prefix === prefix &&
+    !format.suffix &&
+    format.separator === '-' &&
+    format.dateComponent === 'yyyy' &&
+    !format.entityComponent &&
+    !format.branchComponent &&
+    !format.projectComponent &&
+    format.padding === 5 &&
+    format.resetPolicy === 'yearly'
+  );
+}
 
 export const ActivateSequenceSchema = z.strictObject({
   reason: z.string().trim().min(3).max(500),

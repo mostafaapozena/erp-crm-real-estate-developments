@@ -357,7 +357,14 @@ export interface CollectionServiceOptions {
   /** Organization timezone, for formatting the amounts and dates inside a reminder message. */
   timeZone: string;
   /** Allocates the next receipt number; shares the sales counter so numbering is one mechanism. */
-  nextReceiptNumber: (session: ClientSession) => Promise<string>;
+  /**
+   * The next receipt number, inside the receipt's transaction: CORE-DOC-001 when a `receipt` format
+   * is active, otherwise the legacy `RCT` series.
+   */
+  nextReceiptNumber: (
+    session: ClientSession,
+    source?: { receiptId: string; projectId: string },
+  ) => Promise<string>;
 }
 
 export class CollectionService {
@@ -495,10 +502,14 @@ export class CollectionService {
         }
         await this.options.sales.recomputeContractTotals(input.contractId, session);
 
-        const receiptNumber = await this.options.nextReceiptNumber(session);
+        const receiptId = newId('rct');
+        const receiptNumber = await this.options.nextReceiptNumber(session, {
+          receiptId,
+          projectId: contract.projectId,
+        });
         const now = new Date();
         const document: ReceiptDocument = {
-          receiptId: newId('rct'),
+          receiptId,
           receiptNumber,
           customerId: contract.customerId,
           contractId: contract.contractId,

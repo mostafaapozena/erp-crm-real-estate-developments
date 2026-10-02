@@ -281,6 +281,35 @@ describe.skipIf(!gate.available)(`settings and reference data — ${gate.reason}
       expect(await settings.isEnabled('feature.imports')).toBe(false);
     });
 
+    it('validates the quotation validity (BD-36): not configured, refused when invalid, audited when set', async () => {
+      const listed = await as(VIEWER)
+        .get('/api/v1/settings/sales.quotationValidityDays')
+        .expect(200);
+      expect(listed.body).toMatchObject({ value: null, configured: false, decision: 'BD-36' });
+      for (const value of [0, 366, 2.5, '30']) {
+        await put(
+          'sales.quotationValidityDays',
+          { value, expectedVersion: 0, reason: 'invalid value' },
+          ADMIN,
+        ).expect(400);
+      }
+      await put(
+        'sales.quotationValidityDays',
+        { value: 30, expectedVersion: 0, reason: 'a configured validity' },
+        VIEWER,
+      ).expect(403);
+      const saved = await put(
+        'sales.quotationValidityDays',
+        { value: 30, expectedVersion: 0, reason: 'client decision' },
+        ADMIN,
+      ).expect(200);
+      expect(saved.body).toMatchObject({ value: 30, configured: true, version: 1 });
+      const history = await as(VIEWER)
+        .get('/api/v1/settings/sales.quotationValidityDays/history')
+        .expect(200);
+      expect(history.body.items[0]).toMatchObject({ value: 30, reason: 'client decision' });
+    });
+
     it('needs settings.view to read and settings.manage to change', async () => {
       await as().get('/api/v1/settings').expect(401);
       await as(MEMBER).get('/api/v1/settings').expect(403);

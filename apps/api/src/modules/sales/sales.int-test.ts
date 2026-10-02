@@ -2304,16 +2304,14 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       const { reservation } = await confirmed();
       const { contract } = await contractFor(MANAGER, reservation.reservationId);
       // Money beyond the reservation's, as a receipt would leave it (collections are BMP-2's to undo).
-      await connection
-        .collection(CONTRACTS_COLLECTION)
-        .updateOne(
-          { contractId: contract.contractId },
-          {
-            $set: {
-              paidAmount: { amount: Types.Decimal128.fromString('250000'), currency: 'EGP' },
-            },
+      await connection.collection(CONTRACTS_COLLECTION).updateOne(
+        { contractId: contract.contractId },
+        {
+          $set: {
+            paidAmount: { amount: Types.Decimal128.fromString('250000'), currency: 'EGP' },
           },
-        );
+        },
+      );
       const refused = await as(MANAGER)
         .post(`/api/v1/sales/contracts/${contract.contractId}/cancel`)
         .send({ reason: 'customer withdrew' })

@@ -1,5 +1,7 @@
 import {
   IssuedNumberSchema,
+  LEGACY_SERIES_PREFIXES,
+  continuesLegacySeries,
   NUMBERING_AUDIT_ACTIONS,
   SequenceSchema,
   type ActorContext,
@@ -46,6 +48,14 @@ export interface NumberingServiceOptions {
   audit: AuditRecorder;
   /** Month (1–12) the fiscal year starts, or `null` when not configured (`SD-21`). */
   fiscalYearStartMonth?: () => Promise<number | null>;
+  /**
+   * The legacy series a type was numbered with before CORE-DOC-001 (SALE-RESERVE-006): the last value
+   * issued per year. Read inside the activating transaction, so a continuing format starts after it.
+   */
+  legacySeries?: (
+    prefix: string,
+    session: ClientSession,
+  ) => Promise<{ year: string; value: number }[]>;
 }
 
 /** Who issues a number: a module acting for an account, or the system. */
@@ -63,6 +73,7 @@ const iso = (date: Date) => date.toISOString();
 
 function toSequence(d: SequenceDocument): Sequence {
   return SequenceSchema.parse({
+    continuesLegacySeries: continuesLegacySeries(d.type, d),
     type: d.type,
     version: d.version,
     prefix: d.prefix,
@@ -379,6 +390,33 @@ export class NumberingService {
           .lean<SequenceDocument>()
           .exec();
         if (!activated) throw conflict('SEQUENCE_NOT_DRAFT', ['version']);
+        // A format of the legacy shape continues the legacy series: each year's counter starts after
+        // the last number the legacy series issued, so nothing is ever numbered twice.
+        const continued: string[] = [];
+        const prefix = LEGACY_SERIES_PREFIXES[type];
+        if (prefix && continuesLegacySeries(type, activated) && this.options.legacySeries) {
+          for (const { year, value } of await this.options.legacySeries(prefix, session)) {
+            const issued = value + 1 - activated.startAt;
+            if (issued <= 0) continue;
+            await this.counters
+              .updateOne(
+                { counterKey: `${type}|${year}|all` },
+                {
+                  $max: { issued },
+                  $set: { updatedAt: now },
+                  $setOnInsert: {
+                    counterKey: `${type}|${year}|all`,
+                    type,
+                    periodKey: year,
+                    scopeKey: 'all',
+                  },
+                },
+                { upsert: true, session },
+              )
+              .exec();
+            continued.push(`${year}:${value}`);
+          }
+        }
         await this.record(
           actor,
           NUMBERING_AUDIT_ACTIONS.sequenceActivated,
@@ -389,6 +427,9 @@ export class NumberingService {
               ...(previous ? { from: `${type}@${previous.version}` } : {}),
               to: `${type}@${version}`,
             },
+            ...(continued.length > 0
+              ? [{ path: 'continuesLegacySeries', to: continued.join(',') }]
+              : []),
           ],
           context,
           session,

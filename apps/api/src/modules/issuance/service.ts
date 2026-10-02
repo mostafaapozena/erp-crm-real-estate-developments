@@ -98,8 +98,11 @@ export interface IssuanceServiceOptions {
   sources: IssuanceSources;
   /** The company as documents print it; `undefined` before a profile exists. */
   company: () => Promise<(CompanyForDocument & { timeZone: string }) | undefined>;
-  /** The next customer-statement number, from the existing series. */
-  statementNumber: () => Promise<string>;
+  /**
+   * The next customer-statement number: from CORE-DOC-001 when a `customerStatement` format is
+   * active, otherwise the legacy `STM` series (`BD-19`). Keyed to the issue it is drawn for.
+   */
+  statementNumber: (input: { issueId: string }) => Promise<string>;
   /** Origin of the web application: the QR code links to `<origin>/verify/<token>`. */
   publicBaseUrl: string;
   today: () => BusinessDate;
@@ -361,8 +364,9 @@ export class IssuanceService {
     const source = await this.options.sources.load(actor, input.type, input.sourceId);
     let data = source.data;
     let reference = source.businessReference;
+    const issueId = newId('iss');
     if (data.type === 'customerStatement') {
-      reference = await this.options.statementNumber();
+      reference = await this.options.statementNumber({ issueId });
       data = { ...data, statementNumber: reference };
     }
 
@@ -373,7 +377,6 @@ export class IssuanceService {
     const f = createFormatters(locale, { timeZone: company.timeZone });
     const issuedOn = f.businessDate(today);
     const version = (await this.nextVersions(input.type, input.sourceId))[locale];
-    const issueId = newId('iss');
     const token = randomBytes(32).toString('base64url');
 
     // Approved wording, when the client has published it for this kind (CORE-DOC-002).

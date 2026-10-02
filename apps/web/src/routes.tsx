@@ -48,6 +48,7 @@ export const PAGE_MODULES = {
   Tasks: () => import('./pages/TasksPage'),
   Imports: () => import('./pages/ImportsPage'),
   CompanyIdentity: () => import('./pages/CompanyIdentityPage'),
+  SalesSettings: () => import('./pages/SalesSettingsPage'),
   NotFound: () => import('./pages/NotFoundPage'),
   Verify: () => import('./pages/VerifyPage'),
 } as const;
@@ -83,6 +84,7 @@ const Notifications = lazy(PAGE_MODULES.Notifications);
 const Tasks = lazy(PAGE_MODULES.Tasks);
 const Imports = lazy(PAGE_MODULES.Imports);
 const CompanyIdentity = lazy(PAGE_MODULES.CompanyIdentity);
+const SalesSettings = lazy(PAGE_MODULES.SalesSettings);
 const NotFound = lazy(PAGE_MODULES.NotFound);
 
 /** Tall enough that the page does not reflow when the chunk arrives. */
@@ -142,6 +144,7 @@ export function AppRoutes() {
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/imports" element={<Imports />} />
           <Route path="/settings/company" element={<CompanyIdentity />} />
+          <Route path="/settings/sales" element={<SalesSettings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>

@@ -2454,7 +2454,7 @@ export class SalesService {
           context: { amount: contractPrice(current), isException: true },
         })) ?? true;
     }
-    let rows: ScheduleRow[] = [];
+    let rows: ScheduleRow[];
     try {
       rows = buildInstallmentSchedule(contractPrice(current), toPlan(current.paymentPlan));
     } catch {
@@ -3958,6 +3958,23 @@ export class SalesService {
   /** Allocate the next number in a series. Shared with collections so numbering is one mechanism. */
   async allocateNumber(prefix: string, session: ClientSession): Promise<string> {
     return this.nextNumber(prefix, session);
+  }
+
+  /**
+   * The last value the legacy series issued per year for one prefix (SALE-RESERVE-006), read inside
+   * the caller's transaction — what a continuing official format starts after.
+   */
+  async legacyCounters(
+    prefix: string,
+    session: ClientSession,
+  ): Promise<{ year: string; value: number }[]> {
+    if (!/^[A-Z]{2,6}$/.test(prefix)) return [];
+    const rows = await this.counters
+      .find({ key: { $regex: new RegExp(`^${prefix}-\\d{4}$`) } })
+      .session(session)
+      .lean<{ key: string; value: number }[]>()
+      .exec();
+    return rows.map((row) => ({ year: row.key.slice(prefix.length + 1), value: row.value }));
   }
 
   /** Recompute a contract's paid and outstanding totals from its installments, never incrementally. */

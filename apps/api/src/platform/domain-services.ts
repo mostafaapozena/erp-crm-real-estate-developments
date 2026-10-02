@@ -19,8 +19,9 @@ import {
   nowInstant,
   type LocalizedLabel,
   type SalesDefaults,
+  type SequenceType,
 } from '@alola/contracts';
-import type { Connection } from 'mongoose';
+import type { ClientSession, Connection } from 'mongoose';
 import type { Redis } from 'ioredis';
 import { ApprovalService, NoApplicablePolicyError } from '../modules/approval';
 import { AuditService } from '../modules/audit';
@@ -125,6 +126,39 @@ export interface DomainServices {
 
 export function createDomainServices(options: DomainServiceOptions): DomainServices {
   const { config, logger, requireConnection } = options;
+
+  /**
+   * An official number from CORE-DOC-001 inside the caller's transaction, or `undefined` while no
+   * format is active for the type (`BD-19`) — the caller then continues its legacy series.
+   */
+  async function officialNumber(
+    type: SequenceType,
+    source: { type: string; id: string },
+    projectId: string | undefined,
+    session: ClientSession,
+  ): Promise<string | undefined> {
+    const project = projectId
+      ? await getInventoryService().findProjectUnscoped(projectId)
+      : undefined;
+    try {
+      const issued = await getNumberingService().issue(
+        { accountId: `system:${type}` },
+        {
+          type,
+          issueDate: businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
+          ...(project ? { projectCode: project.code } : {}),
+          source,
+          idempotencyKey: `${type}-${source.id}`,
+        },
+        session,
+      );
+      return issued.number;
+    } catch (error) {
+      const issue = (error as { issues?: { code: string }[] }).issues?.[0]?.code;
+      if (issue === 'NO_ACTIVE_SEQUENCE') return undefined;
+      throw error;
+    }
+  }
 
   let auditService: AuditService | undefined;
   let securityService: SecurityService | undefined;
@@ -240,6 +274,8 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
       audit: getAuditService(),
       fiscalYearStartMonth: () =>
         getSettingsService().valueOf<number>('finance.fiscalYearStartMonth'),
+      // The legacy series a continuing format starts after (SALE-RESERVE-006).
+      legacySeries: (prefix, session) => getSalesService().legacyCounters(prefix, session),
     });
     return numberingService;
   }
@@ -1204,8 +1240,16 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
           timeZone: profile.timeZone,
         };
       },
-      statementNumber: () =>
-        withTransaction(connection, (session) => getSalesService().allocateNumber('STM', session)),
+      statementNumber: ({ issueId }) =>
+        withTransaction(connection, async (session) => {
+          const official = await officialNumber(
+            'customerStatement',
+            { type: 'issuedDocument', id: issueId },
+            undefined,
+            session,
+          );
+          return official ?? getSalesService().allocateNumber('STM', session);
+        }),
       publicBaseUrl: config.PUBLIC_APP_URL ?? config.CORS_ALLOWED_ORIGINS[0] ?? '',
       today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
     });
@@ -1359,7 +1403,15 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
         : {}),
       today: () => businessDateInZone(nowInstant(), config.ORG_TIMEZONE),
       timeZone: config.ORG_TIMEZONE,
-      nextReceiptNumber: (session) => getSalesService().allocateNumber('RCT', session),
+      nextReceiptNumber: async (session, source) =>
+        (source
+          ? await officialNumber(
+              'receipt',
+              { type: 'receipt', id: source.receiptId },
+              source.projectId,
+              session,
+            )
+          : undefined) ?? getSalesService().allocateNumber('RCT', session),
     });
     return collectionService;
   }
@@ -1433,7 +1485,9 @@ export function createDomainServices(options: DomainServiceOptions): DomainServi
       reservationValidityDays: await getSettingsService().valueOf<number>(
         'sales.reservationValidityDays',
       ),
-      quotationValidityDays: await getSettingsService().valueOf<number>('sales.quotationValidityDays'),
+      quotationValidityDays: await getSettingsService().valueOf<number>(
+        'sales.quotationValidityDays',
+      ),
       decisions: { reservationValidityDays: 'BD-01', quotationValidityDays: 'BD-36' },
     }),
     issuance: getIssuanceService,
