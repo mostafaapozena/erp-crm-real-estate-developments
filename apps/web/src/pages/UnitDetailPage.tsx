@@ -4,13 +4,24 @@ import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { Icon, PageHeader, StateView } from '@alola/ui';
-import { CalendarCheck, History, House } from '@alola/ui/icons';
+import {
+  CalendarCheck,
+  CircleDot,
+  History,
+  House,
+  PencilLine,
+  Tag,
+  TrendingUp,
+  type LucideIcon,
+} from '@alola/ui/icons';
 import { Link, useParams } from 'react-router';
 import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { useFormatters } from '../format';
 import { useLocale } from '../locale';
+import { PersonName } from '../people';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
+import { unitEventView } from './unit-timeline';
 import {
   BackLink,
   DetailLayout,
@@ -26,6 +37,14 @@ import {
   UNIT_TONES,
   Verbatim,
 } from './shared';
+
+/** One glyph per kind, so a price change never looks like a status change. */
+const UNIT_EVENT_ICONS: Record<UnitEvent['kind'], LucideIcon> = {
+  created: CircleDot,
+  statusChanged: TrendingUp,
+  priceChanged: Tag,
+  attributesChanged: PencilLine,
+};
 
 /**
  * One unit: what it is, what it costs, and everything that has happened to it.
@@ -156,20 +175,40 @@ function UnitDetailScreen() {
               <Timeline
                 emptyLabel={t('states.emptyDescription')}
                 entries={(history.state.kind === 'ready' ? history.state.data.items : []).map(
-                  (event) => ({
-                    key: event.eventId,
-                    title:
-                      event.fromStatus && event.toStatus ? (
+                  (event) => {
+                    const view = unitEventView(event);
+                    return {
+                      key: event.eventId,
+                      icon: UNIT_EVENT_ICONS[view.kind],
+                      title: view.transition ? (
                         <Transition
-                          from={td(`unitStatus.${event.fromStatus}`)}
-                          to={td(`unitStatus.${event.toStatus}`)}
+                          from={td(`unitStatus.${view.transition.from}`)}
+                          to={td(`unitStatus.${view.transition.to}`)}
                         />
                       ) : (
-                        td(`unitStatus.${event.toStatus ?? 'available'}`)
+                        td(`unitEventKind.${view.kind}`)
                       ),
-                    when: format.dateTime(event.occurredAt),
-                    ...(event.reason ? { body: <SystemNote text={event.reason} /> } : {}),
-                  }),
+                      when: format.dateTime(event.occurredAt),
+                      body: (
+                        <>
+                          {view.initialStatus ? (
+                            <Box>{`${t('unitTimeline.initialStatus')}: ${td(`unitStatus.${view.initialStatus}`)}`}</Box>
+                          ) : null}
+                          {view.kind !== 'created' ? (
+                            <Box>{td(`unitTimeline.source.${view.source}`)}</Box>
+                          ) : null}
+                          {event.reason ? (
+                            <Box sx={{ color: 'text.primary' }}>
+                              <SystemNote text={event.reason} />
+                            </Box>
+                          ) : null}
+                          {event.actorAccountId ? (
+                            <PersonName accountId={event.actorAccountId} compact />
+                          ) : null}
+                        </>
+                      ),
+                    };
+                  },
                 )}
               />
             )}

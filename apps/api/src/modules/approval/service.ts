@@ -488,7 +488,7 @@ export class ApprovalService {
             updatedBy: actor.accountId,
           },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<ApprovalPolicyDocument>()
       .exec();
@@ -540,7 +540,7 @@ export class ApprovalService {
             updatedBy: actor.accountId,
           },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<ApprovalPolicyDocument>()
       .exec();
@@ -1110,7 +1110,7 @@ export class ApprovalService {
         .findOneAndUpdate(
           { requestId, version: current.version, state: 'pending' },
           { $set: set, $inc: { version: 1 } },
-          { new: true, session },
+          { returnDocument: 'after', session },
         )
         .lean<ApprovalRequestDocument>()
         .exec();
@@ -1262,7 +1262,7 @@ export class ApprovalService {
             },
             $inc: { version: 1 },
           },
-          { new: true, session },
+          { returnDocument: 'after', session },
         )
         .lean<ApprovalRequestDocument>()
         .exec();
@@ -1348,7 +1348,7 @@ export class ApprovalService {
             $unset: { decidedAt: '' },
             $inc: { version: 1 },
           },
-          { new: true, session },
+          { returnDocument: 'after', session },
         )
         .lean<ApprovalRequestDocument>()
         .exec();
@@ -1396,7 +1396,7 @@ export class ApprovalService {
               },
               $inc: { version: 1 },
             },
-            { new: true, session },
+            { returnDocument: 'after', session },
           )
           .lean<ApprovalRequestDocument>()
           .exec();
@@ -1479,7 +1479,7 @@ export class ApprovalService {
               $addToSet: { pendingApproverAccountIds: manager },
               $inc: { version: 1 },
             },
-            { new: true, session },
+            { returnDocument: 'after', session },
           )
           .lean<ApprovalRequestDocument>()
           .exec();
@@ -1558,7 +1558,7 @@ export class ApprovalService {
           .findOneAndUpdate(
             { requestId: request.requestId, version: request.version, state: 'pending' },
             { $set: { pendingApproverAccountIds: next, updatedAt: now }, $inc: { version: 1 } },
-            { new: true, session },
+            { returnDocument: 'after', session },
           )
           .lean<ApprovalRequestDocument>()
           .exec();
@@ -1674,7 +1674,7 @@ export class ApprovalService {
       .findOneAndUpdate(
         filter,
         { $set: { revokedAt: now, revokedBy: actor.accountId } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<ApprovalDelegationDocument>()
       .exec();

@@ -58,7 +58,78 @@ export const ADMIN_DOCUMENT_SOURCES: Permission[] = [
   'crm.customer.view',
 ];
 
-export const DEMO_ROLES: DemoRole[] = [
+/**
+ * The BMP-1 commercial permissions per demonstration role (BMP-1 package 8), added for user-acceptance
+ * testing of the full sales journey. **Demonstration configuration, not `SD-02`.** The separations are
+ * deliberate and are what the matrix test pins:
+ *
+ * - **Activating, cancelling, amending and signing a contract are the manager's**, never the
+ *   representative's. The representative raises; the manager commits.
+ * - **Seeing an identity document is the manager's** (`crm.customer.viewIdentity`); a representative
+ *   works without it and the contract says so (`identityMissing`).
+ * - **Configuration stays administrative**: commercial settings and number formats are the system
+ *   administrator's (`settings.manage`, `numbering.manage`), behind the second factor.
+ * - **The executive reads everything and changes nothing.**
+ *
+ * `npm run seed:demo:bmp1` adds these to an already-seeded database; a fresh seed creates the roles
+ * with them.
+ */
+export const BMP1_ADDITIONS: Record<string, Permission[]> = {
+  'demo-executive': [
+    'crm.opportunity.view',
+    'sales.quotation.view',
+    'settings.view',
+    'numbering.view',
+  ],
+  'demo-system-administrator': [
+    'settings.view',
+    'settings.manage',
+    'numbering.view',
+    'numbering.manage',
+  ],
+  'demo-sales-manager': [
+    'crm.lead.convert',
+    'crm.customer.viewIdentity',
+    'crm.customer.transfer',
+    'crm.opportunity.view',
+    'crm.opportunity.manage',
+    'crm.opportunity.assign',
+    'crm.lead.export',
+    'inventory.unit.export',
+    'inventory.hold.create',
+    'inventory.hold.manage',
+    'sales.quotation.view',
+    'sales.quotation.manage',
+    'sales.reservation.extend',
+    'sales.contract.activate',
+    'sales.contract.sign',
+    'sales.contract.amend',
+    'sales.contract.cancel',
+  ],
+  'demo-sales-representative': [
+    'crm.lead.convert',
+    'crm.opportunity.view',
+    'crm.opportunity.manage',
+    'inventory.hold.create',
+    'sales.quotation.view',
+    'sales.quotation.manage',
+  ],
+  'demo-collection-officer': ['sales.quotation.view'],
+  'demo-accountant': [],
+  'demo-marketing-manager': ['crm.opportunity.view'],
+};
+
+const withBmp1 = (role: DemoRole): DemoRole => ({
+  ...role,
+  permissions: [
+    ...role.permissions,
+    ...(BMP1_ADDITIONS[role.key] ?? []).filter(
+      (permission) => !role.permissions.includes(permission),
+    ),
+  ],
+});
+
+const BASE_ROLES: DemoRole[] = [
   {
     key: 'demo-executive',
     name: { ar: 'الإدارة التنفيذية', en: 'Executive management' },
@@ -210,3 +281,5 @@ export const DEMO_ROLES: DemoRole[] = [
     ],
   },
 ];
+
+export const DEMO_ROLES: DemoRole[] = BASE_ROLES.map(withBmp1);

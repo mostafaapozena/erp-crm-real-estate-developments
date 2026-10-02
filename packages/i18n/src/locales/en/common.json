@@ -1700,5 +1700,15 @@
     "willContinue": "This format continues the current series: each year continues after the last number issued in it.",
     "willStartNew": "This format's shape differs from the current series, so it starts a new series and no old number can repeat.",
     "activated": "The number format was activated."
+  },
+  "unitTimeline": {
+    "initialStatus": "First status",
+    "source": {
+      "hold": "Through a timed hold",
+      "reservation": "Through a reservation",
+      "contract": "Through a contract",
+      "priceVersion": "An approved price version",
+      "manual": "Changed by hand"
+    }
   }
 }

@@ -220,7 +220,7 @@ async function seedApprovalPolicy(
  * reason recorded on the setting says so. A value already configured — by the client, or by an
  * earlier run — is never overwritten.
  */
-const DEMO_SETTINGS = [
+export const DEMO_SETTINGS = [
   { key: 'sales.reservationValidityDays', value: 14, decision: 'BD-01' },
 ] as const;
 

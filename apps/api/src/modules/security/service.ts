@@ -276,7 +276,7 @@ export class SecurityService {
           $inc: { version: 1 },
           $setOnInsert: { accountId },
         },
-        { upsert: true, new: true, runValidators: true },
+        { upsert: true, returnDocument: 'after', runValidators: true },
       )
       .lean<AccountGrantDocument>()
       .exec();

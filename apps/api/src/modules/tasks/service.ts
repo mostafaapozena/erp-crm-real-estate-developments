@@ -441,7 +441,7 @@ export class TaskService {
               ? { $unset: Object.fromEntries(unset.map((key) => [key, 1])) }
               : {}),
           },
-          { new: true, session },
+          { returnDocument: 'after', session },
         )
         .lean<TaskDocument>()
         .exec();
@@ -735,7 +735,7 @@ export class TaskService {
               $set: { escalatedAt: now, escalatedToAccountId: manager, updatedAt: now },
               $inc: { version: 1 },
             },
-            { new: true, session },
+            { returnDocument: 'after', session },
           )
           .lean<TaskDocument>()
           .exec();

@@ -3800,7 +3800,7 @@ export class SalesService {
           },
           $inc: { version: 1 },
         },
-        { new: true, session },
+        { returnDocument: 'after', session },
       )
       .lean<InstallmentDocument>()
       .exec();
@@ -3869,7 +3869,7 @@ export class SalesService {
           },
           $inc: { version: 1 },
         },
-        { new: true, session },
+        { returnDocument: 'after', session },
       )
       .lean<InstallmentDocument>()
       .exec();

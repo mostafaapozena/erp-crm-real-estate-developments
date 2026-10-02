@@ -217,7 +217,7 @@ export class IntegrationService {
               $unset: { lastErrorCode: 1, lastErrorAt: 1 },
               $inc: { version: 1 },
             },
-            { new: true, upsert: input.expectedVersion === 0, session },
+            { returnDocument: 'after', upsert: input.expectedVersion === 0, session },
           )
           .lean<ConnectionDocument>()
           .exec();
@@ -269,7 +269,7 @@ export class IntegrationService {
             },
             $inc: { version: 1 },
           },
-          { new: true, session },
+          { returnDocument: 'after', session },
         )
         .lean<ConnectionDocument>()
         .exec();
@@ -319,7 +319,7 @@ export class IntegrationService {
           },
           ...(result.ok ? { $unset: { lastErrorCode: 1 } } : {}),
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<ConnectionDocument>()
       .exec();
@@ -515,7 +515,7 @@ export class IntegrationService {
           $set: { state: 'processing', leaseUntil: new Date(now.getTime() + LEASE_MS) },
           $inc: { attempts: 1 },
         },
-        { new: true, sort: { nextAttemptAt: 1 } },
+        { returnDocument: 'after', sort: { nextAttemptAt: 1 } },
       )
       .lean<WebhookDocument>()
       .exec();
@@ -576,7 +576,7 @@ export class IntegrationService {
           ],
         },
         { $set: { state: 'sending', leaseUntil: new Date(now.getTime() + LEASE_MS) } },
-        { new: true, sort: { nextAttemptAt: 1 } },
+        { returnDocument: 'after', sort: { nextAttemptAt: 1 } },
       )
       .lean<OutboxDocument>()
       .exec();

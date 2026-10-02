@@ -472,7 +472,7 @@ export class IdentityService {
           expiresAt: { $gt: now },
         },
         { $set: { usedAt: now } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<AccountTokenDocument>()
       .exec();
@@ -508,7 +508,7 @@ export class IdentityService {
           },
           $inc: { version: 1, credentialVersion: 1 },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<SecurityAccountDocument>()
       .exec();
@@ -608,7 +608,7 @@ export class IdentityService {
       .findOneAndUpdate(
         { accountId, state: current.state },
         { $set: set, $inc: { version: 1 } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<SecurityAccountDocument>()
       .exec();
@@ -899,7 +899,7 @@ export class IdentityService {
       .findOneAndUpdate(
         { tokenHash, usedAt: { $exists: false } },
         { $set: { usedAt: now } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean()
       .exec();

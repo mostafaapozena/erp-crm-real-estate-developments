@@ -344,7 +344,7 @@ export class ImportService {
         .findOneAndUpdate(
           { batchId, version: expectedVersion, state: 'previewed' },
           { $set: { state: 'committed', committedAt: now }, $inc: { version: 1 } },
-          { new: true, session },
+          { returnDocument: 'after', session },
         )
         .lean<ImportBatchDocument>()
         .exec();
@@ -381,7 +381,7 @@ export class ImportService {
         .findOneAndUpdate(
           { batchId, version: expectedVersion, state: 'previewed' },
           { $set: { state: 'discarded', discardedAt: this.now(), rows: [] }, $inc: { version: 1 } },
-          { new: true, session },
+          { returnDocument: 'after', session },
         )
         .lean<ImportBatchDocument>()
         .exec();

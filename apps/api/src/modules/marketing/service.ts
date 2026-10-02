@@ -338,7 +338,7 @@ export class MarketingService {
       .findOneAndUpdate(
         { campaignId, version: current.version },
         { $set: set, $inc: { version: 1 } },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .lean<CampaignDocument>()
       .exec();

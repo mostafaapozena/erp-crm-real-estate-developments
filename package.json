@@ -38,6 +38,7 @@
     "seed:demo:reset": "node scripts/bin.mjs tsx scripts/seed-demo/reset.ts",
     "seed:demo:identity": "node scripts/bin.mjs tsx scripts/seed-demo/identity-cli.ts",
     "seed:demo:documents": "node scripts/bin.mjs tsx scripts/seed-demo/documents-cli.ts",
+    "seed:demo:bmp1": "node scripts/bin.mjs tsx scripts/seed-demo/bmp1-cli.ts",
     "check:links": "node scripts/check-doc-links.mjs",
     "check:ignored": "node scripts/check-ignored-source.mjs",
     "db:migrate": "node scripts/bin.mjs tsx scripts/db-migrate.ts",

@@ -835,7 +835,7 @@ export class InventoryService {
           $inc: { version: 1 },
           ...(Object.keys(unset).length > 0 ? { $unset: unset } : {}),
         },
-        { new: true, runValidators: true, ...(session ? { session } : {}) },
+        { returnDocument: 'after', runValidators: true, ...(session ? { session } : {}) },
       )
       .lean<UnitDocument>()
       .exec();

@@ -619,7 +619,7 @@ export class CollectionService {
               updatedAt: now,
             },
           },
-          { new: true, session },
+          { returnDocument: 'after', session },
         )
         .lean<ReceiptDocument>()
         .exec();
@@ -813,7 +813,7 @@ export class CollectionService {
       .findOneAndUpdate(
         { instrumentId, state: current.state },
         { $set: set, $inc: { version: 1 } },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .lean<InstrumentDocument>()
       .exec();
@@ -1031,7 +1031,7 @@ export class CollectionService {
       .findOneAndUpdate(
         { reminderId, state: current.state },
         { $set: set, $inc: { version: 1 } },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .lean<ReminderDocument>()
       .exec();

@@ -160,7 +160,7 @@ export class MaintenanceScheduler {
             },
             $setOnInsert: { nextRunAt: now },
           },
-          { upsert: true, new: true },
+          { upsert: true, returnDocument: 'after' },
         )
         .lean<RunDocument>()
         .exec();
