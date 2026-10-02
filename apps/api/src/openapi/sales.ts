@@ -1,5 +1,7 @@
 import {
   ActivateContractSchema,
+  ActivationReviewSchema,
+  SetContractPlanSchema,
   AmendContractSchema,
   CONTRACT_STATES,
   ContractHistorySchema,
@@ -65,6 +67,8 @@ export const salesComponents = {
   CancelContractRequest: CancelContractSchema,
   SetContractPartiesRequest: SetContractPartiesSchema,
   ActivateContractRequest: ActivateContractSchema,
+  ActivationReview: ActivationReviewSchema,
+  SetContractPlanRequest: SetContractPlanSchema,
   RecordSigningRequest: RecordSigningSchema,
   AmendContractRequest: AmendContractSchema,
   ContractHistory: ContractHistorySchema,
@@ -309,10 +313,42 @@ export function salesPaths(h: OpenApiHelpers): PathMap {
           'first), the reservation converted, the unit contracted, and the lead and opportunity won. ' +
           'A draft with an exception, where a published policy governs sales.contract.exception, ' +
           'becomes pendingApproval instead and is activated when the approval is granted (back to ' +
-          'draft when refused). Signing is recorded but not required until BD-35 decides it.',
+          'draft when refused). Signing is recorded but not required until BD-35 decides it. ' +
+          'Optional idempotencyKey: a retry carrying the key that moved the draft on answers 200 with ' +
+          'the contract as it stands (active or pendingApproval), records nothing, and never ' +
+          'activates twice; without it a retry is a STALE_VERSION conflict.',
         parameters: [pathParameter('contractId', 'Opaque contract identifier')],
         requestBody: requestBody(h.ref('ActivateContractRequest')),
         responses: { '200': h.json('Contract', 'The contract'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/sales/contracts/{contractId}/payment-plan': {
+      put: {
+        operationId: 'setContractPlan',
+        summary: "Replace a draft contract's payment plan",
+        description:
+          'Requires sales.contract.create (COL-SCHEDULE-001). Draft only (CONTRACT_NOT_DRAFT). The ' +
+          "price is the snapshot's and does not change; the total becomes price plus any maintenance " +
+          "deposit. A plan different from the reservation's carries planChanged, which activation " +
+          'submits as sales.contract.exception where a policy governs it; an identical plan clears ' +
+          'it. Schedule refusals (MILESTONES_EXCEED_REMAINDER, EMPTY_ROW, …) and ' +
+          'RESERVATION_EXCEEDS_TOTAL are 400. One transaction with its audit record.',
+        parameters: [pathParameter('contractId', 'Opaque contract identifier')],
+        requestBody: requestBody(h.ref('SetContractPlanRequest')),
+        responses: { '200': h.json('Contract', 'The draft'), ...h.conflictErrors },
+      },
+    },
+    '/api/v1/sales/contracts/{contractId}/activation-review': {
+      get: {
+        operationId: 'getActivationReview',
+        summary: 'What activating a draft would do, without doing it',
+        description:
+          'Requires sales.contract.view and the contract in scope. Exceptions, whether activation ' +
+          'would wait for an approval (the same question activation asks the engine), blockers ' +
+          '(notDraft, reservationNotConfirmed, approvalPending, notPermitted), warnings, the rows ' +
+          "activation would freeze and the reservation's plan for comparison. Changes nothing.",
+        parameters: [pathParameter('contractId', 'Opaque contract identifier')],
+        responses: { '200': h.json('ActivationReview', 'The review'), ...h.notFoundErrors },
       },
     },
     '/api/v1/sales/contracts/{contractId}/signing': {

@@ -99,7 +99,12 @@ export function OpportunitiesPanel({ customerId }: { customerId: string }) {
           return (
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
               {can('crm.opportunity.manage') && row.stage !== 'won' ? (
-                <Button size="small" variant="outlined" color="inherit" onClick={() => setMoving(row)}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="inherit"
+                  onClick={() => setMoving(row)}
+                >
                   {t('actions.changeStage')}
                 </Button>
               ) : null}

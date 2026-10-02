@@ -106,7 +106,9 @@ function CustomerWorkspace() {
   useBreadcrumbTail(record?.name);
 
   const summary = useApi<CustomerFinancialSummary>(
-    record && can('sales.contract.view') ? `/api/v1/sales/customers/${record.customerId}/summary` : undefined,
+    record && can('sales.contract.view')
+      ? `/api/v1/sales/customers/${record.customerId}/summary`
+      : undefined,
   );
   const branches = useApi<{ items: Branch[] }>(
     record && can('org.view') ? '/api/v1/organization/branches' : undefined,
@@ -185,9 +187,15 @@ function CustomerWorkspace() {
               icon={Wallet}
               label={t('customerWorkspace.contracted')}
               value={format.money(financial.totalContracted)}
-              hint={t('customerWorkspace.contractsCount', { count: format.number(financial.contracts) })}
+              hint={t('customerWorkspace.contractsCount', {
+                count: format.number(financial.contracts),
+              })}
             />
-            <MetricCard icon={HandCoins} label={t('sales.paidAmount')} value={format.money(financial.totalPaid)} />
+            <MetricCard
+              icon={HandCoins}
+              label={t('sales.paidAmount')}
+              value={format.money(financial.totalPaid)}
+            />
             <MetricCard
               icon={Coins}
               label={t('sales.outstandingAmount')}
@@ -197,7 +205,9 @@ function CustomerWorkspace() {
               icon={TriangleAlert}
               label={t('collections.overdueAmount')}
               value={format.money(financial.overdueAmount)}
-              hint={t('detail.overdueInstallments', { count: format.number(financial.overdueCount) })}
+              hint={t('detail.overdueInstallments', {
+                count: format.number(financial.overdueCount),
+              })}
               tone={financial.overdueCount > 0 ? 'attention' : 'default'}
             />
           </CardGrid>
@@ -223,10 +233,14 @@ function CustomerWorkspace() {
                     <Field label={t('fields.address')}>{record.address ?? '—'}</Field>
                     <Field label={t('customerWorkspace.city')}>{record.city ?? '—'}</Field>
                     <Field label={t('customerWorkspace.preferredLanguage')}>
-                      {record.preferredLanguage ? td(`issued.languageName.${record.preferredLanguage}`) : '—'}
+                      {record.preferredLanguage
+                        ? td(`issued.languageName.${record.preferredLanguage}`)
+                        : '—'}
                     </Field>
                     <Field label={t('customerWorkspace.preferredChannel')}>
-                      {record.preferredChannel ? td(`contactChannel.${record.preferredChannel}`) : '—'}
+                      {record.preferredChannel
+                        ? td(`contactChannel.${record.preferredChannel}`)
+                        : '—'}
                     </Field>
                   </FieldGroup>
                   <FieldGroup title={t('customerWorkspace.identity')}>
@@ -240,7 +254,9 @@ function CustomerWorkspace() {
                         </Field>
                       </>
                     ) : (
-                      <Box sx={{ gridColumn: '1 / -1', typography: 'body2', color: 'text.secondary' }}>
+                      <Box
+                        sx={{ gridColumn: '1 / -1', typography: 'body2', color: 'text.secondary' }}
+                      >
                         {can('crm.customer.viewIdentity')
                           ? t('customerWorkspace.identityNone')
                           : t('customerWorkspace.identityRestricted')}
@@ -360,7 +376,9 @@ function Section<T>({
 
 function UnitCode({ unitId }: { unitId: string }) {
   const { can } = useSession();
-  const unit = useApi<Unit>(can('inventory.unit.view') ? `/api/v1/inventory/units/${unitId}` : undefined);
+  const unit = useApi<Unit>(
+    can('inventory.unit.view') ? `/api/v1/inventory/units/${unitId}` : undefined,
+  );
   return unit.state.kind === 'ready' ? (
     <RecordLink to={`/units/${unitId}`}>
       <Verbatim>{unit.state.data.code}</Verbatim>
@@ -377,14 +395,33 @@ function QuotationsSection({ customerId }: { customerId: string }) {
   type Row = QuotationPage['items'][number];
   const columns = useMemo<DataColumn<Row>[]>(
     () => [
-      { key: 'number', header: t('quotations.number'), render: (row) => <Verbatim>{row.quotationNumber}</Verbatim> },
-      { key: 'unit', header: t('fields.unit'), render: (row) => <Verbatim>{row.unitCode}</Verbatim> },
-      { key: 'valid', header: t('quotations.validUntil'), render: (row) => <Verbatim>{format.date(row.validUntil)}</Verbatim> },
-      { key: 'total', header: t('fields.total'), align: 'end', render: (row) => <Verbatim>{format.money(row.total)}</Verbatim> },
+      {
+        key: 'number',
+        header: t('quotations.number'),
+        render: (row) => <Verbatim>{row.quotationNumber}</Verbatim>,
+      },
+      {
+        key: 'unit',
+        header: t('fields.unit'),
+        render: (row) => <Verbatim>{row.unitCode}</Verbatim>,
+      },
+      {
+        key: 'valid',
+        header: t('quotations.validUntil'),
+        render: (row) => <Verbatim>{format.date(row.validUntil)}</Verbatim>,
+      },
+      {
+        key: 'total',
+        header: t('fields.total'),
+        align: 'end',
+        render: (row) => <Verbatim>{format.money(row.total)}</Verbatim>,
+      },
       {
         key: 'state',
         header: t('fields.state'),
-        render: (row) => <EnumChip namespace="quotationState" value={row.state} tones={QUOTATION_TONES} />,
+        render: (row) => (
+          <EnumChip namespace="quotationState" value={row.state} tones={QUOTATION_TONES} />
+        ),
       },
     ],
     [format, t],
@@ -410,14 +447,29 @@ function ReservationsSection({ customerId }: { customerId: string }) {
   type Row = ReservationPage['items'][number];
   const columns = useMemo<DataColumn<Row>[]>(
     () => [
-      { key: 'number', header: t('sales.reservationNumber'), render: (row) => <Verbatim>{row.reservationNumber}</Verbatim> },
+      {
+        key: 'number',
+        header: t('sales.reservationNumber'),
+        render: (row) => <Verbatim>{row.reservationNumber}</Verbatim>,
+      },
       { key: 'unit', header: t('fields.unit'), render: (row) => <UnitCode unitId={row.unitId} /> },
-      { key: 'reserved', header: t('sales.reservedOn'), render: (row) => <Verbatim>{format.date(row.reservedOn)}</Verbatim> },
-      { key: 'price', header: t('sales.agreedPrice'), align: 'end', render: (row) => <Verbatim>{format.money(row.agreedPrice)}</Verbatim> },
+      {
+        key: 'reserved',
+        header: t('sales.reservedOn'),
+        render: (row) => <Verbatim>{format.date(row.reservedOn)}</Verbatim>,
+      },
+      {
+        key: 'price',
+        header: t('sales.agreedPrice'),
+        align: 'end',
+        render: (row) => <Verbatim>{format.money(row.agreedPrice)}</Verbatim>,
+      },
       {
         key: 'state',
         header: t('fields.state'),
-        render: (row) => <EnumChip namespace="reservationState" value={row.state} tones={RESERVATION_TONES} />,
+        render: (row) => (
+          <EnumChip namespace="reservationState" value={row.state} tones={RESERVATION_TONES} />
+        ),
       },
     ],
     [format, t],
@@ -444,7 +496,11 @@ function ContractsSection({ customerId }: { customerId: string }) {
   type Row = ContractPage['items'][number];
   const columns = useMemo<DataColumn<Row>[]>(
     () => [
-      { key: 'number', header: t('sales.contractNumber'), render: (row) => <Verbatim>{row.contractNumber}</Verbatim> },
+      {
+        key: 'number',
+        header: t('sales.contractNumber'),
+        render: (row) => <Verbatim>{row.contractNumber}</Verbatim>,
+      },
       {
         key: 'unit',
         header: t('fields.unit'),
@@ -462,7 +518,12 @@ function ContractsSection({ customerId }: { customerId: string }) {
             <UnitCode unitId={row.unitId} />
           ),
       },
-      { key: 'total', header: t('sales.totalPrice'), align: 'end', render: (row) => <Verbatim>{format.money(row.totalPrice)}</Verbatim> },
+      {
+        key: 'total',
+        header: t('sales.totalPrice'),
+        align: 'end',
+        render: (row) => <Verbatim>{format.money(row.totalPrice)}</Verbatim>,
+      },
       {
         key: 'outstanding',
         header: t('sales.outstandingAmount'),
@@ -473,7 +534,9 @@ function ContractsSection({ customerId }: { customerId: string }) {
       {
         key: 'state',
         header: t('fields.state'),
-        render: (row) => <EnumChip namespace="contractState" value={row.state} tones={CONTRACT_TONES} />,
+        render: (row) => (
+          <EnumChip namespace="contractState" value={row.state} tones={CONTRACT_TONES} />
+        ),
       },
     ],
     [format, projectName, t],
@@ -498,13 +561,28 @@ function InstallmentsSection({ customerId }: { customerId: string }) {
   type Row = InstallmentPage['items'][number];
   const columns = useMemo<DataColumn<Row>[]>(
     () => [
-      { key: 'due', header: t('fields.dueDate'), render: (row) => <Verbatim>{format.date(row.dueOn)}</Verbatim> },
-      { key: 'kind', header: t('plan.rowKind'), render: (row) => <EnumChip namespace="installmentKind" value={row.kind} tones={{}} /> },
-      { key: 'remaining', header: t('fields.remaining'), align: 'end', render: (row) => <Verbatim>{format.money(row.remainingAmount)}</Verbatim> },
+      {
+        key: 'due',
+        header: t('fields.dueDate'),
+        render: (row) => <Verbatim>{format.date(row.dueOn)}</Verbatim>,
+      },
+      {
+        key: 'kind',
+        header: t('plan.rowKind'),
+        render: (row) => <EnumChip namespace="installmentKind" value={row.kind} tones={{}} />,
+      },
+      {
+        key: 'remaining',
+        header: t('fields.remaining'),
+        align: 'end',
+        render: (row) => <Verbatim>{format.money(row.remainingAmount)}</Verbatim>,
+      },
       {
         key: 'state',
         header: t('fields.state'),
-        render: (row) => <EnumChip namespace="installmentState" value={row.state} tones={INSTALLMENT_TONES} />,
+        render: (row) => (
+          <EnumChip namespace="installmentState" value={row.state} tones={INSTALLMENT_TONES} />
+        ),
       },
     ],
     [format, t],
@@ -537,13 +615,28 @@ function ReceiptsSection({ customerId }: { customerId: string }) {
   const navigate = useNavigate();
   const columns = useMemo<DataColumn<Receipt>[]>(
     () => [
-      { key: 'number', header: t('fields.reference'), render: (row) => <Verbatim>{row.receiptNumber}</Verbatim> },
-      { key: 'date', header: t('collections.receivedOn'), render: (row) => <Verbatim>{format.date(row.receivedOn)}</Verbatim> },
-      { key: 'amount', header: t('fields.amount'), align: 'end', render: (row) => <Verbatim>{format.money(row.amount)}</Verbatim> },
+      {
+        key: 'number',
+        header: t('fields.reference'),
+        render: (row) => <Verbatim>{row.receiptNumber}</Verbatim>,
+      },
+      {
+        key: 'date',
+        header: t('collections.receivedOn'),
+        render: (row) => <Verbatim>{format.date(row.receivedOn)}</Verbatim>,
+      },
+      {
+        key: 'amount',
+        header: t('fields.amount'),
+        align: 'end',
+        render: (row) => <Verbatim>{format.money(row.amount)}</Verbatim>,
+      },
       {
         key: 'state',
         header: t('fields.state'),
-        render: (row) => <EnumChip namespace="receiptState" value={row.state} tones={RECEIPT_TONES} />,
+        render: (row) => (
+          <EnumChip namespace="receiptState" value={row.state} tones={RECEIPT_TONES} />
+        ),
       },
     ],
     [format, t],
@@ -579,12 +672,23 @@ function InstrumentsSection({ customerId }: { customerId: string }) {
           </Box>
         ),
       },
-      { key: 'due', header: t('fields.dueDate'), render: (row) => <Verbatim>{format.date(row.dueOn)}</Verbatim> },
-      { key: 'amount', header: t('fields.amount'), align: 'end', render: (row) => <Verbatim>{format.money(row.amount)}</Verbatim> },
+      {
+        key: 'due',
+        header: t('fields.dueDate'),
+        render: (row) => <Verbatim>{format.date(row.dueOn)}</Verbatim>,
+      },
+      {
+        key: 'amount',
+        header: t('fields.amount'),
+        align: 'end',
+        render: (row) => <Verbatim>{format.money(row.amount)}</Verbatim>,
+      },
       {
         key: 'state',
         header: t('fields.state'),
-        render: (row) => <EnumChip namespace="instrumentState" value={row.state} tones={INSTRUMENT_TONES} />,
+        render: (row) => (
+          <EnumChip namespace="instrumentState" value={row.state} tones={INSTRUMENT_TONES} />
+        ),
       },
     ],
     [format, t],
@@ -606,13 +710,28 @@ function RemindersSection({ customerId }: { customerId: string }) {
   const format = useFormatters();
   const columns = useMemo<DataColumn<Reminder>[]>(
     () => [
-      { key: 'due', header: t('fields.dueDate'), render: (row) => <Verbatim>{format.date(row.dueOn)}</Verbatim> },
-      { key: 'channel', header: t('customerWorkspace.channel'), render: (row) => <EnumChip namespace="reminderChannel" value={row.channel} tones={{}} /> },
-      { key: 'amount', header: t('fields.amount'), align: 'end', render: (row) => <Verbatim>{format.money(row.amount)}</Verbatim> },
+      {
+        key: 'due',
+        header: t('fields.dueDate'),
+        render: (row) => <Verbatim>{format.date(row.dueOn)}</Verbatim>,
+      },
+      {
+        key: 'channel',
+        header: t('customerWorkspace.channel'),
+        render: (row) => <EnumChip namespace="reminderChannel" value={row.channel} tones={{}} />,
+      },
+      {
+        key: 'amount',
+        header: t('fields.amount'),
+        align: 'end',
+        render: (row) => <Verbatim>{format.money(row.amount)}</Verbatim>,
+      },
       {
         key: 'state',
         header: t('fields.state'),
-        render: (row) => <EnumChip namespace="reminderState" value={row.state} tones={REMINDER_TONES} />,
+        render: (row) => (
+          <EnumChip namespace="reminderState" value={row.state} tones={REMINDER_TONES} />
+        ),
       },
     ],
     [format, t],
@@ -636,9 +755,21 @@ function LeadsSection({ customerId }: { customerId: string }) {
   type Row = LeadPage['items'][number];
   const columns = useMemo<DataColumn<Row>[]>(
     () => [
-      { key: 'created', header: t('fields.createdAt'), render: (row) => <Verbatim>{format.date(row.createdAt.slice(0, 10))}</Verbatim> },
-      { key: 'source', header: t('crm.source'), render: (row) => <EnumChip namespace="leadSource" value={row.source} tones={{}} /> },
-      { key: 'stage', header: t('crm.stage'), render: (row) => <EnumChip namespace="leadStage" value={row.stage} tones={LEAD_TONES} /> },
+      {
+        key: 'created',
+        header: t('fields.createdAt'),
+        render: (row) => <Verbatim>{format.date(row.createdAt.slice(0, 10))}</Verbatim>,
+      },
+      {
+        key: 'source',
+        header: t('crm.source'),
+        render: (row) => <EnumChip namespace="leadSource" value={row.source} tones={{}} />,
+      },
+      {
+        key: 'stage',
+        header: t('crm.stage'),
+        render: (row) => <EnumChip namespace="leadStage" value={row.stage} tones={LEAD_TONES} />,
+      },
     ],
     [format, t],
   );

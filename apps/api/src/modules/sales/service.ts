@@ -21,6 +21,9 @@ import {
   SCHEDULE_ROUNDING_RULE,
   scheduleTotal,
   type ActivateContract,
+  type ActivationReview,
+  type SetContractPlan,
+  PaymentPlanError,
   type AmendContract,
   type CancelContract,
   type Contract,
@@ -2307,6 +2310,42 @@ export class SalesService {
     input: ActivateContract,
     context: RequestContext,
   ): Promise<Contract> {
+    return (await this.activateContractOnce(actor, contractId, input, context)).contract;
+  }
+
+  /**
+   * `activateContract`, telling the caller whether the request was a retry of an activation that
+   * already moved the draft on. A retry is recognised only by the key that did it, and only once the
+   * contract is past draft — so a key can never activate anything a second time.
+   */
+  async activateContractOnce(
+    actor: ActorContext,
+    contractId: string,
+    input: ActivateContract,
+    context: RequestContext,
+  ): Promise<{ contract: Contract; replayed: boolean }> {
+    if (input.idempotencyKey) {
+      await this.getContract(actor, contractId);
+      const stored = await this.findContractOrThrow(contractId);
+      if (
+        stored.activationKey === input.idempotencyKey &&
+        (stored.state === 'active' || stored.state === 'pendingApproval')
+      ) {
+        return { contract: restrictContract(actor, toContract(stored)), replayed: true };
+      }
+    }
+    return {
+      contract: await this.activateDraft(actor, contractId, input, context),
+      replayed: false,
+    };
+  }
+
+  private async activateDraft(
+    actor: ActorContext,
+    contractId: string,
+    input: ActivateContract,
+    context: RequestContext,
+  ): Promise<Contract> {
     let current = await this.editableContract(actor, contractId, input.expectedVersion);
     if (current.state === 'pendingApproval') {
       await this.syncContractApproval(actor, current.approvals?.at(-1)?.requestId ?? '', context);
@@ -2347,7 +2386,11 @@ export class SalesService {
               .findOneAndUpdate(
                 { contractId, state: 'draft', version: current.version },
                 {
-                  $set: { state: 'pendingApproval', updatedAt: new Date() },
+                  $set: {
+                    state: 'pendingApproval',
+                    updatedAt: new Date(),
+                    ...(input.idempotencyKey ? { activationKey: input.idempotencyKey } : {}),
+                  },
                   $push: {
                     approvals: {
                       operationType: SALES_APPROVAL_OPERATIONS.contractException,
@@ -2378,8 +2421,146 @@ export class SalesService {
         }
       }
     }
-    const activated = await this.applyActivation(actor, current, context);
+    const activated = await this.applyActivation(actor, current, context, input.idempotencyKey);
     return restrictContract(actor, activated);
+  }
+
+  /**
+   * What activating a draft would do, without doing it (SALE-CONTRACT-003). The rows are the ones
+   * activation freezes, and `approvalRequired` asks the approval engine the same question activation
+   * asks. Nothing is written.
+   */
+  async activationReview(actor: ActorContext, contractId: string): Promise<ActivationReview> {
+    await this.getContract(actor, contractId);
+    const current = await this.findContractOrThrow(contractId);
+    const reservation = await this.reservations
+      .findOne({ reservationId: current.reservationId })
+      .lean<ReservationDocument>()
+      .exec();
+    const exceptions = current.exceptions ?? [];
+    const blockers: ActivationReview['blockers'] = [];
+    if (current.state === 'pendingApproval') blockers.push('approvalPending');
+    else if (current.state !== 'draft') blockers.push('notDraft');
+    if (current.state === 'draft' && reservation?.state !== 'confirmed') {
+      blockers.push('reservationNotConfirmed');
+    }
+    if (!can(actor, 'sales.contract.activate')) blockers.push('notPermitted');
+    let approvalRequired = false;
+    if (exceptions.length > 0 && this.options.approvals) {
+      approvalRequired =
+        (await this.options.approvals.applies?.(actor, {
+          operationType: SALES_APPROVAL_OPERATIONS.contractException,
+          scope: this.approvalScope(current),
+          context: { amount: contractPrice(current), isException: true },
+        })) ?? true;
+    }
+    let rows: ScheduleRow[] = [];
+    try {
+      rows = buildInstallmentSchedule(contractPrice(current), toPlan(current.paymentPlan));
+    } catch {
+      rows = [];
+    }
+    return {
+      contractId: current.contractId,
+      state: current.state,
+      version: current.version,
+      exceptions,
+      approvalRequired,
+      blockers,
+      warnings: contractWarnings(current),
+      rows,
+      total: toMoney(current.totalPrice),
+      reservationCredit: toMoney(current.reservationAmount),
+      ...(reservation ? { reservationPlan: toPlan(reservation.paymentPlan) } : {}),
+    };
+  }
+
+  /**
+   * Replace a draft's payment plan (COL-SCHEDULE-001). The price is the snapshot's and stays; the
+   * total becomes price plus any maintenance deposit; a plan different from the reservation's carries
+   * `planChanged` — which activation submits for approval where a policy governs it — and a plan equal
+   * to it carries none. One transaction with its audit record; a stale version loses.
+   */
+  async setDraftPlan(
+    actor: ActorContext,
+    contractId: string,
+    input: SetContractPlan,
+    context: RequestContext,
+  ): Promise<Contract> {
+    const current = await this.editableContract(actor, contractId, input.expectedVersion);
+    if (current.state !== 'draft') throw conflict('CONTRACT_NOT_DRAFT', ['paymentPlan']);
+    const price = contractPrice(current);
+    let rows: ScheduleRow[];
+    try {
+      rows = buildInstallmentSchedule(price, input.paymentPlan);
+    } catch (error) {
+      if (error instanceof PaymentPlanError) throw invalid(error.issue, ['paymentPlan']);
+      throw error;
+    }
+    const total = scheduleTotal(price, input.paymentPlan);
+    this.assertReconciles(rows, total);
+    if (compareMoney(toMoney(current.reservationAmount), total) > 0) {
+      throw invalid('RESERVATION_EXCEEDS_TOTAL', ['paymentPlan']);
+    }
+    const reservation = await this.reservations
+      .findOne({ reservationId: current.reservationId })
+      .lean<ReservationDocument>()
+      .exec();
+    const exceptions: Contract['exceptions'] =
+      reservation && samePlan(input.paymentPlan, toPlan(reservation.paymentPlan))
+        ? []
+        : ['planChanged'];
+    const deposit = input.paymentPlan.maintenanceDeposit;
+    return withTransaction(this.connection, async (session) => {
+      const updated = await this.contracts
+        .findOneAndUpdate(
+          { contractId, state: 'draft', version: current.version },
+          {
+            $set: {
+              paymentPlan: fromPlan(input.paymentPlan),
+              totalPrice: fromMoney(total),
+              outstandingAmount: fromMoney(total),
+              exceptions,
+              updatedAt: new Date(),
+              ...(deposit && current.pricing
+                ? { 'pricing.maintenanceDeposit': fromMoney(deposit.amount) }
+                : {}),
+            },
+            ...(!deposit && current.pricing?.maintenanceDeposit
+              ? { $unset: { 'pricing.maintenanceDeposit': '' } }
+              : {}),
+            $inc: { version: 1 },
+          },
+          // The total is immutable in the model because a committed contract's total never changes.
+          // A draft has committed nothing yet, and its total is the plan's: this one update, filtered
+          // to `state: 'draft'`, may set it. Without the option Mongoose drops the path silently.
+          { returnDocument: 'after', session, overwriteImmutable: true },
+        )
+        .lean<ContractDocument>()
+        .exec();
+      if (!updated) throw conflict('STALE_VERSION', ['expectedVersion']);
+      await this.contractAudit(
+        actor,
+        {
+          action: SALES_AUDIT_ACTIONS.contractPlanChanged,
+          contractId,
+          changes: buildChangeSummary(
+            {
+              totalPrice: `${fromDecimal128(current.totalPrice.amount)} ${current.totalPrice.currency}`,
+              exceptions: (current.exceptions ?? []).join(',') || 'none',
+            },
+            {
+              totalPrice: `${total.amount} ${total.currency}`,
+              rows: String(rows.length),
+              exceptions: exceptions.join(',') || 'none',
+            },
+          ),
+        },
+        context,
+        session,
+      );
+      return restrictContract(actor, toContract(updated));
+    });
   }
 
   /**
@@ -2391,6 +2572,7 @@ export class SalesService {
     actor: ActorContext,
     current: ContractDocument,
     context: RequestContext,
+    activationKey?: string,
   ): Promise<Contract> {
     const plan = toPlan(current.paymentPlan);
     const price = contractPrice(current);
@@ -2419,6 +2601,7 @@ export class SalesService {
             $set: {
               state: 'active',
               activatedAt: now,
+              ...(activationKey ? { activationKey } : {}),
               paidAmount: fromMoney(paidAmount),
               outstandingAmount: fromMoney(outstanding),
               updatedAt: now,
@@ -2784,7 +2967,8 @@ export class SalesService {
    */
   private assertNoCollections(current: ContractDocument): void {
     if (compareMoney(toMoney(current.paidAmount), toMoney(current.reservationAmount)) > 0) {
-      throw new SalesConflictError('contractHasCollections');
+      // Named, so the screen can say why: this is a refund, and refunds are BMP-2's.
+      throw conflict('CONTRACT_HAS_COLLECTIONS', ['state']);
     }
   }
 

@@ -23,7 +23,13 @@ import { PersonName } from '../people';
 import { useBreadcrumbTail } from '../shell/breadcrumbs';
 import { IssuedDocumentsPanel } from './IssuedDocumentsPanel';
 import { RecordLink, useCustomerNames, useProjectNames } from './lookups';
-import { PaymentPlanEditor, SchedulePreviewTable, planDraftFrom, planIsComplete, planRequest } from './plan';
+import {
+  PaymentPlanEditor,
+  SchedulePreviewTable,
+  planDraftFrom,
+  planIsComplete,
+  planRequest,
+} from './plan';
 import {
   BackLink,
   DetailLayout,
@@ -70,7 +76,9 @@ function QuotationDetailScreen() {
   );
   const items = revisions.state.kind === 'ready' ? revisions.state.data.items : [];
   const current = items[0];
-  const unit = useApi<Unit>(current && can('inventory.unit.view') ? `/api/v1/inventory/units/${current.unitId}` : undefined);
+  const unit = useApi<Unit>(
+    current && can('inventory.unit.view') ? `/api/v1/inventory/units/${current.unitId}` : undefined,
+  );
   const customerName = useCustomerNames([current?.customerId]);
   const projectName = useProjectNames();
   useBreadcrumbTail(current?.quotationNumber);
@@ -136,10 +144,14 @@ function QuotationDetailScreen() {
       <PageHeader
         eyebrow={t('quotations.one')}
         title={current.quotationNumber}
-        status={<EnumChip namespace="quotationState" value={current.state} tones={QUOTATION_TONES} />}
+        status={
+          <EnumChip namespace="quotationState" value={current.state} tones={QUOTATION_TONES} />
+        }
         meta={
           <>
-            <span>{t('quotations.revisionShort', { revision: format.number(current.revision) })}</span>
+            <span>
+              {t('quotations.revisionShort', { revision: format.number(current.revision) })}
+            </span>
             <span>{`${t('quotations.validUntil')}: `}</span>
             <Verbatim>{format.date(current.validUntil)}</Verbatim>
             <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
@@ -202,7 +214,9 @@ function QuotationDetailScreen() {
                         {customerName(current.customerId) ?? t('quotations.customerHidden')}
                       </RecordLink>
                     ) : current.leadId ? (
-                      <RecordLink to={`/leads/${current.leadId}`}>{t('quotations.leadRecipient')}</RecordLink>
+                      <RecordLink to={`/leads/${current.leadId}`}>
+                        {t('quotations.leadRecipient')}
+                      </RecordLink>
                     ) : (
                       '—'
                     )}
@@ -264,7 +278,11 @@ function QuotationDetailScreen() {
         aside={
           <>
             <Panel title={t('quotations.whatItIs')} icon={History}>
-              <Box component="ul" sx={{ margin: 0, paddingInlineStart: 2.5, typography: 'body2' }} lang={locale}>
+              <Box
+                component="ul"
+                sx={{ margin: 0, paddingInlineStart: 2.5, typography: 'body2' }}
+                lang={locale}
+              >
                 <li>{t('quotations.noReservationShort')}</li>
                 <li>{t('quotations.revisionsKept')}</li>
                 <li>{t('quotations.expiryComputed')}</li>
@@ -281,7 +299,11 @@ function QuotationDetailScreen() {
                 </Field>
               </Panel>
             ) : null}
-            <IssuedDocumentsPanel sourceType="quotation" sourceId={current.quotationId} types={['quotation']} />
+            <IssuedDocumentsPanel
+              sourceType="quotation"
+              sourceId={current.quotationId}
+              types={['quotation']}
+            />
           </>
         }
       />
@@ -325,7 +347,9 @@ function ReviseDialog({
   const errorMessage = useErrorMessage();
   const today = useToday();
   const [price, setPrice] = useState<string>(current.agreedPrice.amount);
-  const [validUntil, setValidUntil] = useState<string>(current.validUntil >= today ? current.validUntil : '');
+  const [validUntil, setValidUntil] = useState<string>(
+    current.validUntil >= today ? current.validUntil : '',
+  );
   const [notes, setNotes] = useState(current.notes ?? '');
   const [plan, setPlan] = useState(planDraftFrom(current.paymentPlan));
   const currency = current.agreedPrice.currency;

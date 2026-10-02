@@ -20,7 +20,7 @@ import { apiRequest } from '../api/client';
 import { useSession } from '../api/session';
 import { useApi, useIdempotencyKey, useMutation } from '../api/useApi';
 import { useErrorMessage } from '../errors';
-import { useFormatters } from '../format';
+import { useFormatters, useToday } from '../format';
 import { useLocale } from '../locale';
 import { PersonName } from '../people';
 import { IssuedDocumentsPanel } from './IssuedDocumentsPanel';
@@ -60,7 +60,9 @@ function ReservationDetailScreen() {
   const errorMessage = useErrorMessage();
   const navigate = useNavigate();
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [draftOpen, setDraftOpen] = useState(false);
   const [reason, setReason] = useState('');
+  const today = useToday();
 
   const reservation = useApi<Reservation>(
     reservationId ? `/api/v1/sales/reservations/${reservationId}` : undefined,
@@ -88,7 +90,7 @@ function ReservationDetailScreen() {
         method: 'POST',
         body: {
           reservationId,
-          contractedOn: new Date().toISOString().slice(0, 10),
+          contractedOn: today,
           idempotencyKey: contractKey(),
         },
       }),
@@ -161,18 +163,17 @@ function ReservationDetailScreen() {
                 {t('actions.confirmReservation')}
               </Button>
             ) : null}
-            {can('sales.contract.create') && record.state === 'confirmed' ? (
+            {record.contractId && can('sales.contract.view') ? (
               <Button
                 variant="contained"
-                disabled={createContract.pending}
-                onClick={() => {
-                  void createContract.run().then(
-                    (result) => void navigate(`/contracts/${result.contract.contractId}`),
-                    () => undefined,
-                  );
-                }}
+                component={RouterLink}
+                to={`/contracts/${record.contractId}`}
               >
-                {t('actions.createContract')}
+                {t('detail.openContract')}
+              </Button>
+            ) : can('sales.contract.create') && record.state === 'confirmed' ? (
+              <Button variant="contained" onClick={() => setDraftOpen(true)}>
+                {t('reservationDetail.draftContract')}
               </Button>
             ) : null}
           </>
@@ -198,6 +199,19 @@ function ReservationDetailScreen() {
                 {unit.state.kind === 'ready' ? (
                   <Link component={RouterLink} to={`/units/${record.unitId}`} underline="hover">
                     <Verbatim>{unit.state.data.code}</Verbatim>
+                  </Link>
+                ) : (
+                  '—'
+                )}
+              </Field>
+              <Field label={t('fields.customer')}>
+                {can('crm.customer.view') ? (
+                  <Link
+                    component={RouterLink}
+                    to={`/customers/${record.customerId}`}
+                    underline="hover"
+                  >
+                    {t('reservationDetail.openCustomer')}
                   </Link>
                 ) : (
                   '—'
@@ -259,6 +273,46 @@ function ReservationDetailScreen() {
           {t('sales.demoDocumentBody')}
         </Alert>
       </Stack>
+
+      <Dialog
+        open={draftOpen}
+        onClose={() => setDraftOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        aria-labelledby="draft-contract-title"
+      >
+        <DialogTitle id="draft-contract-title">{t('reservationDetail.draftContract')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ marginBlockEnd: 2 }}>
+            {t('reservationDetail.draftExplanation')}
+          </DialogContentText>
+          <Box component="ul" sx={{ margin: 0, paddingInlineStart: 2.5, typography: 'body2' }}>
+            <li>{t('reservationDetail.draftNoInstalments')}</li>
+            <li>{t('reservationDetail.draftUnitStays')}</li>
+            <li>{t('reservationDetail.draftActivation')}</li>
+          </Box>
+          {createContract.error ? (
+            <Alert severity="error" role="alert" sx={{ marginBlockStart: 2 }}>
+              {errorMessage(createContract.error)}
+            </Alert>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDraftOpen(false)}>{t('actions.cancel')}</Button>
+          <Button
+            variant="contained"
+            disabled={createContract.pending}
+            onClick={() => {
+              void createContract.run().then(
+                (result) => void navigate(`/contracts/${result.contract.contractId}`),
+                () => undefined,
+              );
+            }}
+          >
+            {t('reservationDetail.createDraft')}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{t('confirm.title')}</DialogTitle>

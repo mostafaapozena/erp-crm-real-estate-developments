@@ -196,9 +196,12 @@ export const CustomerQuerySchema = z.strictObject({
    */
   ids: z
     .string()
-    .regex(/^[a-z][a-z0-9]{0,11}_[A-Za-z0-9]{6,64}(,[a-z][a-z0-9]{0,11}_[A-Za-z0-9]{6,64}){0,99}$/, {
-      message: 'RECORD_IDS_EXPECTED',
-    })
+    .regex(
+      /^[a-z][a-z0-9]{0,11}_[A-Za-z0-9]{6,64}(,[a-z][a-z0-9]{0,11}_[A-Za-z0-9]{6,64}){0,99}$/,
+      {
+        message: 'RECORD_IDS_EXPECTED',
+      },
+    )
     .optional(),
 });
 export type CustomerQuery = z.infer<typeof CustomerQuerySchema>;

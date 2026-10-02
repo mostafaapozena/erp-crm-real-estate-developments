@@ -15,7 +15,7 @@ import {
 import { createLogger } from '@alola/security';
 import { serviceGate } from '@alola/testing';
 import type { Express } from 'express';
-import mongoose, { type Connection } from 'mongoose';
+import mongoose, { Types, type Connection } from 'mongoose';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -2132,6 +2132,198 @@ describe.skipIf(!gate.available)(`sales module — ${gate.reason}`, () => {
       );
       expect(history.body.items[0].changes).toBeUndefined();
       await as(REP_TWO).get(`/api/v1/sales/contracts/${contract.contractId}/history`).expect(404);
+    });
+  });
+
+  describe('draft plan, activation review and replay (BMP-1 package 8)', () => {
+    it("replaces a draft's plan, marks a changed plan and clears an identical one", async () => {
+      const { reservation } = await confirmed();
+      const draft = await draftFor(MANAGER, reservation.reservationId);
+      const changed = await as(MANAGER)
+        .put(`/api/v1/sales/contracts/${draft.contractId}/payment-plan`)
+        .send({
+          paymentPlan: {
+            ...defaultPlan,
+            installmentCount: 24,
+            maintenanceDeposit: { amount: egp('50000'), dueOn: '2027-01-01' },
+          },
+          expectedVersion: draft.version,
+        })
+        .expect(200);
+      expect(changed.body).toMatchObject({
+        state: 'draft',
+        exceptions: ['planChanged'],
+        totalPrice: egp('3050000'),
+        pricing: { maintenanceDeposit: egp('50000') },
+      });
+      expect(changed.body.draftSchedule).toHaveLength(26);
+      // Stale version loses and changes nothing.
+      await as(MANAGER)
+        .put(`/api/v1/sales/contracts/${draft.contractId}/payment-plan`)
+        .send({ paymentPlan: defaultPlan, expectedVersion: draft.version })
+        .expect(409);
+      const back = await as(MANAGER)
+        .put(`/api/v1/sales/contracts/${draft.contractId}/payment-plan`)
+        .send({ paymentPlan: defaultPlan, expectedVersion: changed.body.version as number })
+        .expect(200);
+      expect(back.body.exceptions).toEqual([]);
+      expect(back.body.totalPrice).toEqual(egp('3000000'));
+      expect(back.body.pricing.maintenanceDeposit).toBeUndefined();
+      // A plan that cannot reconcile is refused with its reason.
+      const refused = await as(MANAGER)
+        .put(`/api/v1/sales/contracts/${draft.contractId}/payment-plan`)
+        .send({
+          paymentPlan: {
+            ...defaultPlan,
+            milestones: [{ dueOn: '2027-06-01', amount: egp('2900000') }],
+          },
+          expectedVersion: back.body.version as number,
+        })
+        .expect(400);
+      expect(refused.body.error.issues[0].code).toBe('MILESTONES_EXCEED_REMAINDER');
+      const history = await as(MANAGER)
+        .get(`/api/v1/sales/contracts/${draft.contractId}/history`)
+        .expect(200);
+      expect(
+        (history.body.items as { action: string }[]).filter(
+          (entry) => entry.action === SALES_AUDIT_ACTIONS.contractPlanChanged,
+        ),
+      ).toHaveLength(2);
+      // Nothing was committed by editing a draft.
+      expect(
+        await installmentModel(connection).countDocuments({ contractId: draft.contractId }),
+      ).toBe(0);
+      // Once active the plan changes only by amendment.
+      const active = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${draft.contractId}/activate`)
+        .send({ expectedVersion: back.body.version as number })
+        .expect(200);
+      const late = await as(MANAGER)
+        .put(`/api/v1/sales/contracts/${draft.contractId}/payment-plan`)
+        .send({ paymentPlan: defaultPlan, expectedVersion: active.body.version as number })
+        .expect(409);
+      expect(late.body.error.issues[0].code).toBe('CONTRACT_NOT_DRAFT');
+    });
+
+    it('reviews activation without changing anything, and names what blocks it', async () => {
+      const { reservation } = await confirmed();
+      const draft = await draftFor(MANAGER, reservation.reservationId);
+      const review = await as(MANAGER)
+        .get(`/api/v1/sales/contracts/${draft.contractId}/activation-review`)
+        .expect(200);
+      expect(review.body).toMatchObject({
+        state: 'draft',
+        exceptions: [],
+        approvalRequired: false,
+        blockers: [],
+        reservationCredit: egp('100000'),
+      });
+      expect(review.body.rows).toHaveLength(13);
+      const asViewer = await as(VIEWER)
+        .get(`/api/v1/sales/contracts/${draft.contractId}/activation-review`)
+        .expect(200);
+      expect(asViewer.body.blockers).toContain('notPermitted');
+      await as(REP_TWO)
+        .get(`/api/v1/sales/contracts/${draft.contractId}/activation-review`)
+        .expect(404);
+
+      governed.add('sales.contract.exception');
+      try {
+        const changed = await draftFor(MANAGER, (await confirmed()).reservation.reservationId, {
+          paymentPlan: { ...defaultPlan, installmentCount: 24 },
+        });
+        const governedReview = await as(MANAGER)
+          .get(`/api/v1/sales/contracts/${changed.contractId}/activation-review`)
+          .expect(200);
+        expect(governedReview.body).toMatchObject({
+          exceptions: ['planChanged'],
+          approvalRequired: true,
+        });
+        expect(governedReview.body.reservationPlan.installmentCount).toBe(12);
+      } finally {
+        governed.delete('sales.contract.exception');
+      }
+      const after = await contractModel(connection)
+        .findOne({ contractId: draft.contractId })
+        .lean()
+        .exec();
+      expect(after?.version).toBe(draft.version);
+    });
+
+    it('answers a retried activation with the contract, and activates exactly once', async () => {
+      const { unit, reservation } = await confirmed();
+      const draft = await draftFor(MANAGER, reservation.reservationId);
+      const key = nextKey('idem-activate-');
+      const first = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${draft.contractId}/activate`)
+        .send({ expectedVersion: draft.version, idempotencyKey: key })
+        .expect(200);
+      expect(first.body.state).toBe('active');
+      const retry = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${draft.contractId}/activate`)
+        .send({ expectedVersion: draft.version, idempotencyKey: key })
+        .expect(200);
+      expect(retry.body).toMatchObject({ state: 'active', version: first.body.version as number });
+      // Another key is not a retry: it is a stale request.
+      await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${draft.contractId}/activate`)
+        .send({ expectedVersion: draft.version, idempotencyKey: nextKey('idem-activate-') })
+        .expect(409);
+      expect(
+        await installmentModel(connection).countDocuments({ contractId: draft.contractId }),
+      ).toBe(13);
+      const history = await as(MANAGER)
+        .get(`/api/v1/sales/contracts/${draft.contractId}/history`)
+        .expect(200);
+      expect(
+        (history.body.items as { action: string }[]).filter(
+          (entry) => entry.action === SALES_AUDIT_ACTIONS.contractActivated,
+        ),
+      ).toHaveLength(1);
+      const storedUnit = await unitModel(connection).findOne({ unitId: unit.unitId }).lean().exec();
+      expect(storedUnit?.status).toBe('contracted');
+    });
+
+    it('lets one of two simultaneous activations win', async () => {
+      const { reservation } = await confirmed();
+      const draft = await draftFor(MANAGER, reservation.reservationId);
+      const results = await Promise.all(
+        [1, 2].map(() =>
+          as(MANAGER)
+            .post(`/api/v1/sales/contracts/${draft.contractId}/activate`)
+            .send({ expectedVersion: draft.version, idempotencyKey: nextKey('idem-activate-') }),
+        ),
+      );
+      expect(results.map((response) => response.status).sort()).toEqual([200, 409]);
+      expect(
+        await installmentModel(connection).countDocuments({ contractId: draft.contractId }),
+      ).toBe(13);
+    });
+
+    it('names the refusal to cancel a contract that has taken money beyond the deposit', async () => {
+      const { reservation } = await confirmed();
+      const { contract } = await contractFor(MANAGER, reservation.reservationId);
+      // Money beyond the reservation's, as a receipt would leave it (collections are BMP-2's to undo).
+      await connection
+        .collection(CONTRACTS_COLLECTION)
+        .updateOne(
+          { contractId: contract.contractId },
+          {
+            $set: {
+              paidAmount: { amount: Types.Decimal128.fromString('250000'), currency: 'EGP' },
+            },
+          },
+        );
+      const refused = await as(MANAGER)
+        .post(`/api/v1/sales/contracts/${contract.contractId}/cancel`)
+        .send({ reason: 'customer withdrew' })
+        .expect(409);
+      expect(refused.body.error.issues[0].code).toBe('CONTRACT_HAS_COLLECTIONS');
+      const stored = await contractModel(connection)
+        .findOne({ contractId: contract.contractId })
+        .lean()
+        .exec();
+      expect(stored?.state).toBe('active');
     });
   });
 

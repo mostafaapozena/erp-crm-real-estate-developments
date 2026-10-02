@@ -21,10 +21,7 @@ export function useCustomerNames(ids: readonly (string | undefined)[]) {
   const { can } = useSession();
   const key = useMemo(
     () =>
-      [...new Set(ids.filter((id): id is string => Boolean(id)))]
-        .sort()
-        .slice(0, 100)
-        .join(','),
+      [...new Set(ids.filter((id): id is string => Boolean(id)))].sort().slice(0, 100).join(','),
     [ids],
   );
   const customers = useApi<{ items: Customer[] }>(
@@ -35,7 +32,8 @@ export function useCustomerNames(ids: readonly (string | undefined)[]) {
   return useMemo(() => {
     const names = new Map<string, string>();
     if (customers.state.kind === 'ready') {
-      for (const customer of customers.state.data.items) names.set(customer.customerId, customer.name);
+      for (const customer of customers.state.data.items)
+        names.set(customer.customerId, customer.name);
     }
     return (id: string | undefined) => (id ? names.get(id) : undefined);
   }, [customers.state]);

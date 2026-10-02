@@ -17,6 +17,7 @@ import {
   ReservationQuerySchema,
   ReviseQuotationSchema,
   SetContractPartiesSchema,
+  SetContractPlanSchema,
   WithdrawQuotationSchema,
   type ActorContext,
   type SalesDefaults,
@@ -304,6 +305,37 @@ export function salesRouter(options: SalesRouterOptions): Router {
     },
   );
 
+  router.put(
+    '/contracts/:contractId/payment-plan',
+    requirePermission('sales.contract.create', options.guard),
+    validate({ params: ContractParamsSchema, body: SetContractPlanSchema }),
+    async (req, res) => {
+      const { contractId } = validated<typeof ContractParamsSchema._output>(res, 'params');
+      const body = validated<typeof SetContractPlanSchema._output>(res, 'body');
+      res.json(
+        await options
+          .getService()
+          .setDraftPlan(
+            actorOf(res),
+            contractId,
+            body,
+            requestContext(req, res, `${base}/contracts/:contractId/payment-plan`),
+          ),
+      );
+    },
+  );
+
+  /** What activation would do. Read-only: the contract viewer may ask; activating needs its own. */
+  router.get(
+    '/contracts/:contractId/activation-review',
+    requirePermission('sales.contract.view', options.guard),
+    validate({ params: ContractParamsSchema }),
+    async (_req, res) => {
+      const { contractId } = validated<typeof ContractParamsSchema._output>(res, 'params');
+      res.json(await options.getService().activationReview(actorOf(res), contractId));
+    },
+  );
+
   router.post(
     '/contracts/:contractId/activate',
     requirePermission('sales.contract.activate', options.guard),
@@ -311,16 +343,17 @@ export function salesRouter(options: SalesRouterOptions): Router {
     async (req, res) => {
       const { contractId } = validated<typeof ContractParamsSchema._output>(res, 'params');
       const body = validated<typeof ActivateContractSchema._output>(res, 'body');
-      res.json(
-        await options
-          .getService()
-          .activateContract(
-            actorOf(res),
-            contractId,
-            body,
-            requestContext(req, res, `${base}/contracts/:contractId/activate`),
-          ),
-      );
+      const result = await options
+        .getService()
+        .activateContractOnce(
+          actorOf(res),
+          contractId,
+          body,
+          requestContext(req, res, `${base}/contracts/:contractId/activate`),
+        );
+      // A retry of the activation that already happened stored nothing and recorded nothing.
+      if (result.replayed) markAuditExempt(res);
+      res.json(result.contract);
     },
   );
 

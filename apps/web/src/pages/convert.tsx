@@ -40,7 +40,11 @@ export function ConvertLeadPanel({ lead, onConverted }: { lead: Lead; onConverte
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   return (
-    <Alert severity="info" variant="outlined" sx={{ '& .MuiAlert-message': { inlineSize: '100%' } }}>
+    <Alert
+      severity="info"
+      variant="outlined"
+      sx={{ '& .MuiAlert-message': { inlineSize: '100%' } }}
+    >
       <Box sx={{ marginBlockEnd: 1.25 }}>{t('convert.hint')}</Box>
       <Button variant="outlined" size="small" onClick={() => setOpen(true)}>
         {t('convert.action')}

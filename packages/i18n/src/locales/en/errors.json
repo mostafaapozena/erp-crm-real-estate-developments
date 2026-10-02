@@ -95,6 +95,7 @@
     "CUSTOMER_NOT_FOUND": "This customer does not exist or is outside your scope.",
     "LEAD_NOT_FOUND": "This lead does not exist or is outside your scope.",
     "OPPORTUNITY_NOT_FOUND": "This opportunity does not exist or is outside your scope.",
-    "IDEMPOTENCY_CONFLICT": "This request was already sent with different details."
+    "IDEMPOTENCY_CONFLICT": "This request was already sent with different details.",
+    "CONTRACT_HAS_COLLECTIONS": "The contract cannot be cancelled: money beyond the reservation deposit has been collected. Cancelling after collection is a financial settlement handled in BMP-2."
   }
 }

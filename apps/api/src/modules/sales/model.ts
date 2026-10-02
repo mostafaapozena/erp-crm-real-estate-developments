@@ -178,6 +178,11 @@ export interface ContractDocument {
   pendingCancellation?: { requestId: string; reason: string };
   refundHandoff?: 'notApplicable' | 'pending';
   activatedAt?: Date;
+  /**
+   * The idempotency key of the activation request that moved the draft on (active or pending
+   * approval). A retry with the same key answers with the contract instead of a stale-version error.
+   */
+  activationKey?: string;
   cancellationReason?: string;
   documentRef?: string;
   idempotencyKey: string;
@@ -549,6 +554,7 @@ function contractSchema(): Schema<ContractDocument> {
       },
       refundHandoff: { type: String, enum: ['notApplicable', 'pending'] },
       activatedAt: { type: Date },
+      activationKey: { type: String },
       cancellationReason: { type: String },
       documentRef: { type: String },
       idempotencyKey: { type: String, required: true, immutable: true },

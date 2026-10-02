@@ -130,7 +130,8 @@ function ReservationWizard() {
 
   const unit = selectedUnit.state.kind === 'ready' ? selectedUnit.state.data : undefined;
   const { baseCurrency } = useBranding();
-  const currency = unit?.currentPrice?.currency ?? quoted?.agreedPrice.currency ?? baseCurrency ?? '';
+  const currency =
+    unit?.currentPrice?.currency ?? quoted?.agreedPrice.currency ?? baseCurrency ?? '';
   const quotedPrice = quoted && quoted.unitId === unitId ? quoted.agreedPrice.amount : undefined;
   const effectivePrice = agreedPrice ?? quotedPrice ?? unit?.currentPrice?.amount ?? '';
   const effectivePlan: PlanDraft =
@@ -362,7 +363,9 @@ function ReservationWizard() {
                 }}
               />
               <Stack direction="row" spacing={1}>
-                <Button onClick={() => setStep(fixedUnitId ? 0 : 1)}>{t('actions.previous')}</Button>
+                <Button onClick={() => setStep(fixedUnitId ? 0 : 1)}>
+                  {t('actions.previous')}
+                </Button>
                 <Button
                   variant="contained"
                   disabled={
@@ -387,7 +390,8 @@ function ReservationWizard() {
                 <Field label={t('fields.customer')}>
                   {customerLabel ??
                     (customers.state.kind === 'ready'
-                      ? customers.state.data.items.find((row) => row.customerId === customerId)?.name
+                      ? customers.state.data.items.find((row) => row.customerId === customerId)
+                          ?.name
                       : undefined) ??
                     '—'}
                 </Field>
@@ -426,11 +430,7 @@ function ReservationWizard() {
 
             <Stack direction="row" spacing={1}>
               <Button onClick={() => setStep(2)}>{t('actions.previous')}</Button>
-              <Button
-                variant="contained"
-                disabled={reserve.pending}
-                onClick={() => void submit()}
-              >
+              <Button variant="contained" disabled={reserve.pending} onClick={() => void submit()}>
                 {t('actions.reserve')}
               </Button>
             </Stack>

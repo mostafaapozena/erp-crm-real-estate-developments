@@ -126,7 +126,9 @@ export function planRequest(draft: PlanDraft, currency: string): Record<string, 
 export function planIsComplete(draft: PlanDraft): boolean {
   return (
     draft.firstDueOn !== '' &&
-    draft.milestones.every((milestone) => milestone.dueOn !== '' && milestone.amount.trim() !== '') &&
+    draft.milestones.every(
+      (milestone) => milestone.dueOn !== '' && milestone.amount.trim() !== '',
+    ) &&
     (draft.maintenanceAmount.trim() === '' || draft.maintenanceDueOn !== '')
   );
 }
@@ -267,7 +269,9 @@ export function PaymentPlanEditor({
                   <IconButton
                     aria-label={t('plan.removeMilestone', { index: index + 1 })}
                     onClick={() =>
-                      set({ milestones: value.milestones.filter((_, position) => position !== index) })
+                      set({
+                        milestones: value.milestones.filter((_, position) => position !== index),
+                      })
                     }
                     disabled={disabled}
                     sx={{ marginBlockStart: 0.5 }}
@@ -359,7 +363,12 @@ export function SchedulePreviewTable({
 }) {
   const { t, td, locale } = useLocale();
   const format = useFormatters();
-  const cell = { padding: 1, borderBlockEnd: 1, borderColor: 'divider', textAlign: 'start' } as const;
+  const cell = {
+    padding: 1,
+    borderBlockEnd: 1,
+    borderColor: 'divider',
+    textAlign: 'start',
+  } as const;
   return (
     <Stack spacing={2}>
       {price || total ? (
@@ -381,7 +390,10 @@ export function SchedulePreviewTable({
       ) : null}
       <Box sx={{ overflowX: 'auto' }}>
         <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
-          <Box component="caption" sx={{ textAlign: 'start', captionSide: 'top', paddingBlockEnd: 1 }}>
+          <Box
+            component="caption"
+            sx={{ textAlign: 'start', captionSide: 'top', paddingBlockEnd: 1 }}
+          >
             <Typography variant="body2" color="text.secondary" component="span">
               {caption}
             </Typography>

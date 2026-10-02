@@ -188,7 +188,11 @@ function QuotationsScreen() {
             {t('states.retry')}
           </Button>
         }
-        labels={{ ...labels, emptyTitle: t('quotations.empty'), emptyDescription: t('quotations.emptyHint') }}
+        labels={{
+          ...labels,
+          emptyTitle: t('quotations.empty'),
+          emptyDescription: t('quotations.emptyHint'),
+        }}
         toolbar={
           <TableToolbar
             search={

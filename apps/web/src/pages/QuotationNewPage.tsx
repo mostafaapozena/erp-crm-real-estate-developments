@@ -86,7 +86,9 @@ function QuotationForm() {
   const [chosenUnitId, setChosenUnitId] = useState('');
   const unitId = fixedUnitId || chosenUnitId;
   const units = useApi<UnitPage>(
-    fixedUnitId ? undefined : `/api/v1/inventory/units${query({ status: 'available', limit: 100 })}`,
+    fixedUnitId
+      ? undefined
+      : `/api/v1/inventory/units${query({ status: 'available', limit: 100 })}`,
   );
   const unit = useApi<Unit>(unitId ? `/api/v1/inventory/units/${unitId}` : undefined);
   const unitData = unit.state.kind === 'ready' ? unit.state.data : undefined;
@@ -137,7 +139,10 @@ function QuotationForm() {
   async function runPreview() {
     try {
       setPreview(
-        await previewMutation.run({ price: { amount: price.trim(), currency }, plan: planRequest(plan, currency) }),
+        await previewMutation.run({
+          price: { amount: price.trim(), currency },
+          plan: planRequest(plan, currency),
+        }),
       );
     } catch {
       setPreview(undefined);
@@ -184,11 +189,13 @@ function QuotationForm() {
               required
               helperText={t('quotations.customerHint')}
             >
-              {(customers.state.kind === 'ready' ? customers.state.data.items : []).map((customer) => (
-                <MenuItem key={customer.customerId} value={customer.customerId}>
-                  {`${customer.name} — ${customer.primaryPhone}`}
-                </MenuItem>
-              ))}
+              {(customers.state.kind === 'ready' ? customers.state.data.items : []).map(
+                (customer) => (
+                  <MenuItem key={customer.customerId} value={customer.customerId}>
+                    {`${customer.name} — ${customer.primaryPhone}`}
+                  </MenuItem>
+                ),
+              )}
             </TextField>
           )}
         </Panel>
@@ -279,7 +286,11 @@ function QuotationForm() {
           </Stack>
         </Panel>
 
-        <Panel title={t('plan.previewTitle')} icon={CalendarClock} description={t('plan.previewHint')}>
+        <Panel
+          title={t('plan.previewTitle')}
+          icon={CalendarClock}
+          description={t('plan.previewHint')}
+        >
           <Stack spacing={2}>
             {previewMutation.error ? (
               <Alert severity="error" role="alert">
@@ -323,7 +334,10 @@ function QuotationForm() {
           </Button>
         </Stack>
         {!preview && ready ? (
-          <Box sx={{ textAlign: 'end', typography: 'caption', color: 'text.secondary' }} lang={locale}>
+          <Box
+            sx={{ textAlign: 'end', typography: 'caption', color: 'text.secondary' }}
+            lang={locale}
+          >
             {t('quotations.previewFirst')}
           </Box>
         ) : null}

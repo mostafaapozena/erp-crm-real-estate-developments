@@ -713,8 +713,56 @@ export type SetContractParties = z.infer<typeof SetContractPartiesSchema>;
 
 export const ActivateContractSchema = z.strictObject({
   expectedVersion: z.number().int().positive(),
+  /**
+   * Optional idempotency key. A retried activation carrying the key that moved the draft on answers
+   * with the contract as it now stands — active, or waiting for approval — instead of a stale-version
+   * conflict. Activation itself happens once either way: the version is checked in the update.
+   */
+  idempotencyKey: z.string().min(8).max(200).optional(),
 });
 export type ActivateContract = z.infer<typeof ActivateContractSchema>;
+
+/**
+ * SALE-CONTRACT-001, COL-SCHEDULE-001. Replace a draft's payment plan. Draft only; the price is the
+ * snapshot's and does not change. A plan that differs from the reservation's carries the
+ * `planChanged` exception, which activation submits for approval where a policy governs it.
+ */
+export const SetContractPlanSchema = z.strictObject({
+  paymentPlan: PaymentPlanSchema,
+  expectedVersion: z.number().int().positive(),
+});
+export type SetContractPlan = z.infer<typeof SetContractPlanSchema>;
+
+/** Why a draft cannot be activated right now, before anyone presses the button. */
+export const ACTIVATION_BLOCKERS = [
+  'notDraft',
+  'reservationNotConfirmed',
+  'approvalPending',
+  'notPermitted',
+] as const;
+
+/**
+ * What activating a draft would do, asked before doing it (SALE-CONTRACT-003): whether the draft
+ * carries an exception, whether a published policy would send it for approval, what stops it, and
+ * the rows it would freeze. Reads only; changes nothing.
+ */
+export const ActivationReviewSchema = z.strictObject({
+  contractId: RecordIdSchema,
+  state: ContractStateSchema,
+  version: z.number().int().positive(),
+  exceptions: z.array(z.enum(CONTRACT_EXCEPTIONS)),
+  /** True when activation would wait for an approval instead of activating at once. */
+  approvalRequired: z.boolean(),
+  blockers: z.array(z.enum(ACTIVATION_BLOCKERS)),
+  warnings: z.array(z.enum(CONTRACT_WARNINGS)),
+  /** The rows activation would turn into instalments, with the reservation money credited. */
+  rows: z.array(ScheduleRowSchema),
+  total: MoneySchema,
+  reservationCredit: MoneySchema,
+  /** What the reservation was approved with — shown beside the draft's plan when they differ. */
+  reservationPlan: PaymentPlanSchema.optional(),
+});
+export type ActivationReview = z.infer<typeof ActivationReviewSchema>;
 
 export const RecordSigningSchema = z.strictObject({
   signedOn: BusinessDateSchema,
@@ -1027,6 +1075,7 @@ export const SALES_AUDIT_ACTIONS = {
   reservationCancellationRequested: 'sales.reservation.cancellationRequested',
   contractCreated: 'sales.contract.created',
   contractActivated: 'sales.contract.activated',
+  contractPlanChanged: 'sales.contract.planChanged',
   contractActivationRequested: 'sales.contract.activationRequested',
   contractActivationRejected: 'sales.contract.activationRejected',
   contractPartiesChanged: 'sales.contract.partiesChanged',
